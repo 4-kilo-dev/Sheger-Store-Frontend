@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Plus, Filter, ArrowUpDown, MoreVertical, ChevronDown, Calendar } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -53,13 +53,14 @@ function BookingsPage() {
             {MOCK_BOOKINGS.length} total
           </span>
         </div>
-        <button
+        <Link
+          to="/bookings/new"
           className="flex h-9 items-center gap-2 rounded-md px-4 text-[13px] font-semibold transition hover:brightness-110"
           style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
         >
           <Plus className="h-4 w-4" strokeWidth={2.5} />
           New Booking
-        </button>
+        </Link>
       </div>
 
       {/* Tabs */}
@@ -172,10 +173,10 @@ function BookingsPage() {
               {rows.map((b, i) => (
                 <tr
                   key={b.code}
-                  className="group transition"
+                  className="group cursor-pointer transition hover:brightness-110"
                   style={{ background: i % 2 === 0 ? "var(--surface)" : "var(--surface-2)" }}
                 >
-                  <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}>
+                  <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }} onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selected.has(b.code)}
@@ -183,10 +184,14 @@ function BookingsPage() {
                       className="h-3.5 w-3.5 accent-[var(--accent)]"
                     />
                   </td>
-                  <td className="border-b px-3 py-3 font-bold" style={{ borderColor: "var(--border)", color: "var(--accent)" }}>
-                    {b.code}
+                  <td className="border-b px-3 py-3 font-bold" style={{ borderColor: "var(--border)" }}>
+                    <Link to="/bookings/$code" params={{ code: b.code }} className="hover:underline" style={{ color: "var(--accent)" }}>
+                      {b.code}
+                    </Link>
                   </td>
-                  <td className="border-b px-3 py-3 font-medium" style={{ borderColor: "var(--border)" }}>{b.client}</td>
+                  <td className="border-b px-3 py-3 font-medium" style={{ borderColor: "var(--border)" }}>
+                    <Link to="/bookings/$code" params={{ code: b.code }}>{b.client}</Link>
+                  </td>
                   <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.assemblyDate}</td>
                   <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.eventDate}</td>
                   <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}>{b.venue}</td>
@@ -211,9 +216,9 @@ function BookingsPage() {
                   <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}><PaymentBadge status={b.payment} /></td>
                   <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}><StatusBadge status={b.status} /></td>
                   <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}>
-                    <button className="flex h-6 w-6 items-center justify-center rounded transition hover:bg-[var(--surface)]" style={{ color: "var(--text-2)" }}>
+                    <Link to="/bookings/$code" params={{ code: b.code }} className="flex h-6 w-6 items-center justify-center rounded transition hover:bg-[var(--surface)]" style={{ color: "var(--text-2)" }}>
                       <MoreVertical className="h-3.5 w-3.5" />
-                    </button>
+                    </Link>
                   </td>
                 </tr>
               ))}
