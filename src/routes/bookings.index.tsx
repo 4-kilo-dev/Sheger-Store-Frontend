@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { MOCK_BOOKINGS, type Booking } from "@/lib/mock-bookings";
 
-export const Route = createFileRoute("/bookings")({
+export const Route = createFileRoute("/bookings/")({
   head: () => ({
     meta: [
       { title: "Bookings · Vortex Visual" },
