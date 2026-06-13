@@ -52,11 +52,12 @@ function Home() {
         <StatusStepper current="PREPARATION" />
       </div>
 
-      <div className="mt-6 rounded-lg border p-8 text-center" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-        <div className="label-eyebrow">Next up</div>
-        <p className="mx-auto mt-2 max-w-md text-[13px]" style={{ color: "var(--text-2)" }}>
-          Foundation, shell, and the Booking List screen are live. Ready to build Booking Detail, the New Booking form, role dashboards, and Inventory next.
-        </p>
+      <div className="mt-6 grid grid-cols-3 gap-4">
+        {[{ label: "Warehouse availability", value: "323 units ready", to: "/inventory" as const }, { label: "Maintenance alerts", value: "3 groups due", to: "/inventory" as const }, { label: "Damaged equipment", value: "15 units on hold", to: "/inventory" as const }].map((item) => (
+          <Link key={item.label} to={item.to} className="rounded-lg border p-4 transition hover:border-accent" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+            <div className="label-eyebrow">{item.label}</div><div className="mt-2 text-[15px] font-bold">{item.value}</div>
+          </Link>
+        ))}
       </div>
     </AppShell>
   );
