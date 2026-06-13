@@ -1,0 +1,13 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { Banknote, CalendarCheck, Download, Gauge, TrendingUp } from "lucide-react";
+import { AppShell } from "@/components/app-shell";
+import { Meter, PageHeader, Section, StatStrip } from "@/components/operations-ui";
+import { Button } from "@/components/ui/button";
+
+export const Route = createFileRoute("/reports")({ head: () => ({ meta: [{ title: "Reports · Vortex Visual" }, { name: "description", content: "Booking, revenue, equipment, and crew performance reports." }] }), component: ReportsPage });
+const months = [{ m: "Jan", v: 42 }, { m: "Feb", v: 55 }, { m: "Mar", v: 48 }, { m: "Apr", v: 70 }, { m: "May", v: 63 }, { m: "Jun", v: 88 }];
+function ReportsPage() { return <AppShell><PageHeader eyebrow="Business Intelligence" title="Operations Reports" description="A consolidated view of booking volume, collections, stock use, and crew output." />
+  <StatStrip items={[{ label: "Booked Revenue", value: "1.84M ETB", note: "+14.2% vs last month", icon: Banknote }, { label: "Completed Jobs", value: "39", note: "92% completion rate", icon: CalendarCheck }, { label: "Utilization", value: "78%", note: "LED cabinet fleet", icon: Gauge }, { label: "Avg. Job Value", value: "47.2K", note: "+6.8% this quarter", icon: TrendingUp }]} />
+  <div className="mt-5 grid gap-5 xl:grid-cols-[1.6fr_1fr]"><Section title="Revenue Trend" aside="Last 6 months"><div className="flex h-64 items-end gap-5 border-b border-l border-border px-5 pb-5">{months.map((x) => <div key={x.m} className="flex h-full flex-1 flex-col justify-end gap-2"><div className="bg-accent/80" style={{ height: `${x.v}%` }}/><span className="text-center text-[10px] font-semibold text-text-2">{x.m}</span></div>)}</div></Section>
+    <Section title="Equipment Utilization" aside="Current month"><div className="space-y-5">{[["P2.97 New", 91], ["P3.91 Outdoor", 78], ["P4 Cabinets", 66], ["Processors", 54]].map(([name, value]) => <div key={name as string}><div className="mb-2 flex justify-between text-xs"><span>{name}</span><b>{value}%</b></div><Meter value={value as number}/></div>)}</div></Section></div>
+  <div className="mt-5 flex items-center justify-between border border-border bg-surface p-4"><div><h2 className="text-sm font-bold">Export operational report</h2><p className="mt-1 text-xs text-text-2">Generate a booking, payment, inventory, or team performance report.</p></div><Button variant="outline"><Download/> Export CSV</Button></div></AppShell>; }

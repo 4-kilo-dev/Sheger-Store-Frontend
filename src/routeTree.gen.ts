@@ -9,7 +9,14 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as StaffRouteImport } from './routes/staff'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as OtpRouteImport } from './routes/otp'
+import { Route as NotificationsRouteImport } from './routes/notifications'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as InventoryRouteImport } from './routes/inventory'
+import { Route as DashboardsRouteImport } from './routes/dashboards'
 import { Route as DamageReportRouteImport } from './routes/damage-report'
 import { Route as BookingsRouteImport } from './routes/bookings'
 import { Route as IndexRouteImport } from './routes/index'
@@ -19,9 +26,44 @@ import { Route as InventoryItemIdRouteImport } from './routes/inventory.$itemId'
 import { Route as BookingsNewRouteImport } from './routes/bookings.new'
 import { Route as BookingsCodeRouteImport } from './routes/bookings.$code'
 
+const StaffRoute = StaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OtpRoute = OtpRouteImport.update({
+  id: '/otp',
+  path: '/otp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InventoryRoute = InventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardsRoute = DashboardsRouteImport.update({
+  id: '/dashboards',
+  path: '/dashboards',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DamageReportRoute = DamageReportRouteImport.update({
@@ -69,7 +111,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/bookings': typeof BookingsRouteWithChildren
   '/damage-report': typeof DamageReportRoute
+  '/dashboards': typeof DashboardsRoute
   '/inventory': typeof InventoryRouteWithChildren
+  '/login': typeof LoginRoute
+  '/notifications': typeof NotificationsRoute
+  '/otp': typeof OtpRoute
+  '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/staff': typeof StaffRoute
   '/bookings/$code': typeof BookingsCodeRoute
   '/bookings/new': typeof BookingsNewRoute
   '/inventory/$itemId': typeof InventoryItemIdRoute
@@ -79,6 +128,13 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/damage-report': typeof DamageReportRoute
+  '/dashboards': typeof DashboardsRoute
+  '/login': typeof LoginRoute
+  '/notifications': typeof NotificationsRoute
+  '/otp': typeof OtpRoute
+  '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/staff': typeof StaffRoute
   '/bookings/$code': typeof BookingsCodeRoute
   '/bookings/new': typeof BookingsNewRoute
   '/inventory/$itemId': typeof InventoryItemIdRoute
@@ -90,7 +146,14 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/bookings': typeof BookingsRouteWithChildren
   '/damage-report': typeof DamageReportRoute
+  '/dashboards': typeof DashboardsRoute
   '/inventory': typeof InventoryRouteWithChildren
+  '/login': typeof LoginRoute
+  '/notifications': typeof NotificationsRoute
+  '/otp': typeof OtpRoute
+  '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/staff': typeof StaffRoute
   '/bookings/$code': typeof BookingsCodeRoute
   '/bookings/new': typeof BookingsNewRoute
   '/inventory/$itemId': typeof InventoryItemIdRoute
@@ -103,7 +166,14 @@ export interface FileRouteTypes {
     | '/'
     | '/bookings'
     | '/damage-report'
+    | '/dashboards'
     | '/inventory'
+    | '/login'
+    | '/notifications'
+    | '/otp'
+    | '/reports'
+    | '/settings'
+    | '/staff'
     | '/bookings/$code'
     | '/bookings/new'
     | '/inventory/$itemId'
@@ -113,6 +183,13 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/damage-report'
+    | '/dashboards'
+    | '/login'
+    | '/notifications'
+    | '/otp'
+    | '/reports'
+    | '/settings'
+    | '/staff'
     | '/bookings/$code'
     | '/bookings/new'
     | '/inventory/$itemId'
@@ -123,7 +200,14 @@ export interface FileRouteTypes {
     | '/'
     | '/bookings'
     | '/damage-report'
+    | '/dashboards'
     | '/inventory'
+    | '/login'
+    | '/notifications'
+    | '/otp'
+    | '/reports'
+    | '/settings'
+    | '/staff'
     | '/bookings/$code'
     | '/bookings/new'
     | '/inventory/$itemId'
@@ -135,16 +219,72 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BookingsRoute: typeof BookingsRouteWithChildren
   DamageReportRoute: typeof DamageReportRoute
+  DashboardsRoute: typeof DashboardsRoute
   InventoryRoute: typeof InventoryRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  NotificationsRoute: typeof NotificationsRoute
+  OtpRoute: typeof OtpRoute
+  ReportsRoute: typeof ReportsRoute
+  SettingsRoute: typeof SettingsRoute
+  StaffRoute: typeof StaffRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/staff': {
+      id: '/staff'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof StaffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/otp': {
+      id: '/otp'
+      path: '/otp'
+      fullPath: '/otp'
+      preLoaderRoute: typeof OtpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/inventory': {
       id: '/inventory'
       path: '/inventory'
       fullPath: '/inventory'
       preLoaderRoute: typeof InventoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboards': {
+      id: '/dashboards'
+      path: '/dashboards'
+      fullPath: '/dashboards'
+      preLoaderRoute: typeof DashboardsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/damage-report': {
@@ -240,7 +380,14 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BookingsRoute: BookingsRouteWithChildren,
   DamageReportRoute: DamageReportRoute,
+  DashboardsRoute: DashboardsRoute,
   InventoryRoute: InventoryRouteWithChildren,
+  LoginRoute: LoginRoute,
+  NotificationsRoute: NotificationsRoute,
+  OtpRoute: OtpRoute,
+  ReportsRoute: ReportsRoute,
+  SettingsRoute: SettingsRoute,
+  StaffRoute: StaffRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

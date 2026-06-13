@@ -1,0 +1,14 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { BellRing, Building2, Languages, LockKeyhole, Save, UsersRound } from "lucide-react";
+import { useState } from "react";
+import { AppShell } from "@/components/app-shell";
+import { PageHeader, Section } from "@/components/operations-ui";
+import { Button } from "@/components/ui/button";
+
+export const Route = createFileRoute("/settings")({ head: () => ({ meta: [{ title: "Settings · Vortex Visual" }, { name: "description", content: "Configure Vortex Visual operations, alerts, language, and access." }] }), component: SettingsPage });
+const panels = [{ icon: Building2, label: "Company" }, { icon: UsersRound, label: "Roles & permissions" }, { icon: BellRing, label: "Notifications" }, { icon: Languages, label: "Language" }, { icon: LockKeyhole, label: "Security" }];
+function SettingsPage() { const [active, setActive] = useState("Company"); return <AppShell><PageHeader eyebrow="Administration" title="Settings" description="Company defaults, role permissions, notifications, and language preferences." />
+  <div className="grid gap-5 xl:grid-cols-[240px_1fr]"><nav className="h-fit border border-border bg-surface p-2">{panels.map(({ icon: Icon, label }) => <button key={label} onClick={() => setActive(label)} className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-xs font-semibold ${active === label ? "bg-surface-2 text-foreground" : "text-text-2"}`}><Icon className={active === label ? "h-4 w-4 text-accent" : "h-4 w-4"}/>{label}</button>)}</nav>
+  <div className="space-y-5"><Section title={active} aside="System defaults"><div className="grid gap-4 md:grid-cols-2">{[["Company name", "Vortex Visual"], ["Operations email", "operations@vortexvisual.et"], ["Primary phone", "+251 911 000 040"], ["Timezone", "Africa/Addis_Ababa"]].map(([label, value]) => <label key={label} className="text-xs font-semibold">{label}<input defaultValue={value} className="mt-2 h-10 w-full border border-border bg-surface-2 px-3 text-xs font-normal outline-none focus:border-accent"/></label>)}</div></Section>
+    <Section title="Regional preferences"><div className="grid gap-4 md:grid-cols-2"><label className="text-xs font-semibold">Display language<select className="mt-2 h-10 w-full border border-border bg-surface-2 px-3 font-normal"><option>English</option><option>አማርኛ</option></select></label><label className="text-xs font-semibold">Currency<select className="mt-2 h-10 w-full border border-border bg-surface-2 px-3 font-normal"><option>ETB — Ethiopian Birr</option></select></label></div></Section>
+    <div className="flex justify-end"><Button><Save/> Save Changes</Button></div></div></div></AppShell>; }

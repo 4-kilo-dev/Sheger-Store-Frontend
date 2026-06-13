@@ -1,0 +1,11 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { Bell, CheckCheck, SlidersHorizontal } from "lucide-react";
+import { AppShell } from "@/components/app-shell";
+import { PageHeader } from "@/components/operations-ui";
+import { Button } from "@/components/ui/button";
+import { NOTIFICATIONS } from "@/lib/mock-operations";
+
+export const Route = createFileRoute("/notifications")({ head: () => ({ meta: [{ title: "Notifications · Vortex Visual" }, { name: "description", content: "Operational alerts and activity notifications." }] }), component: NotificationsPage });
+function NotificationsPage() { return <AppShell><PageHeader eyebrow="Activity Center" title="Notifications" description="Prioritized booking, warehouse, payment, and schedule alerts." />
+  <div className="grid gap-5 xl:grid-cols-[1fr_280px]"><section className="border border-border bg-surface"><div className="flex items-center justify-between border-b border-border p-3"><div className="flex gap-2"><Button size="sm">All</Button><Button size="sm" variant="ghost">Unread</Button><Button size="sm" variant="ghost">Mentions</Button></div><Button size="sm" variant="outline"><CheckCheck/> Mark all read</Button></div>{NOTIFICATIONS.map((n) => <div key={n.title} className="flex gap-4 border-b border-border p-4 last:border-0"><div className={n.unread ? "mt-1 flex h-9 w-9 items-center justify-center bg-accent text-accent-foreground" : "mt-1 flex h-9 w-9 items-center justify-center bg-surface-2 text-text-2"}><Bell className="h-4 w-4"/></div><div className="flex-1"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">{n.title}</h2><time className="text-[10px] text-text-3">{n.time}</time></div><p className="mt-1 text-xs text-text-2">{n.detail}</p><span className="mt-2 inline-block text-[10px] font-bold uppercase tracking-wider text-accent">{n.type}</span></div></div>)}</section>
+  <aside className="h-fit border border-border bg-surface p-4"><SlidersHorizontal className="h-5 w-5 text-accent"/><h2 className="mt-3 text-sm font-bold">Alert routing</h2><p className="mt-2 text-xs leading-5 text-text-2">Critical stock, damage, and onsite alerts are pinned. Payment and assignment updates follow your selected role.</p><Button className="mt-4 w-full" variant="outline">Notification Settings</Button></aside></div></AppShell>; }
