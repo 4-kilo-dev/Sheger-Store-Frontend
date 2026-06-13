@@ -9,6 +9,9 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as StaffRouteImport } from './routes/staff'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as DamageReportRouteImport } from './routes/damage-report'
 import { Route as BookingsRouteImport } from './routes/bookings'
@@ -19,6 +22,21 @@ import { Route as InventoryItemIdRouteImport } from './routes/inventory.$itemId'
 import { Route as BookingsNewRouteImport } from './routes/bookings.new'
 import { Route as BookingsCodeRouteImport } from './routes/bookings.$code'
 
+const StaffRoute = StaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InventoryRoute = InventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
@@ -70,6 +88,9 @@ export interface FileRoutesByFullPath {
   '/bookings': typeof BookingsRouteWithChildren
   '/damage-report': typeof DamageReportRoute
   '/inventory': typeof InventoryRouteWithChildren
+  '/notifications': typeof NotificationsRoute
+  '/reports': typeof ReportsRoute
+  '/staff': typeof StaffRoute
   '/bookings/$code': typeof BookingsCodeRoute
   '/bookings/new': typeof BookingsNewRoute
   '/inventory/$itemId': typeof InventoryItemIdRoute
@@ -79,6 +100,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/damage-report': typeof DamageReportRoute
+  '/notifications': typeof NotificationsRoute
+  '/reports': typeof ReportsRoute
+  '/staff': typeof StaffRoute
   '/bookings/$code': typeof BookingsCodeRoute
   '/bookings/new': typeof BookingsNewRoute
   '/inventory/$itemId': typeof InventoryItemIdRoute
@@ -91,6 +115,9 @@ export interface FileRoutesById {
   '/bookings': typeof BookingsRouteWithChildren
   '/damage-report': typeof DamageReportRoute
   '/inventory': typeof InventoryRouteWithChildren
+  '/notifications': typeof NotificationsRoute
+  '/reports': typeof ReportsRoute
+  '/staff': typeof StaffRoute
   '/bookings/$code': typeof BookingsCodeRoute
   '/bookings/new': typeof BookingsNewRoute
   '/inventory/$itemId': typeof InventoryItemIdRoute
@@ -104,6 +131,9 @@ export interface FileRouteTypes {
     | '/bookings'
     | '/damage-report'
     | '/inventory'
+    | '/notifications'
+    | '/reports'
+    | '/staff'
     | '/bookings/$code'
     | '/bookings/new'
     | '/inventory/$itemId'
@@ -113,6 +143,9 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/damage-report'
+    | '/notifications'
+    | '/reports'
+    | '/staff'
     | '/bookings/$code'
     | '/bookings/new'
     | '/inventory/$itemId'
@@ -124,6 +157,9 @@ export interface FileRouteTypes {
     | '/bookings'
     | '/damage-report'
     | '/inventory'
+    | '/notifications'
+    | '/reports'
+    | '/staff'
     | '/bookings/$code'
     | '/bookings/new'
     | '/inventory/$itemId'
@@ -136,10 +172,34 @@ export interface RootRouteChildren {
   BookingsRoute: typeof BookingsRouteWithChildren
   DamageReportRoute: typeof DamageReportRoute
   InventoryRoute: typeof InventoryRouteWithChildren
+  NotificationsRoute: typeof NotificationsRoute
+  ReportsRoute: typeof ReportsRoute
+  StaffRoute: typeof StaffRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/staff': {
+      id: '/staff'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof StaffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/inventory': {
       id: '/inventory'
       path: '/inventory'
@@ -241,6 +301,9 @@ const rootRouteChildren: RootRouteChildren = {
   BookingsRoute: BookingsRouteWithChildren,
   DamageReportRoute: DamageReportRoute,
   InventoryRoute: InventoryRouteWithChildren,
+  NotificationsRoute: NotificationsRoute,
+  ReportsRoute: ReportsRoute,
+  StaffRoute: StaffRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
