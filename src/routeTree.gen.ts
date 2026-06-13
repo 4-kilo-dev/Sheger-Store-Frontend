@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as InventoryRouteImport } from './routes/inventory'
+import { Route as DamageReportRouteImport } from './routes/damage-report'
 import { Route as BookingsRouteImport } from './routes/bookings'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory.index'
@@ -21,6 +22,11 @@ import { Route as BookingsCodeRouteImport } from './routes/bookings.$code'
 const InventoryRoute = InventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DamageReportRoute = DamageReportRouteImport.update({
+  id: '/damage-report',
+  path: '/damage-report',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BookingsRoute = BookingsRouteImport.update({
@@ -62,6 +68,7 @@ const BookingsCodeRoute = BookingsCodeRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/bookings': typeof BookingsRouteWithChildren
+  '/damage-report': typeof DamageReportRoute
   '/inventory': typeof InventoryRouteWithChildren
   '/bookings/$code': typeof BookingsCodeRoute
   '/bookings/new': typeof BookingsNewRoute
@@ -71,6 +78,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/damage-report': typeof DamageReportRoute
   '/bookings/$code': typeof BookingsCodeRoute
   '/bookings/new': typeof BookingsNewRoute
   '/inventory/$itemId': typeof InventoryItemIdRoute
@@ -81,6 +89,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/bookings': typeof BookingsRouteWithChildren
+  '/damage-report': typeof DamageReportRoute
   '/inventory': typeof InventoryRouteWithChildren
   '/bookings/$code': typeof BookingsCodeRoute
   '/bookings/new': typeof BookingsNewRoute
@@ -93,6 +102,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/bookings'
+    | '/damage-report'
     | '/inventory'
     | '/bookings/$code'
     | '/bookings/new'
@@ -102,6 +112,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/damage-report'
     | '/bookings/$code'
     | '/bookings/new'
     | '/inventory/$itemId'
@@ -111,6 +122,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/bookings'
+    | '/damage-report'
     | '/inventory'
     | '/bookings/$code'
     | '/bookings/new'
@@ -122,6 +134,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BookingsRoute: typeof BookingsRouteWithChildren
+  DamageReportRoute: typeof DamageReportRoute
   InventoryRoute: typeof InventoryRouteWithChildren
 }
 
@@ -132,6 +145,13 @@ declare module '@tanstack/react-router' {
       path: '/inventory'
       fullPath: '/inventory'
       preLoaderRoute: typeof InventoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/damage-report': {
+      id: '/damage-report'
+      path: '/damage-report'
+      fullPath: '/damage-report'
+      preLoaderRoute: typeof DamageReportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bookings': {
@@ -219,6 +239,7 @@ const InventoryRouteWithChildren = InventoryRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BookingsRoute: BookingsRouteWithChildren,
+  DamageReportRoute: DamageReportRoute,
   InventoryRoute: InventoryRouteWithChildren,
 }
 export const routeTree = rootRouteImport
