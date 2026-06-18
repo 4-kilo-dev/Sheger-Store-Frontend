@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   ArrowLeft, Building2, MapPin, Calendar, User, Phone, Package,
-  Users, DollarSign, CheckCircle2, Save,
+  Users, DollarSign, CheckCircle2, Save, Wrench, MessageSquare,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 
@@ -18,6 +18,7 @@ export const Route = createFileRoute("/bookings/new")({
 
 const STEPS = [
   { k: "client", label: "Client", icon: Building2 },
+  { k: "consult", label: "CTO Consult", icon: Wrench },
   { k: "venue", label: "Venue & Date", icon: MapPin },
   { k: "screen", label: "Screen Spec", icon: Package },
   { k: "team", label: "Team", icon: Users },
@@ -30,6 +31,7 @@ function NewBookingPage() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     client: "", contactPerson: "", contactPhone: "",
+    ctoConsulted: false, ctoNotes: "", screensAvailable: 3, ctoArrangement: "",
     venue: "", assemblyDate: "", eventDate: "",
     screenType: "P4", size: 36, arrangement: "6M x 3M",
     chief: "", technician: "", stageHand: "TEAM 1 · Abel",
@@ -57,7 +59,7 @@ function NewBookingPage() {
       </div>
 
       {/* Step pills */}
-      <div className="mb-6 grid grid-cols-6 gap-2">
+      <div className="mb-6 grid grid-cols-7 gap-2">
         {STEPS.map((s, i) => {
           const done = i < step;
           const active = i === step;
@@ -82,11 +84,11 @@ function NewBookingPage() {
               >
                 {done ? "✓" : i + 1}
               </div>
-              <div>
+              <div className="hidden xl:block">
                 <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: active ? "var(--accent)" : "var(--text-3)" }}>
                   Step {i + 1}
                 </div>
-                <div className="text-[12px] font-semibold">{s.label}</div>
+                <div className="text-[11px] font-semibold">{s.label}</div>
               </div>
             </button>
           );
@@ -95,6 +97,7 @@ function NewBookingPage() {
 
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-8 rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          {/* Step 0: Client */}
           {step === 0 && (
             <Group title="Client Information" icon={Building2}>
               <Field label="Client / Organization">
@@ -111,7 +114,80 @@ function NewBookingPage() {
             </Group>
           )}
 
+          {/* Step 1: CTO Consultation (SOP §1.2-1.3) */}
           {step === 1 && (
+            <Group title="CTO Consultation" icon={Wrench}>
+              <div className="rounded-md border p-4 mb-4" style={{ borderColor: "var(--accent)", background: "color-mix(in oklab, var(--accent) 6%, transparent)" }}>
+                <div className="flex items-center gap-2 text-[12px] font-bold" style={{ color: "var(--accent)" }}>
+                  <Wrench className="h-4 w-4" />
+                  SOP §1.2 — Consult Chief Technical Officer
+                </div>
+                <p className="mt-1 text-[11px]" style={{ color: "var(--text-2)" }}>
+                  Contact the CTO to confirm screen availability for the requested dates and get arrangement guidance.
+                </p>
+              </div>
+
+              <Field label="Screen Availability (units available)">
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { type: "P2.97", avail: 128 },
+                    { type: "P4", avail: 20 },
+                    { type: "P3.91 INDOOR", avail: 72 },
+                    { type: "P3.91 OUTDOOR", avail: 72 },
+                    { type: "P2.97-New", avail: 128 },
+                    { type: "P5", avail: 48 },
+                  ].map(({ type, avail }) => (
+                    <div key={type} className="rounded-md border p-2.5" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                      <div className="font-mono text-[11px] font-bold">{type}</div>
+                      <div className="mt-1 text-[14px] font-bold" style={{ color: avail > 30 ? "var(--color-bom-returned)" : "var(--color-pay-advance)" }}>
+                        {avail} <span className="text-[9px] font-normal" style={{ color: "var(--text-3)" }}>panels</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="CTO Arrangement Suggestions" icon={MessageSquare}>
+                <textarea
+                  value={form.ctoArrangement}
+                  onChange={(e) => set("ctoArrangement", e.target.value)}
+                  placeholder="CTO arrangement notes, e.g. 'Recommend 2-stack horizontal, P2.97 for indoor venue...'"
+                  rows={3}
+                  className="h-auto w-full rounded-md border bg-[var(--surface-2)] p-3 text-[13px] outline-none placeholder:text-[var(--text-3)] focus:border-[var(--accent)]"
+                  style={{ borderColor: "var(--border)" }}
+                />
+              </Field>
+
+              <Field label="CTO Notes / Special Guidance">
+                <textarea
+                  value={form.ctoNotes}
+                  onChange={(e) => set("ctoNotes", e.target.value)}
+                  placeholder="e.g. 'HDMI to SDI converter needed. Backup PSU on standby.'"
+                  rows={2}
+                  className="h-auto w-full rounded-md border bg-[var(--surface-2)] p-3 text-[13px] outline-none placeholder:text-[var(--text-3)] focus:border-[var(--accent)]"
+                  style={{ borderColor: "var(--border)" }}
+                />
+              </Field>
+
+              <div className="flex items-center gap-3 mt-2">
+                <button
+                  onClick={() => set("ctoConsulted", !form.ctoConsulted)}
+                  className="flex items-center gap-2 rounded-md border px-4 py-2 text-[12px] font-semibold transition"
+                  style={{
+                    borderColor: form.ctoConsulted ? "var(--color-bom-returned)" : "var(--border)",
+                    background: form.ctoConsulted ? "color-mix(in oklab, var(--color-bom-returned) 12%, transparent)" : "transparent",
+                    color: form.ctoConsulted ? "var(--color-bom-returned)" : "var(--text-2)",
+                  }}
+                >
+                  {form.ctoConsulted ? <CheckCircle2 className="h-4 w-4" /> : <div className="h-4 w-4 rounded-full border-2" style={{ borderColor: "var(--border)" }} />}
+                  CTO Consultation Completed
+                </button>
+              </div>
+            </Group>
+          )}
+
+          {/* Step 2: Venue & Date */}
+          {step === 2 && (
             <Group title="Venue & Date" icon={MapPin}>
               <Field label="Venue / Location">
                 <input value={form.venue} onChange={(e) => set("venue", e.target.value)} placeholder="e.g. Millennium Hall" className={inputCls} />
@@ -127,7 +203,8 @@ function NewBookingPage() {
             </Group>
           )}
 
-          {step === 2 && (
+          {/* Step 3: Screen Spec */}
+          {step === 3 && (
             <Group title="Screen Specification" icon={Package}>
               <Field label="Screen Type">
                 <div className="grid grid-cols-3 gap-2">
@@ -158,29 +235,31 @@ function NewBookingPage() {
             </Group>
           )}
 
-          {step === 3 && (
+          {/* Step 4: Team */}
+          {step === 4 && (
             <Group title="Team Assignment" icon={Users}>
               <Field label="Chief Technician">
                 <select value={form.chief} onChange={(e) => set("chief", e.target.value)} className={inputCls}>
                   <option value="">— Select —</option>
-                  {["Nathan", "Bereket", "Samuel", "Eyob"].map((p) => <option key={p}>{p}</option>)}
+                  {["Bereket Alemu", "Robel Hailu"].map((p) => <option key={p}>{p}</option>)}
                 </select>
               </Field>
               <Field label="Technician">
                 <select value={form.technician} onChange={(e) => set("technician", e.target.value)} className={inputCls}>
                   <option value="">— Select —</option>
-                  {["Yeabtsega", "Hanna", "Selam", "Dawit"].map((p) => <option key={p}>{p}</option>)}
+                  {["Yeabtsega", "Dawit Mekonnen", "Yonas Kebede", "Mahlet Girma"].map((p) => <option key={p}>{p}</option>)}
                 </select>
               </Field>
               <Field label="Stage Hand Team">
                 <select value={form.stageHand} onChange={(e) => set("stageHand", e.target.value)} className={inputCls}>
-                  {["TEAM 1 · Abel", "TEAM 2 · Mesfin", "TEAM 3 · Henok", "TEAM 4 · Solomon"].map((p) => <option key={p}>{p}</option>)}
+                  {["TEAM 1 · Abel", "TEAM 2 · Mesfin", "TEAM 3 · Henok", "TEAM 4 · Solomon", "TEAM 5 · Tewodros"].map((p) => <option key={p}>{p}</option>)}
                 </select>
               </Field>
             </Group>
           )}
 
-          {step === 4 && (
+          {/* Step 5: Payment */}
+          {step === 5 && (
             <Group title="Payment Terms" icon={DollarSign}>
               <Field label="Total Contract Value (ETB)">
                 <input type="number" value={form.amount} onChange={(e) => set("amount", +e.target.value)} className={`${inputCls} font-mono text-[15px] font-bold`} />
@@ -206,12 +285,15 @@ function NewBookingPage() {
             </Group>
           )}
 
-          {step === 5 && (
+          {/* Step 6: Review */}
+          {step === 6 && (
             <Group title="Review & Confirm" icon={CheckCircle2}>
               <div className="space-y-1 rounded-md border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
                 {[
                   ["Client", form.client || "—"],
                   ["Contact", `${form.contactPerson || "—"} · ${form.contactPhone || "—"}`],
+                  ["CTO Consulted", form.ctoConsulted ? "Yes ✓" : "Pending"],
+                  ["CTO Notes", form.ctoNotes || form.ctoArrangement || "—"],
                   ["Venue", form.venue || "—"],
                   ["Assembly", form.assemblyDate || "—"],
                   ["Event", form.eventDate || "—"],
@@ -221,7 +303,7 @@ function NewBookingPage() {
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between border-b py-1.5 text-[12px] last:border-0" style={{ borderColor: "var(--border)" }}>
                     <span className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>{k}</span>
-                    <span className="font-semibold">{v}</span>
+                    <span className="font-semibold text-right max-w-[60%]">{v}</span>
                   </div>
                 ))}
               </div>
@@ -268,6 +350,11 @@ function NewBookingPage() {
               <div className="font-mono text-[20px] font-bold" style={{ color: "var(--accent)" }}>SB-DRAFT</div>
               <div className="mt-1 text-[13px] font-semibold">{form.client || "Client name…"}</div>
               <div className="text-[11px]" style={{ color: "var(--text-2)" }}>{form.venue || "Venue…"}</div>
+              {form.ctoConsulted && (
+                <div className="mt-2 flex items-center gap-1 text-[10px] font-semibold" style={{ color: "var(--color-bom-returned)" }}>
+                  <CheckCircle2 className="h-3 w-3" /> CTO Consulted
+                </div>
+              )}
               <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3 text-[11px]" style={{ borderColor: "var(--border)" }}>
                 <div>
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Assembly</div>

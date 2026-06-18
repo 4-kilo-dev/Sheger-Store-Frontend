@@ -6,6 +6,7 @@
 
 @theme inline {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
 
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -39,49 +40,99 @@
   --color-text-3: var(--text-3);
 
   /* Booking status */
-  --color-status-reserved:    #fdab3d;
-  --color-status-confirmed:   #9cd326;
-  --color-status-assigned:    #b07a68;
-  --color-status-accepted:    #579bfc;
-  --color-status-preparation: #df2f4a;
-  --color-status-onsite:      #c4c4c4;
-  --color-status-completed:   #007eb5;
-  --color-status-done:        #037f4c;
+  --color-status-reserved:    #E8A030;
+  --color-status-confirmed:   #46A758;
+  --color-status-assigned:    #A18072;
+  --color-status-accepted:    #3E93DE;
+  --color-status-preparation: #E54666;
+  --color-status-onsite:      #8B8B97;
+  --color-status-completed:   #0091B2;
+  --color-status-done:        #30A46C;
 
   /* Payment */
-  --color-pay-paid:    #6b3dd1;
-  --color-pay-advance: #fdab3d;
-  --color-pay-unpaid:  #df2f4a;
+  --color-pay-paid:    #6E56CF;
+  --color-pay-advance: #E8A030;
+  --color-pay-unpaid:  #E54666;
 
   /* BOM */
-  --color-bom-returned:    #00c875;
-  --color-bom-checkedout:  #df2f4a;
+  --color-bom-returned:    #30A46C;
+  --color-bom-checkedout:  #E54666;
 }
 
 :root {
-  /* Brand: Sheger Charcoal + Sheger Yellow */
-  --background: #0F0F12;
-  --foreground: #F1F1F3;
-  --surface: #16161C;
-  --surface-2: #1E1E26;
-  --border: #2A2A35;
-  --text-2: #8B8B99;
-  --text-3: #5A5A6A;
+  /* Brand: Warm Charcoal + Amber Gold */
+  --background: #111113;
+  --foreground: #E8E8EC;
+  --surface: #18181B;
+  --surface-2: #222225;
+  --border: #2C2C30;
+  --text-2: #9898A4;
+  --text-3: #64646E;
 
-  --primary: #FFC72C;
-  --primary-foreground: #1D1E22;
-  --accent: #FFC72C;
-  --accent-foreground: #1D1E22;
-  --accent-dim: #7C5F05;
+  --primary: #F5B731;
+  --primary-foreground: #171310;
+  --accent: #F5B731;
+  --accent-foreground: #171310;
+  --accent-dim: #6B4F0E;
 
-  --destructive: #df2f4a;
+  --destructive: #E5484D;
 
+  --popover-bg: rgba(24, 24, 27, 0.85);
+  --popover-border: rgba(44, 44, 48, 0.6);
   --radius: 0.5rem;
 }
+.light {
+  --background: #F8F8FA;
+  --foreground: #18181B;
+  --surface: #FFFFFF;
+  --surface-2: #F0F0F3;
+  --border: #E4E4E7;
+  --text-2: #6B6B76;
+  --text-3: #9898A4;
 
-.dark { /* same — single theme */
-  --background: #0F0F12;
-  --foreground: #F1F1F3;
+  --primary: #D9A020;
+  --primary-foreground: #171310;
+  --accent: #D9A020;
+  --accent-foreground: #171310;
+  --accent-dim: #FFF0C8;
+
+  --popover-bg: rgba(255, 255, 255, 0.85);
+  --popover-border: rgba(228, 228, 231, 0.8);
+}
+
+.dark {
+  --background: #111113;
+  --foreground: #E8E8EC;
+  --surface: #18181B;
+  --surface-2: #222225;
+  --border: #2C2C30;
+  --text-2: #9898A4;
+  --text-3: #64646E;
+  --primary: #F5B731;
+  --primary-foreground: #171310;
+  --accent: #F5B731;
+  --accent-foreground: #171310;
+  --accent-dim: #6B4F0E;
+
+  --popover-bg: rgba(24, 24, 27, 0.85);
+  --popover-border: rgba(44, 44, 48, 0.6);
+}
+
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.profile-popover {
+  animation: popover-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 @layer base {
@@ -105,6 +156,41 @@
     font-weight: 600;
     color: var(--text-2);
   }
+  .font-data {
+    font-family: var(--font-data);
+    font-feature-settings: "tnum" 1, "ss01" 1;
+  }
+  .stat-value {
+    font-family: var(--font-data);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-feature-settings: "tnum" 1;
+  }
   .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
   .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 4px; }
+  
+  .switcher-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 10px;
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    border: 1px solid transparent;
+    cursor: pointer;
+  }
+  .switcher-item:hover {
+    background-color: var(--surface-2);
+    transform: translateX(3px);
+  }
+  .switcher-item.active {
+    background-color: var(--surface-2);
+    border-color: var(--accent);
+  }
 }
