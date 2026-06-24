@@ -1,5 +1,5 @@
 @import "tailwindcss" source(none);
-@source "../src";
+@source "../";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
@@ -60,62 +60,66 @@
 }
 
 :root {
-  /* Brand: Warm Charcoal + Amber Gold */
-  --background: #111113;
-  --foreground: #E8E8EC;
+  /* Brand: Warm Charcoal + Bright Yellow */
+  --background: #09090B;
+  --foreground: #FAFAFA;
   --surface: #18181B;
-  --surface-2: #222225;
-  --border: #2C2C30;
-  --text-2: #9898A4;
-  --text-3: #64646E;
+  --surface-2: #27272A;
+  --border: #3F3F46;
+  --text-2: #A1A1AA;
+  --text-3: #71717A;
 
-  --primary: #F5B731;
-  --primary-foreground: #171310;
-  --accent: #F5B731;
-  --accent-foreground: #171310;
-  --accent-dim: #6B4F0E;
+  /* Smooth vibrant yellow for dark mode */
+  --primary: #FDE047;
+  --primary-foreground: #09090B;
+  --accent: #FDE047;
+  --accent-foreground: #09090B;
+  --accent-dim: rgba(253, 224, 71, 0.15);
 
-  --destructive: #E5484D;
+  --destructive: #EF4444;
 
-  --popover-bg: rgba(24, 24, 27, 0.85);
-  --popover-border: rgba(44, 44, 48, 0.6);
+  --popover-bg: rgba(24, 24, 27, 0.95);
+  --popover-border: rgba(63, 63, 70, 0.5);
   --radius: 0.5rem;
 }
+
 .light {
-  --background: #F8F8FA;
-  --foreground: #18181B;
-  --surface: #FFFFFF;
-  --surface-2: #F0F0F3;
+  --background: #FFFFFF;
+  --foreground: #09090B;
+  --surface: #FAFAFA;
+  --surface-2: #F4F4F5;
   --border: #E4E4E7;
-  --text-2: #6B6B76;
-  --text-3: #9898A4;
+  --text-2: #52525B;
+  --text-3: #A1A1AA;
 
-  --primary: #D9A020;
-  --primary-foreground: #171310;
-  --accent: #D9A020;
-  --accent-foreground: #171310;
-  --accent-dim: #FFF0C8;
+  /* Slightly deeper golden yellow for light mode to maintain contrast */
+  --primary: #EAB308;
+  --primary-foreground: #FFFFFF;
+  --accent: #EAB308;
+  --accent-foreground: #000000;
+  --accent-dim: rgba(234, 179, 8, 0.15);
 
-  --popover-bg: rgba(255, 255, 255, 0.85);
+  --popover-bg: rgba(255, 255, 255, 0.95);
   --popover-border: rgba(228, 228, 231, 0.8);
 }
 
 .dark {
-  --background: #111113;
-  --foreground: #E8E8EC;
+  --background: #09090B;
+  --foreground: #FAFAFA;
   --surface: #18181B;
-  --surface-2: #222225;
-  --border: #2C2C30;
-  --text-2: #9898A4;
-  --text-3: #64646E;
-  --primary: #F5B731;
-  --primary-foreground: #171310;
-  --accent: #F5B731;
-  --accent-foreground: #171310;
-  --accent-dim: #6B4F0E;
+  --surface-2: #27272A;
+  --border: #3F3F46;
+  --text-2: #A1A1AA;
+  --text-3: #71717A;
 
-  --popover-bg: rgba(24, 24, 27, 0.85);
-  --popover-border: rgba(44, 44, 48, 0.6);
+  --primary: #FDE047;
+  --primary-foreground: #09090B;
+  --accent: #FDE047;
+  --accent-foreground: #09090B;
+  --accent-dim: rgba(253, 224, 71, 0.15);
+
+  --popover-bg: rgba(24, 24, 27, 0.95);
+  --popover-border: rgba(63, 63, 70, 0.5);
 }
 
 @keyframes popover-in {

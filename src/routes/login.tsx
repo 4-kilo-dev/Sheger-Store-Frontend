@@ -1,7 +1,12 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, LockKeyhole } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { createFileRoute } from "@tanstack/react-router";
+import { LoginPage } from "@/features/auth/pages/LoginPage";
 
-export const Route = createFileRoute("/login")({ head: () => ({ meta: [{ title: "Sign in · Vortex Visual" }, { name: "description", content: "Secure sign in to the Vortex Visual operations platform." }] }), component: LoginPage });
-function Brand() { return <div className="flex items-center gap-3"><div className="h-9 w-9 rotate-45 border-2 border-accent"><div className="m-1 h-5 w-5 border border-foreground"/></div><div><div className="text-sm font-bold tracking-[.22em]">VORTEX</div><div className="text-[9px] font-bold tracking-[.32em] text-accent">VISUAL</div></div></div>; }
-function LoginPage() { return <main className="grid min-h-screen bg-background lg:grid-cols-[1.15fr_0.85fr]"><section className="relative hidden overflow-hidden border-r border-border bg-surface p-12 lg:flex lg:flex-col lg:justify-between"><Brand/><div><div className="label-eyebrow text-accent">Operations platform</div><h1 className="mt-4 max-w-xl text-5xl font-bold leading-[1.05] tracking-tight">Every screen. Every crew. One clear operation.</h1><p className="mt-5 max-w-lg text-sm leading-6 text-text-2">Coordinate bookings, warehouse movement, installations, and client delivery from a single control room.</p></div><div className="text-xs text-text-3">Internal access · Addis Ababa, Ethiopia</div></section><section className="flex items-center justify-center p-6"><div className="w-full max-w-sm"><div className="mb-10 lg:hidden"><Brand/></div><LockKeyhole className="h-7 w-7 text-accent"/><h2 className="mt-5 text-2xl font-bold">Sign in to operations</h2><p className="mt-2 text-xs text-text-2">Use your staff phone number to receive a one-time code.</p><label className="mt-8 block text-xs font-semibold">Phone number<input defaultValue="+251 " className="mt-2 h-11 w-full border border-border bg-surface px-3 font-mono outline-none focus:border-accent"/></label><Button asChild className="mt-4 h-11 w-full"><Link to="/otp">Continue <ArrowRight/></Link></Button><p className="mt-5 text-center text-[10px] leading-4 text-text-3">Access is restricted to authorized Vortex Visual staff.</p></div></section></main>; }
+export const Route = createFileRoute("/login")({
+  head: () => ({
+    meta: [
+      { title: "Sign in · Vortex Visual" },
+      { name: "description", content: "Secure sign in to the Vortex Visual operations platform." },
+    ],
+  }),
+  component: LoginPage,
+});

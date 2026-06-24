@@ -86,23 +86,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [activeProfile, setActiveProfile] = useActiveProfile();
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("vortex_theme") as "light" | "dark") || "dark";
+      return document.documentElement.classList.contains("light") ? "light" : "dark";
     }
     return "dark";
   });
-  const path = useRouterState({ select: (s) => s.location.pathname });
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "light") {
-      root.classList.add("light");
-      root.classList.remove("dark");
-    } else {
-      root.classList.add("dark");
-      root.classList.remove("light");
-    }
-    localStorage.setItem("vortex_theme", theme);
-  }, [theme]);
+    // Sync React state with the actual DOM on mount
+    setTheme(document.documentElement.classList.contains("light") ? "light" : "dark");
+  }, []);
+
+  const path = useRouterState({ select: (s) => s.location.pathname });
 
   return (
     <div className="flex min-h-screen" style={{ background: "var(--background)" }}>
@@ -190,7 +184,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             (() => {
               const myRoleKey = activeProfile.role.toLowerCase();
               const myRoleLabel = activeProfile.role === "CTO" ? "Chief Tech Workspace" : `${activeProfile.role} Workspace`;
-              const myPath = `/dashboards/${myRoleKey}` as const;
+              const myPath = `/dashboards/${myRoleKey}` as any;
               const active = path === myPath;
               return (
                 <Link
@@ -286,7 +280,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                             background: isActive ? "var(--accent)" : "var(--surface-2)", 
                             color: isActive ? "var(--accent-foreground)" : "var(--text-2)",
                             border: isActive ? "none" : "1px solid var(--border)",
-                            boxShadow: isActive ? "0 0 12px rgba(245, 183, 49, 0.3)" : "none",
+                            boxShadow: isActive ? "0 0 12px rgba(252, 191, 36, 0.35)" : "none",
                           }}
                         >
                           {p.initials}
@@ -375,7 +369,19 @@ export function AppShell({ children }: { children: ReactNode }) {
               />
             </div>
             <button 
-              onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} 
+              onClick={() => {
+                const nextTheme = theme === "dark" ? "light" : "dark";
+                setTheme(nextTheme);
+                localStorage.setItem("vortex_theme", nextTheme);
+                const root = document.documentElement;
+                if (nextTheme === "light") {
+                  root.classList.add("light");
+                  root.classList.remove("dark");
+                } else {
+                  root.classList.add("dark");
+                  root.classList.remove("light");
+                }
+              }} 
               aria-label="Toggle theme" 
               className="flex h-8 w-8 items-center justify-center rounded-lg border transition-colors hover:bg-[var(--surface-2)]" 
               style={{ borderColor: "var(--border)" }}

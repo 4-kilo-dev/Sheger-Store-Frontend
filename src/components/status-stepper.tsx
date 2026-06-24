@@ -1,5 +1,5 @@
 import { Check } from "lucide-react";
-import { STATUS_ORDER, STATUS_LABELS, type BookingStatus } from "@/lib/mock-bookings";
+import { STATUS_ORDER, STATUS_LABELS, type BookingStatus } from "@/features/bookings/services/bookings.api";
 
 const VAR: Record<BookingStatus, string> = {
   RESERVED: "var(--color-status-reserved)",
