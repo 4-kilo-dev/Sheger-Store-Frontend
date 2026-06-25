@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowRight, LockKeyhole } from "lucide-react";
+import { ArrowRight, LockKeyhole, Eye, EyeOff } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -30,6 +31,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export function LoginPage() { 
     const navigate = useNavigate();
+    const [showPassword, setShowPassword] = useState(false);
 
     const form = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
@@ -100,11 +102,26 @@ export function LoginPage() {
                             <FormItem>
                                 <FormLabel className="text-xs font-semibold">Password</FormLabel>
                                 <FormControl>
-                                    <Input 
-                                        type="password" 
-                                        className="h-11 border-border bg-surface px-3 font-mono focus:border-accent" 
-                                        {...field} 
-                                    />
+                                    <div className="relative">
+                                        <Input 
+                                            type={showPassword ? "text" : "password"} 
+                                            className="h-11 border-border bg-surface pl-3 pr-10 font-mono focus:border-accent" 
+                                            {...field} 
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className={`absolute right-3 top-1/2 -translate-y-1/2 transition-colors focus:outline-none cursor-pointer ${
+                                                showPassword ? "text-accent" : "text-text-3 hover:text-foreground"
+                                            }`}
+                                        >
+                                            {showPassword ? (
+                                                <EyeOff className="h-4 w-4" />
+                                            ) : (
+                                                <Eye className="h-4 w-4" />
+                                            )}
+                                        </button>
+                                    </div>
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>

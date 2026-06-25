@@ -4,8 +4,10 @@ import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { STAFF, STAFF_ROLES } from "@/features/checkout/services/operations.api";
 import { AddStaffModal } from "../components/AddStaffModal";
-import { useQuery } from "@tanstack/react-query";
-import { getStaffApi } from "@/features/users/services/staff.api";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getStaffApi, resetPasswordApi, toggleUserActiveApi } from "@/features/users/services/staff.api";
+import { useActiveProfile } from "@/hooks/use-active-profile";
+import { toast } from "sonner";
 
 const _Route = createFileRoute("/staff")({
   head: () => ({
@@ -27,11 +29,53 @@ const statusColor: Record<string, string> = {
 export function StaffPage() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<(typeof STAFF_ROLES)[number]>("All");
+  const [activeProfile] = useActiveProfile();
+  const isAdmin = activeProfile.role === "Admin";
+  const queryClient = useQueryClient();
 
   const { data: staffList = STAFF } = useQuery({
     queryKey: ["staff"],
     queryFn: getStaffApi,
   });
+
+  const { mutate: resetPassword } = useMutation({
+    mutationFn: resetPasswordApi,
+    onSuccess: (res, userId) => {
+      const userObj = staffList.find((s) => s.id === userId);
+      toast.success(
+        `Password reset for ${userObj?.name || "staff"}! Temporary password: ${res.temporaryPassword}`,
+        { duration: 15000, description: "Copy and share securely. User must update it on first login." }
+      );
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to reset password");
+    },
+  });
+
+  const { mutate: toggleActive } = useMutation({
+    mutationFn: ({ userId, active }: { userId: string; active: boolean }) =>
+      toggleUserActiveApi(userId, active),
+    onSuccess: (_, variables) => {
+      toast.success(variables.active ? "Account activated successfully" : "Account deactivated successfully");
+      queryClient.invalidateQueries({ queryKey: ["staff"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to toggle account status");
+    },
+  });
+
+  const handleResetPassword = (userId: string, name: string) => {
+    if (confirm(`Are you sure you want to reset the password for ${name}?`)) {
+      resetPassword(userId);
+    }
+  };
+
+  const handleToggleActive = (userId: string, currentActive: boolean) => {
+    const action = currentActive ? "deactivate" : "activate";
+    if (confirm(`Are you sure you want to ${action} this staff member's account?`)) {
+      toggleActive({ userId, active: !currentActive });
+    }
+  };
 
   const rows = useMemo(
     () =>
@@ -164,12 +208,35 @@ export function StaffPage() {
                 </div>
               </div>
 
+               {isAdmin && p.id && (
+                <div className="mt-3 flex gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                  <button
+                    onClick={() => handleResetPassword(p.id!, p.name)}
+                    className="rounded bg-[var(--surface-2)] px-2.5 py-1 text-[10px] font-semibold transition hover:bg-border cursor-pointer"
+                    style={{ color: "var(--text-2)", border: "1px solid var(--border)" }}
+                  >
+                    Reset Password
+                  </button>
+                  <button
+                    onClick={() => handleToggleActive(p.id!, p.status !== "OFF DUTY")}
+                    className="rounded px-2.5 py-1 text-[10px] font-semibold transition cursor-pointer"
+                    style={{
+                      background: p.status !== "OFF DUTY" ? "rgba(239, 68, 68, 0.1)" : "rgba(34, 197, 94, 0.1)",
+                      color: p.status !== "OFF DUTY" ? "#f87171" : "#4ade80",
+                      border: p.status !== "OFF DUTY" ? "1px solid rgba(239, 68, 68, 0.2)" : "1px solid rgba(34, 197, 94, 0.2)",
+                    }}
+                  >
+                    {p.status !== "OFF DUTY" ? "Deactivate" : "Activate"}
+                  </button>
+                </div>
+              )}
+
               <div className="mt-3 flex items-center justify-between border-t pt-3 text-[10px]" style={{ borderColor: "var(--border)" }}>
                 <span style={{ color: "var(--text-3)" }}>
                   <Calendar className="mr-1 inline h-3 w-3" />
                   Joined {p.joinedDate}
                 </span>
-                <button className="font-semibold" style={{ color: "var(--accent)" }}>Assign to Booking →</button>
+                <button className="font-semibold cursor-pointer" style={{ color: "var(--accent)" }}>Assign to Booking →</button>
               </div>
             </div>
           );

@@ -1,7 +1,7 @@
 import { client, authStorage } from "@/lib/api/client";
 
 export interface LoginResponse {
-  token: string;
+  accessToken: string;
   user: {
     id: string;
     name: string;
@@ -16,8 +16,36 @@ export interface LoginResponse {
 
 export async function loginApi(payload: any): Promise<LoginResponse> {
   const data = await client.post<LoginResponse>("/api/auth/login", payload);
-  authStorage.setToken(data.token);
+  authStorage.setToken(data.accessToken);
   authStorage.setUser(data.user);
+
+  if (typeof window !== "undefined") {
+    const backendRole = data.user.role?.toLowerCase() || "";
+    let matchedRole: "Admin" | "CCR" | "CTO" | "TO" | "OO" | "SK" = "Admin";
+    if (backendRole === "admin" || backendRole === "supervisor") matchedRole = "Admin";
+    else if (backendRole === "ccr") matchedRole = "CCR";
+    else if (backendRole === "chief_tech") matchedRole = "CTO";
+    else if (backendRole === "technician") matchedRole = "TO";
+    else if (backendRole === "ops_officer") matchedRole = "OO";
+    else if (backendRole === "storekeeper") matchedRole = "SK";
+
+    const initials = data.user.name
+      .split(" ")
+      .map((n: string) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "U";
+
+    const activeProfile = {
+      name: data.user.name,
+      role: matchedRole,
+      initials,
+      color: "var(--accent)",
+    };
+
+    localStorage.setItem("vortex_active_profile", JSON.stringify(activeProfile));
+  }
+
   return data;
 }
 
@@ -33,5 +61,8 @@ export async function logoutApi(): Promise<void> {
   } finally {
     authStorage.clearToken();
     authStorage.clearUser();
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("vortex_active_profile");
+    }
   }
 }

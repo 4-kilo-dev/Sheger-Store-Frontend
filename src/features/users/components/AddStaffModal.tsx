@@ -27,7 +27,7 @@ const addStaffSchema = z.object({
   phone: z.string().regex(/^\+?[0-9\s\-]+$/, "Phone number can only contain digits, spaces, and hyphens").min(10, "Phone must be at least 10 characters"),
   email: z.string().email("Please enter a valid email address"),
   role: z.string().min(1, "Please select a role"),
-  team: z.string().min(1, "Team is required"),
+  team: z.string().optional(),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
@@ -41,6 +41,15 @@ export function AddStaffModal() {
     queryKey: ["roles"],
     queryFn: getRolesApi,
   });
+
+  const fallbackRoles = [
+    { id: "ccr", key: "ccr", displayName: "CCR" },
+    { id: "cto", key: "cto", displayName: "Chief Technician" },
+    { id: "to", key: "to", displayName: "Technician" },
+    { id: "oo", key: "oo", displayName: "Operation Officer" },
+    { id: "sk", key: "sk", displayName: "Storekeeper" },
+  ];
+  const displayRoles = roles.length > 0 ? roles : fallbackRoles;
 
   const form = useForm<AddStaffFormValues>({
     resolver: zodResolver(addStaffSchema),
@@ -162,7 +171,7 @@ export function AddStaffModal() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {roles.map((role) => (
+                        {displayRoles.map((role) => (
                           <SelectItem key={role.id} value={role.displayName}>
                             {role.displayName}
                           </SelectItem>

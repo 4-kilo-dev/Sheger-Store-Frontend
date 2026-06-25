@@ -25,6 +25,7 @@ export async function getStaffApi(): Promise<StaffMember[]> {
       .slice(0, 2);
 
     return {
+      id: u.id,
       name: u.name,
       role: roleName,
       team: u.team || "Operations",
@@ -40,7 +41,7 @@ export async function getStaffApi(): Promise<StaffMember[]> {
 
 export async function createStaffApi(payload: any): Promise<StaffMember> {
   // 1. Fetch roles list to map payload.role (displayName) to roleId
-  const roles = await getRolesApi();
+  const roles = await getRolesApi().catch(() => []);
   const matchedRole = roles.find(
     (r) =>
       r.displayName.toLowerCase() === payload.role.toLowerCase() ||
@@ -72,6 +73,7 @@ export async function createStaffApi(payload: any): Promise<StaffMember> {
     .slice(0, 2);
 
   return {
+    id: newUser.id,
     name: newUser.name,
     role: matchedRole.displayName,
     team: payload.team || "Operations",
@@ -82,4 +84,12 @@ export async function createStaffApi(payload: any): Promise<StaffMember> {
     initials: initials || "?",
     joinedDate: new Date().toISOString().slice(0, 10),
   };
+}
+
+export async function resetPasswordApi(userId: string): Promise<{ temporaryPassword: string }> {
+  return client.post<{ temporaryPassword: string }>(`/api/users/${userId}/reset-password`);
+}
+
+export async function toggleUserActiveApi(userId: string, active: boolean): Promise<any> {
+  return client.patch<any>(`/api/users/${userId}`, { active });
 }

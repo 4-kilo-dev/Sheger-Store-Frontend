@@ -26,8 +26,7 @@ export function useActiveProfile() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        const found = PROFILES.find((p) => p.role === parsed.role);
-        if (found) setProfileState(found);
+        if (parsed && parsed.role) setProfileState(parsed);
       } catch (e) {
         // ignore
       }
@@ -46,8 +45,7 @@ export function useActiveProfile() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          const found = PROFILES.find((p) => p.role === parsed.role);
-          if (found) setProfileState(found);
+          if (parsed && parsed.role) setProfileState(parsed);
         } catch (e) {
           // ignore
         }
