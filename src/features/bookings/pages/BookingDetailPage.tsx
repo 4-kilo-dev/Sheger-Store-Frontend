@@ -1,5 +1,7 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useState } from "react";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   ArrowLeft, Edit3, Printer, Share2, MoreHorizontal, MapPin, Calendar,
   Phone, User, Building2, DollarSign, Paperclip, MessageSquare,
@@ -10,7 +12,14 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { StatusStepper } from "@/components/status-stepper";
-import { MOCK_BOOKINGS, STATUS_ORDER } from "@/features/bookings/services/bookings.api";
+import { 
+  getBookingDetailApi, 
+  transitionBookingStatusApi, 
+  recordBookingPaymentApi, 
+  STATUS_ORDER, 
+  MOCK_BOOKINGS,
+  type BookingStatus 
+} from "@/features/bookings/services/bookings.api";
 
 const _Route = createFileRoute("/bookings/$code")({
   head: ({ params }) => ({
@@ -20,9 +29,7 @@ const _Route = createFileRoute("/bookings/$code")({
     ],
   }),
   loader: ({ params }) => {
-    const b = MOCK_BOOKINGS.find((x) => x.code === params.code);
-    if (!b) throw notFound();
-    return { booking: b };
+    return { code: params.code };
   },
   notFoundComponent: () => (
     <AppShell>
@@ -50,9 +57,66 @@ const STATUS_ACTIONS: Record<string, { label: string; icon: any; nextStatus: str
 };
 
 export function BookingDetail() {
-  const { booking } = Route.useLoaderData();
+  const { code } = _Route.useParams();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [showActionModal, setShowActionModal] = useState(false);
+
+  const { data: booking, isLoading, error } = useQuery({
+    queryKey: ["booking", code],
+    queryFn: () => getBookingDetailApi(code),
+  });
+
+  const { mutate: transitionStatus, isPending: isTransitioning } = useMutation({
+    mutationFn: ({ toStatus, reason }: { toStatus: BookingStatus; reason?: string }) => 
+      transitionBookingStatusApi(code, toStatus, reason),
+    onSuccess: () => {
+      toast.success("Booking state advanced successfully!");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      setShowActionModal(false);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to advance booking state");
+    }
+  });
+
+  const { mutate: recordPayment, isPending: isRecordingPayment } = useMutation({
+    mutationFn: ({ toStatus, amount }: { toStatus: string; amount: number }) => 
+      recordBookingPaymentApi(code, toStatus, amount),
+    onSuccess: () => {
+      toast.success("Payment recorded successfully!");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      setShowActionModal(false);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to record payment");
+    }
+  });
+
+  if (isLoading) {
+    return (
+      <AppShell>
+        <div className="flex h-[60vh] flex-col items-center justify-center gap-3">
+          <div className="text-[14px] font-semibold">Loading booking details...</div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (error || !booking) {
+    return (
+      <AppShell>
+        <div className="flex h-[60vh] flex-col items-center justify-center gap-3 text-center">
+          <AlertTriangle className="h-8 w-8" style={{ color: "var(--accent)" }} />
+          <div className="text-[15px] font-semibold">Booking not found or failed to load</div>
+          <Link to="/bookings" className="text-[12px]" style={{ color: "var(--accent)" }}>← Back to Bookings</Link>
+        </div>
+      </AppShell>
+    );
+  }
+
   const action = STATUS_ACTIONS[booking.status];
 
   return (
@@ -158,9 +222,20 @@ export function BookingDetail() {
             </div>
             <button onClick={() => setShowActionModal(false)} className="text-[12px] font-semibold" style={{ color: "var(--text-3)" }}>✕</button>
           </div>
-          <div className="mt-4 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-            <button className="rounded-md px-4 py-2 text-[12px] font-bold transition hover:brightness-110" style={{ background: action.color || "var(--accent)", color: action.color ? "#fff" : "var(--accent-foreground)" }}>
-              Confirm: {action.label}
+           <div className="mt-4 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+            <button
+              onClick={() => {
+                if (booking.status === "RESERVED") {
+                  recordPayment({ toStatus: "advance", amount: booking.amount });
+                } else {
+                  transitionStatus({ toStatus: action.nextStatus as BookingStatus });
+                }
+              }}
+              disabled={isTransitioning || isRecordingPayment}
+              className="rounded-md px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
+              style={{ background: action.color || "var(--accent)", color: action.color ? "#fff" : "var(--accent-foreground)" }}
+            >
+              {isTransitioning || isRecordingPayment ? "Processing..." : `Confirm: ${action.label}`}
             </button>
             <button onClick={() => setShowActionModal(false)} className="rounded-md border px-4 py-2 text-[12px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
               Cancel
