@@ -56,3 +56,22 @@ export const NOTIFICATIONS: Notification[] = [
   { id: "n11", title: "SB035 marked as DONE", detail: "All materials checked in and verified. Job closed successfully.", time: "4 days", type: "Booking", priority: "LOW", unread: false, date: "This Week" },
   { id: "n12", title: "Meal budget exceeded", detail: "SB042 meal provision exceeded budget by 800 ETB. Review with OO.", time: "5 days", type: "Payment", priority: "NORMAL", unread: false, date: "This Week" },
 ];
+
+import { client } from "@/lib/api/client";
+
+export async function getBookingBomLinesApi(bookingId: string): Promise<any[]> {
+  try {
+    return await client.get<any[]>(`/api/bookings/${bookingId}/bom/lines`);
+  } catch (error) {
+    console.error("Failed to fetch BOM lines, returning empty list", error);
+    return [];
+  }
+}
+
+export async function checkoutBookingApi(bookingId: string, payload: any): Promise<any> {
+  return client.post(`/api/bookings/${bookingId}/checkout`, payload);
+}
+
+export async function checkinBookingApi(bookingId: string, payload: any): Promise<any> {
+  return client.post(`/api/bookings/${bookingId}/checkin`, payload);
+}

@@ -3,6 +3,9 @@ import { Search, UserCheck, Users, Radio, BriefcaseBusiness, Phone, Calendar, Ch
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { STAFF, STAFF_ROLES } from "@/features/checkout/services/operations.api";
+import { AddStaffModal } from "../components/AddStaffModal";
+import { useQuery } from "@tanstack/react-query";
+import { getStaffApi } from "@/features/users/services/staff.api";
 
 const _Route = createFileRoute("/staff")({
   head: () => ({
@@ -25,22 +28,27 @@ export function StaffPage() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<(typeof STAFF_ROLES)[number]>("All");
 
+  const { data: staffList = STAFF } = useQuery({
+    queryKey: ["staff"],
+    queryFn: getStaffApi,
+  });
+
   const rows = useMemo(
     () =>
-      STAFF.filter(
+      staffList.filter(
         (person) =>
           (roleFilter === "All" || person.role === roleFilter) &&
           `${person.name} ${person.role} ${person.team}`.toLowerCase().includes(query.toLowerCase()),
       ),
-    [query, roleFilter],
+    [query, roleFilter, staffList],
   );
 
   const counts = useMemo(() => ({
-    total: STAFF.length,
-    active: STAFF.filter((s) => s.status === "ACTIVE").length,
-    onsite: STAFF.filter((s) => s.status === "ONSITE").length,
+    total: staffList.length,
+    active: staffList.filter((s) => s.status === "ACTIVE").length,
+    onsite: staffList.filter((s) => s.status === "ONSITE").length,
     openAssignments: 7,
-  }), []);
+  }), [staffList]);
 
   return (
     <AppShell>
@@ -51,9 +59,7 @@ export function StaffPage() {
           <h1 className="text-[24px] font-bold tracking-tight">Staff Management</h1>
           <p className="mt-1 text-[12px] text-text-2">Roles, duty status, workload, and crew contact directory.</p>
         </div>
-        <button className="flex h-9 items-center gap-2 rounded-md px-4 text-[13px] font-semibold" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
-          Add Staff Member
-        </button>
+        <AddStaffModal />
       </div>
 
       {/* Stats */}

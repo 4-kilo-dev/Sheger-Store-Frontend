@@ -4,9 +4,12 @@ import {
   ArrowLeft, Check, CheckCircle2, ChevronDown, ClipboardCheck,
   Package, PackageCheck, Printer, Search, Truck, X,
 } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
-import { MOCK_BOOKINGS, type Booking, type BomItem } from "@/features/bookings/services/bookings.api";
+import { getBookingsApi, MOCK_BOOKINGS, type Booking, type BomItem } from "@/features/bookings/services/bookings.api";
+import { getBookingBomLinesApi, checkoutBookingApi, checkinBookingApi } from "@/features/checkout/services/operations.api";
 
 const _Route = createFileRoute("/checkout")({
   head: () => ({
@@ -21,17 +24,31 @@ const _Route = createFileRoute("/checkout")({
 type Mode = "checkout" | "checkin";
 
 export function CheckoutPage() {
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState<Mode>("checkout");
   const [selectedCode, setSelectedCode] = useState("");
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState(false);
 
+  // Fetch bookings list
+  const { data: bookingsList = [] } = useQuery({
+    queryKey: ["bookings"],
+    queryFn: getBookingsApi,
+  });
+
+  // Fetch BOM lines for the selected booking
+  const { data: backendBomLines = [] } = useQuery({
+    queryKey: ["bomLines", selectedCode],
+    queryFn: () => getBookingBomLinesApi(selectedCode),
+    enabled: !!selectedCode,
+  });
+
   const eligibleBookings = useMemo(() => {
     if (mode === "checkout") {
-      return MOCK_BOOKINGS.filter((b) => b.status === "PREPARATION" || b.status === "ACCEPTED");
+      return bookingsList.filter((b) => b.status === "PREPARATION" || b.status === "ACCEPTED" || b.status === "RESERVED" || b.status === "CONFIRMED");
     }
-    return MOCK_BOOKINGS.filter((b) => b.status === "COMPLETED" || b.status === "ONSITE");
-  }, [mode]);
+    return bookingsList.filter((b) => b.status === "COMPLETED" || b.status === "ONSITE");
+  }, [mode, bookingsList]);
 
   const selected = eligibleBookings.find((b) => b.code === selectedCode);
 
@@ -52,8 +69,49 @@ export function CheckoutPage() {
     }
   };
 
+  const { mutate: performOperation, isPending } = useMutation({
+    mutationFn: async () => {
+      if (!selected) return;
+      if (mode === "checkout") {
+        const assets = selected.bomItems.map((item) => {
+          const matchedLine = backendBomLines.find(
+            (line) => line.id === item.id || line.item?.name === item.name || line.pool?.name === item.name
+          );
+          return {
+            poolId: matchedLine?.poolId || null,
+            itemId: matchedLine?.itemId || null,
+            quantity: String(item.qty),
+          };
+        });
+        await checkoutBookingApi(selected.code, { assets });
+      } else {
+        const returns = selected.bomItems.map((item) => {
+          const matchedLine = backendBomLines.find(
+            (line) => line.id === item.id || line.item?.name === item.name || line.pool?.name === item.name
+          );
+          return {
+            poolId: matchedLine?.poolId || null,
+            itemId: matchedLine?.itemId || null,
+            quantityReturned: String(item.qty),
+            condition: "AVAILABLE",
+          };
+        });
+        await checkinBookingApi(selected.code, { returns });
+      }
+    },
+    onSuccess: () => {
+      toast.success(mode === "checkout" ? "Check-out completed successfully!" : "Check-in completed successfully!");
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking", selectedCode] });
+      setSubmitted(true);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Operation failed");
+    },
+  });
+
   const handleSubmit = () => {
-    setSubmitted(true);
+    performOperation();
   };
 
   const reset = () => {
@@ -345,7 +403,7 @@ export function CheckoutPage() {
                 <div className="space-y-2">
                   <button
                     onClick={handleSubmit}
-                    disabled={checkedItems.size === 0}
+                    disabled={checkedItems.size === 0 || isPending}
                     className="flex w-full items-center justify-center gap-2 rounded-md py-3 text-[13px] font-bold transition hover:brightness-110 disabled:opacity-40"
                     style={{
                       background: mode === "checkout" ? "var(--accent)" : "var(--color-bom-returned)",
@@ -353,7 +411,7 @@ export function CheckoutPage() {
                     }}
                   >
                     {mode === "checkout" ? <Truck className="h-4 w-4" /> : <PackageCheck className="h-4 w-4" />}
-                    {mode === "checkout" ? "Confirm Check-Out" : "Confirm Check-In"}
+                    {isPending ? "Processing..." : (mode === "checkout" ? "Confirm Check-Out" : "Confirm Check-In")}
                   </button>
                   <button
                     className="flex w-full items-center justify-center gap-2 rounded-md border py-2.5 text-[12px] font-semibold transition hover:border-[var(--accent)]"

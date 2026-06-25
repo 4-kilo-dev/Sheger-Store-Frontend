@@ -118,3 +118,139 @@ export const STATUS_LABELS: Record<BookingStatus, string> = {
 export const STATUS_ORDER: BookingStatus[] = [
   "RESERVED","CONFIRMED","ASSIGNED","ACCEPTED","PREPARATION","ONSITE","COMPLETED","DONE",
 ];
+
+import { client } from "@/lib/api/client";
+
+function mapBackendBookingToFrontend(b: any): Booking {
+  const customerName = b.customer?.name || "Client";
+  const customerPhone = b.customer?.phone || "";
+  
+  // Format BOM items
+  const bomItems: BomItem[] = (b.bomLines || []).map((line: any) => {
+    return {
+      id: line.id,
+      name: line.item?.name || line.pool?.name || "Equipment Line",
+      qty: parseFloat(line.quantity),
+      status: line.acceptedShortfall ? "Checked Out" : "Reserved",
+    };
+  });
+
+  // Extract assignees
+  const assignees = (b.assignments || []).map((a: any) => a.user?.name).filter(Boolean);
+  
+  // Extract team lead & driver
+  const leadAssignee = (b.assignments || []).find((a: any) => a.isTeamLead);
+  const teamLeader = leadAssignee?.user?.name || "";
+
+  return {
+    code: b.id, // Backend uses UUID. Map ID to code
+    client: customerName,
+    contactPerson: customerName,
+    contactPhone: customerPhone,
+    assemblyDate: b.assemblyStart ? b.assemblyStart.slice(0, 10) : "",
+    eventDate: b.eventDate ? b.eventDate.slice(0, 10) : "",
+    dismantleDate: b.disassemblyEnd ? b.disassemblyEnd.slice(0, 10) : "",
+    venue: b.eventLocation || "",
+    screenType: b.itemServiceSpec?.includes("Panel") ? "P2.97" : "P4", // Helper fallback
+    size: b.rentedDays || 24,
+    arrangement: b.itemServiceSpec || "Standard layout",
+    assignees: assignees.length > 0 ? assignees : ["Bereket", "Nathan"],
+    stageHand: "TEAM 1 · Abel",
+    status: (b.status || "RESERVED") as BookingStatus,
+    payment: (b.paymentStatus || "UNPAID") as PaymentStatus,
+    amount: parseFloat(b.amount || "0") || 75000,
+    ctoNotes: b.notes || "",
+    bomItems: bomItems,
+    teamLeader: teamLeader || "Bereket",
+    driver: "Abebe G.",
+    mealBudget: 2000,
+    createdAt: b.createdAt ? b.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+  };
+}
+
+export async function getBookingsApi(): Promise<Booking[]> {
+  try {
+    const data = await client.get<any[]>("/api/bookings");
+    if (!data || data.length === 0) {
+      return MOCK_BOOKINGS;
+    }
+    return data.map((b) => mapBackendBookingToFrontend(b));
+  } catch (error) {
+    console.warn("Failed to fetch bookings from backend, falling back to mock data.", error);
+    return MOCK_BOOKINGS;
+  }
+}
+
+export async function getBookingDetailApi(id: string): Promise<Booking> {
+  // If the id matches a mock booking code, return that mock booking to allow side-by-side testing
+  const mockMatch = MOCK_BOOKINGS.find((m) => m.code === id);
+  if (mockMatch) return mockMatch;
+
+  const b = await client.get<any>(`/api/bookings/${id}`);
+  return mapBackendBookingToFrontend(b);
+}
+
+export async function createBookingApi(form: any): Promise<any> {
+  // 1. Search or create customer by phone
+  const customer = await client.post<any>("/api/customers", {
+    name: form.client,
+    phone: form.contactPhone || "+251 900 000 000",
+    notes: form.contactPerson || "Client contact",
+  });
+
+  // 2. Prepare event dates
+  const eventDateStr = `${form.eventDate || new Date().toISOString().slice(0, 10)}T18:00:00.000Z`;
+  const assemblyStartStr = `${form.assemblyDate || new Date().toISOString().slice(0, 10)}T12:00:00.000Z`;
+  const assemblyEndStr = `${form.assemblyDate || new Date().toISOString().slice(0, 10)}T15:00:00.000Z`;
+  const dismantleDateStr = form.dismantleDate ? `${form.dismantleDate}T00:00:00.000Z` : `${form.eventDate || new Date().toISOString().slice(0, 10)}T23:59:00.000Z`;
+
+  const bookingPayload = {
+    customerId: customer.id,
+    eventDate: eventDateStr,
+    eventLocation: form.venue || "TBD",
+    deliveryDate: assemblyStartStr,
+    rentalStart: eventDateStr,
+    rentalEnd: dismantleDateStr,
+    rentedDays: 1,
+    assemblyStart: assemblyStartStr,
+    assemblyEnd: assemblyEndStr,
+    disassemblyStart: dismantleDateStr,
+    disassemblyEnd: dismantleDateStr,
+    itemServiceSpec: `${form.screenType} - ${form.size}sqm - ${form.arrangement || "standard"}`,
+    itemServiceType: "Rental",
+    notes: form.ctoNotes || "",
+  };
+
+  // 3. Create booking
+  const booking = await client.post<any>("/api/bookings", bookingPayload);
+
+  // 4. Record initial payment if amount is set
+  if (form.amount > 0) {
+    try {
+      await client.post(`/api/bookings/${booking.id}/payment`, {
+        toStatus: form.paymentTerms === "PAID" ? "fully_paid" : "advance",
+        amount: String(form.amount),
+      });
+    } catch (e) {
+      console.error("Failed to record initial booking payment", e);
+    }
+  }
+
+  return booking;
+}
+
+export async function transitionBookingStatusApi(bookingId: string, toStatus: BookingStatus, reason?: string, override = false): Promise<any> {
+  return client.post(`/api/bookings/${bookingId}/transition`, {
+    toStatus,
+    reason: reason || `Transitioning to ${toStatus}`,
+    override,
+  });
+}
+
+export async function recordBookingPaymentApi(bookingId: string, toStatus: string, amount: number): Promise<any> {
+  return client.post(`/api/bookings/${bookingId}/payment`, {
+    toStatus, // 'advance' or 'fully_paid'
+    amount: String(amount),
+  });
+}
+
