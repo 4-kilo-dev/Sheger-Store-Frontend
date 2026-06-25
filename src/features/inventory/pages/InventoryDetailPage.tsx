@@ -1,16 +1,15 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, ClipboardList, MapPin, Package, RotateCcw, ShieldAlert, Wrench } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
-import { MOCK_INVENTORY } from "@/features/inventory/services/inventory.api";
+import { MOCK_INVENTORY, getInventoryItemDetailApi } from "@/features/inventory/services/inventory.api";
 
 const _Route = createFileRoute("/inventory/$itemId")({
   head: ({ params }) => ({ meta: [{ title: `${params.itemId} · Inventory · Vortex Visual` }, { name: "description", content: `Equipment history and availability for ${params.itemId}.` }] }),
   loader: ({ params }) => {
-    const item = MOCK_INVENTORY.find((candidate) => candidate.id === params.itemId);
-    if (!item) throw notFound();
-    return { item };
+    return { itemId: params.itemId };
   },
   notFoundComponent: () => <AppShell><div className="flex h-[60vh] flex-col items-center justify-center gap-3"><AlertTriangle className="h-8 w-8 text-accent" /><p>Inventory item not found.</p><Link to="/inventory" className="text-accent">Back to Inventory</Link></div></AppShell>,
   component: InventoryDetail,
@@ -21,8 +20,33 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: str
 }
 
 export function InventoryDetail() {
-  const { item } = Route.useLoaderData();
+  const { itemId } = _Route.useParams();
+
+  const { data: item, isLoading, error } = useQuery({
+    queryKey: ["inventoryItem", itemId],
+    queryFn: () => getInventoryItemDetailApi(itemId),
+  });
+
   const [tab, setTab] = useState<"Units" | "Movement" | "Maintenance">("Units");
+
+  if (isLoading) {
+    return <AppShell>
+      <div className="flex h-[60vh] flex-col items-center justify-center gap-3">
+        <p className="text-[14px] font-semibold text-text-2">Loading item details...</p>
+      </div>
+    </AppShell>;
+  }
+
+  if (error || !item) {
+    return <AppShell>
+      <div className="flex h-[60vh] flex-col items-center justify-center gap-3 text-center">
+        <AlertTriangle className="h-8 w-8 text-accent" />
+        <p className="text-[14px] font-semibold text-text-2">Inventory item not found or failed to load.</p>
+        <Link to="/inventory" className="text-accent">Back to Inventory</Link>
+      </div>
+    </AppShell>;
+  }
+
   const units = Array.from({ length: Math.min(item.total, 12) }, (_, i) => ({ serial: `${item.id}-${String(i + 1).padStart(3, "0")}`, state: i < item.damaged ? "DAMAGED" : i < item.damaged + item.onsite ? "ONSITE" : i < item.damaged + item.onsite + item.reserved ? "RESERVED" : "AVAILABLE", location: i < item.onsite ? "SB047 · Sheraton" : item.location }));
 
   return <AppShell>

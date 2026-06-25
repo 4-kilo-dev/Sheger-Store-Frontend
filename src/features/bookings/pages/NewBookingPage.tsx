@@ -1,10 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   ArrowLeft, Building2, MapPin, Calendar, User, Phone, Package,
   Users, DollarSign, CheckCircle2, Save, Wrench, MessageSquare,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { createBookingApi } from "@/features/bookings/services/bookings.api";
 
 const _Route = createFileRoute("/bookings/new")({
   head: () => ({
@@ -28,6 +31,7 @@ const STEPS = [
 
 export function NewBooking() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     client: "", contactPerson: "", contactPhone: "",
@@ -38,6 +42,18 @@ export function NewBooking() {
     amount: 75000, paymentTerms: "ADVANCE",
   });
   const set = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  const { mutate: createBooking, isPending } = useMutation({
+    mutationFn: createBookingApi,
+    onSuccess: () => {
+      toast.success("Booking created successfully!");
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      navigate({ to: "/bookings" });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to create booking");
+    },
+  });
 
   return (
     <AppShell>
@@ -332,12 +348,13 @@ export function NewBooking() {
               </button>
             ) : (
               <button
-                onClick={() => navigate({ to: "/bookings" })}
-                className="flex items-center gap-1.5 rounded-md px-5 py-2 text-[12px] font-bold"
+                onClick={() => createBooking(form)}
+                disabled={isPending}
+                className="flex items-center gap-1.5 rounded-md px-5 py-2 text-[12px] font-bold disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
               >
                 <Save className="h-3.5 w-3.5" />
-                Confirm & Create Booking
+                {isPending ? "Creating..." : "Confirm & Create Booking"}
               </button>
             )}
           </div>

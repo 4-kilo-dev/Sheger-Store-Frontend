@@ -4,7 +4,8 @@ import { Plus, Filter, ArrowUpDown, MoreVertical, Calendar } from "lucide-react"
 import { AppShell } from "@/components/app-shell";
 import { FilterDropdown, SortButton } from "@/components/filter-dropdown";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
-import { MOCK_BOOKINGS, STATUS_ORDER, STATUS_LABELS, type Booking, type BookingStatus, type PaymentStatus, type ScreenType } from "@/features/bookings/services/bookings.api";
+import { useQuery } from "@tanstack/react-query";
+import { getBookingsApi, MOCK_BOOKINGS, STATUS_ORDER, STATUS_LABELS, type Booking, type BookingStatus, type PaymentStatus, type ScreenType } from "@/features/bookings/services/bookings.api";
 
 const _Route = createFileRoute("/bookings/")({
   head: () => ({
@@ -28,6 +29,12 @@ export function BookingsIndex() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
 
+  // Query bookings from backend
+  const { data: bookingsList = MOCK_BOOKINGS } = useQuery({
+    queryKey: ["bookings"],
+    queryFn: getBookingsApi,
+  });
+
   // Filters
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [screenFilter, setScreenFilter] = useState<Set<string>>(new Set());
@@ -42,7 +49,7 @@ export function BookingsIndex() {
   const [pageSize, setPageSize] = useState(25);
 
   const filtered = useMemo(() => {
-    let r: Booking[] = [...MOCK_BOOKINGS];
+    let r: Booking[] = [...bookingsList];
 
     // Tab filter
     if (tab === "Onsite") r = r.filter((b) => b.status === "ONSITE");
@@ -100,7 +107,7 @@ export function BookingsIndex() {
     });
 
     return r;
-  }, [tab, query, statusFilter, screenFilter, assigneeFilter, paymentFilter, sortDir]);
+  }, [tab, query, statusFilter, screenFilter, assigneeFilter, paymentFilter, sortDir, bookingsList]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -127,7 +134,7 @@ export function BookingsIndex() {
         <div className="flex items-baseline gap-3">
           <h1 className="text-[22px] font-bold tracking-tight">Bookings</h1>
           <span className="rounded-md border px-2 py-0.5 text-[11px] font-semibold" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
-            {filtered.length} of {MOCK_BOOKINGS.length}
+            {filtered.length} of {bookingsList.length}
           </span>
           {activeFilterCount > 0 && (
             <button

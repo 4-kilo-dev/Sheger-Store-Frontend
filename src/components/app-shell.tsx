@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, CalendarRange, Package, Users, BarChart3, Settings,
   Bell, ChevronsLeft, ChevronsRight, Search, ChevronRight,
@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import { useActiveProfile, PROFILES } from "@/hooks/use-active-profile";
+import { logoutApi } from "@/features/auth/services/auth.api";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -80,6 +81,7 @@ function Breadcrumb() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [rolesOpen, setRolesOpen] = useState(true);
   const [showSwitcher, setShowSwitcher] = useState(false);
@@ -301,7 +303,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                   })}
                 </div>
                 <div className="mt-1 border-t pt-1.5" style={{ borderColor: "var(--border)" }}>
-                  <button className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] font-medium transition hover:bg-destructive/10 hover:text-destructive" style={{ color: "var(--text-3)" }}>
+                  <button
+                    onClick={async () => {
+                      await logoutApi();
+                      navigate({ to: "/login" });
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] font-medium transition hover:bg-destructive/10 hover:text-destructive"
+                    style={{ color: "var(--text-3)" }}
+                  >
                     <LogOut className="h-3.5 w-3.5" />
                     Sign out
                   </button>

@@ -6,11 +6,13 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  redirect,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles/styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { authStorage } from "../lib/api/client";
 
 function NotFoundComponent() {
   return (
@@ -92,6 +94,23 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" },
     ],
   }),
+  beforeLoad: ({ location }) => {
+    const token = authStorage.getToken();
+    const isPublicRoute = ["/login", "/otp"].includes(location.pathname);
+    if (!token && !isPublicRoute) {
+      throw redirect({
+        to: "/login",
+        search: {
+          redirect: location.href,
+        },
+      });
+    }
+    if (token && isPublicRoute) {
+      throw redirect({
+        to: "/",
+      });
+    }
+  },
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,

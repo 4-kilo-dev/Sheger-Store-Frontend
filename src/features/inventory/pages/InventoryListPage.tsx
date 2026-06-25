@@ -4,7 +4,8 @@ import { AlertTriangle, ArrowUpDown, Boxes, Filter, PackageCheck, Search, Shield
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { FilterDropdown, SortButton } from "@/components/filter-dropdown";
-import { INVENTORY_CATEGORIES, MOCK_INVENTORY, type InventoryCondition } from "@/features/inventory/services/inventory.api";
+import { useQuery } from "@tanstack/react-query";
+import { INVENTORY_CATEGORIES, MOCK_INVENTORY, type InventoryCondition, getCombinedInventoryApi } from "@/features/inventory/services/inventory.api";
 
 const _Route = createFileRoute("/inventory/")({
   head: () => ({ meta: [{ title: "Inventory · Vortex Visual" }, { name: "description", content: "LED equipment stock, allocation, service, and damage tracking." }] }),
@@ -14,21 +15,26 @@ const _Route = createFileRoute("/inventory/")({
 const conditionColor: Record<InventoryCondition, string> = { GOOD: "var(--color-bom-returned)", "SERVICE DUE": "var(--color-pay-advance)", DAMAGED: "var(--destructive)" };
 
 const ALL_CONDITIONS: InventoryCondition[] = ["GOOD", "SERVICE DUE", "DAMAGED"];
-const ALL_LOCATIONS = [...new Set(MOCK_INVENTORY.map((i) => i.location))].sort();
-
 export function InventoryPage() {
   const [category, setCategory] = useState<(typeof INVENTORY_CATEGORIES)[number]>("All");
   const [query, setQuery] = useState("");
+
+  const { data: inventoryList = MOCK_INVENTORY } = useQuery({
+    queryKey: ["inventory"],
+    queryFn: getCombinedInventoryApi,
+  });
 
   // Filters
   const [conditionFilter, setConditionFilter] = useState<Set<string>>(new Set());
   const [locationFilter, setLocationFilter] = useState<Set<string>>(new Set());
 
+  const ALL_LOCATIONS = useMemo(() => [...new Set(inventoryList.map((i) => i.location))].sort(), [inventoryList]);
+
   // Sort
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const rows = useMemo(() => {
-    let items = MOCK_INVENTORY.filter(
+    let items = inventoryList.filter(
       (item) =>
         (category === "All" || item.category === category) &&
         `${item.id} ${item.name} ${item.model}`.toLowerCase().includes(query.toLowerCase())
@@ -47,9 +53,9 @@ export function InventoryPage() {
     });
 
     return items;
-  }, [category, query, conditionFilter, locationFilter, sortDir]);
+  }, [category, query, conditionFilter, locationFilter, sortDir, inventoryList]);
 
-  const totals = MOCK_INVENTORY.reduce((a, i) => ({ units: a.units + i.total, available: a.available + i.available, onsite: a.onsite + i.onsite, attention: a.attention + i.damaged }), { units: 0, available: 0, onsite: 0, attention: 0 });
+  const totals = inventoryList.reduce((a, i) => ({ units: a.units + i.total, available: a.available + i.available, onsite: a.onsite + i.onsite, attention: a.attention + i.damaged }), { units: 0, available: 0, onsite: 0, attention: 0 });
 
   const activeFilterCount = conditionFilter.size + locationFilter.size;
 
