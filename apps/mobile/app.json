@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Vortex Visual Operations",
+    "slug": "vortex-visual-operations",
+    "scheme": "vortex",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
