@@ -30,21 +30,24 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const token = authStorage.getToken();
+  const hasValidToken = !!(token && token !== "undefined" && token !== "null");
 
   // Queries
   const { data: notifications = [], isLoading: loadingNotifs } = useQuery({
     queryKey: ["notifications-list"],
     queryFn: () => getNotificationsApi(),
-    enabled: !!token,
+    enabled: hasValidToken,
   });
 
   const { data: pendingTasks = [], isLoading: loadingTasks } = useQuery({
     queryKey: ["pending-tasks"],
     queryFn: () => getPendingTasksApi(),
-    enabled: !!token,
+    enabled: hasValidToken,
   });
 
-  const unreadCount = notifications.filter((n) => !n.readAt).length;
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
+  const safePendingTasks = Array.isArray(pendingTasks) ? pendingTasks : [];
+  const unreadCount = safeNotifications.filter((n) => !n.readAt).length;
 
   // Mutations
   const { mutate: markRead } = useMutation({
@@ -143,7 +146,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
   // Connect SSE Stream Connection
   useEffect(() => {
-    if (!token) return;
+    if (!hasValidToken) return;
 
     const disconnect = connectNotificationsStream({
       onMessage: (newNotif) => {
@@ -174,13 +177,13 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     return () => {
       disconnect();
     };
-  }, [token, queryClient]);
+  }, [hasValidToken, queryClient]);
 
   return (
     <NotificationsContext.Provider 
       value={{
-        notifications,
-        pendingTasks,
+        notifications: safeNotifications,
+        pendingTasks: safePendingTasks,
         unreadCount,
         isLoading: loadingNotifs || loadingTasks,
         markAsRead: markRead,
