@@ -9,6 +9,7 @@ import { AppShell } from "@/components/app-shell";
 import { StatusStepper } from "@/components/status-stepper";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { PendingTasksWidget } from "@/features/notifications/components/PendingTasksWidget";
 import { MOCK_BOOKINGS } from "@/features/bookings/services/bookings.api";
 import { MOCK_INVENTORY } from "@/features/inventory/services/inventory.api";
 
@@ -134,41 +135,44 @@ export function AdminDashboard() {
           <StatusStepper current={featured.status} />
         </div>
 
-        {/* Equipment Summary */}
-        <div className="col-span-12 xl:col-span-4 rounded-lg border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-          <div className="label-eyebrow mb-4">Equipment pool</div>
-          <div className="flex items-center gap-4">
-            <div className="relative h-24 w-24">
-              <svg viewBox="0 0 36 36" className="h-24 w-24 -rotate-90">
-                <circle cx="18" cy="18" r="14" fill="none" stroke="var(--surface-2)" strokeWidth="3" />
-                <circle cx="18" cy="18" r="14" fill="none" stroke="var(--color-bom-returned)" strokeWidth="3" strokeDasharray={`${(stats.availInv / stats.totalInv) * 88} 88`} strokeLinecap="round" />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-[16px] font-bold">{Math.round((stats.availInv / stats.totalInv) * 100)}%</div>
-                <div className="text-[8px] uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Available</div>
+        {/* Equipment Summary & Task Center */}
+        <div className="col-span-12 xl:col-span-4 flex flex-col gap-4">
+          <div className="rounded-lg border p-5 flex-1" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+            <div className="label-eyebrow mb-4">Equipment pool</div>
+            <div className="flex items-center gap-4">
+              <div className="relative h-24 w-24">
+                <svg viewBox="0 0 36 36" className="h-24 w-24 -rotate-90">
+                  <circle cx="18" cy="18" r="14" fill="none" stroke="var(--surface-2)" strokeWidth="3" />
+                  <circle cx="18" cy="18" r="14" fill="none" stroke="var(--color-bom-returned)" strokeWidth="3" strokeDasharray={`${(stats.availInv / stats.totalInv) * 88} 88`} strokeLinecap="round" />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <div className="text-[16px] font-bold">{Math.round((stats.availInv / stats.totalInv) * 100)}%</div>
+                  <div className="text-[8px] uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Available</div>
+                </div>
+              </div>
+              <div className="flex-1 space-y-2">
+                {[
+                  { label: "Available", value: stats.availInv, color: "var(--color-bom-returned)" },
+                  { label: "Reserved", value: stats.totalInv - stats.availInv - MOCK_INVENTORY.reduce((a, i) => a + i.onsite, 0), color: "var(--color-pay-advance)" },
+                  { label: "Onsite", value: MOCK_INVENTORY.reduce((a, i) => a + i.onsite, 0), color: "var(--color-status-accepted)" },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="flex items-center justify-between text-[11px]">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+                      {label}
+                    </span>
+                    <span className="font-data font-semibold">{value}</span>
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="flex-1 space-y-2">
-              {[
-                { label: "Available", value: stats.availInv, color: "var(--color-bom-returned)" },
-                { label: "Reserved", value: stats.totalInv - stats.availInv - MOCK_INVENTORY.reduce((a, i) => a + i.onsite, 0), color: "var(--color-pay-advance)" },
-                { label: "Onsite", value: MOCK_INVENTORY.reduce((a, i) => a + i.onsite, 0), color: "var(--color-status-accepted)" },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="flex items-center justify-between text-[11px]">
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full" style={{ background: color }} />
-                    {label}
-                  </span>
-                  <span className="font-data font-semibold">{value}</span>
-                </div>
-              ))}
-            </div>
+            <Button variant="outline" size="default" asChild className="mt-4 w-full">
+              <Link to="/inventory">
+                View inventory <ArrowRight className="h-3 w-3" />
+              </Link>
+            </Button>
           </div>
-          <Button variant="outline" size="default" asChild className="mt-4">
-            <Link to="/inventory">
-              View inventory <ArrowRight className="h-3 w-3" />
-            </Link>
-          </Button>
+          <PendingTasksWidget />
         </div>
       </div>
 

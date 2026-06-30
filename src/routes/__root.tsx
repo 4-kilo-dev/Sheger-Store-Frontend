@@ -148,15 +148,18 @@ function RootShell({ children }: { children: ReactNode }) {
 }
 
 import { Toaster } from "../components/ui/sonner";
+import { NotificationsProvider } from "@/features/notifications/context/NotificationsContext";
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
-      <Toaster theme="dark" closeButton />
+      <NotificationsProvider>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+        <Toaster theme="dark" closeButton />
+      </NotificationsProvider>
     </QueryClientProvider>
   );
 }
