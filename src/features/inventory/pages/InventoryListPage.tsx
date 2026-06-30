@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { FilterDropdown, SortButton } from "@/components/filter-dropdown";
 import { useQuery } from "@tanstack/react-query";
-import { INVENTORY_CATEGORIES, MOCK_INVENTORY, type InventoryCondition, getCombinedInventoryApi } from "@/features/inventory/services/inventory.api";
+import { INVENTORY_CATEGORIES, type InventoryCondition, getCombinedInventoryApi } from "@/features/inventory/services/inventory.api";
 
 const _Route = createFileRoute("/inventory/")({
   head: () => ({ meta: [{ title: "Inventory · Vortex Visual" }, { name: "description", content: "LED equipment stock, allocation, service, and damage tracking." }] }),
@@ -19,7 +19,7 @@ export function InventoryPage() {
   const [category, setCategory] = useState<(typeof INVENTORY_CATEGORIES)[number]>("All");
   const [query, setQuery] = useState("");
 
-  const { data: inventoryList = MOCK_INVENTORY } = useQuery({
+  const { data: inventoryList = [] } = useQuery({
     queryKey: ["inventory"],
     queryFn: getCombinedInventoryApi,
   });

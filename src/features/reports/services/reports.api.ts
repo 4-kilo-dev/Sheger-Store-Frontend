@@ -474,109 +474,58 @@ export async function getBookingsReportApi(filters: {
   customerId?: string;
   location?: string;
 }): Promise<BookingsReportResponse> {
-  try {
-    const query = new URLSearchParams();
-    if (filters.status) query.append("status", filters.status);
-    if (filters.startDate) query.append("startDate", filters.startDate);
-    if (filters.endDate) query.append("endDate", filters.endDate);
-    if (filters.customerId) query.append("customerId", filters.customerId);
-    if (filters.location) query.append("location", filters.location);
+  const query = new URLSearchParams();
+  if (filters.status) query.append("status", filters.status);
+  if (filters.startDate) query.append("startDate", filters.startDate);
+  if (filters.endDate) query.append("endDate", filters.endDate);
+  if (filters.customerId) query.append("customerId", filters.customerId);
+  if (filters.location) query.append("location", filters.location);
 
-    return await client.get<BookingsReportResponse>(`/api/reports/bookings?${query.toString()}`);
-  } catch (error) {
-    console.warn("Failed to fetch bookings report, returning mock.", error);
-    // Apply basic filter simulation to mock bookings
-    let bookings = [...MOCK_BOOKINGS_REPORT.bookings];
-    if (filters.status) {
-      bookings = bookings.filter((b) => b.status === filters.status);
-    }
-    if (filters.location) {
-      bookings = bookings.filter((b) => b.eventLocation.toLowerCase().includes(filters.location!.toLowerCase()));
-    }
-    return {
-      ...MOCK_BOOKINGS_REPORT,
-      bookings,
-      totalCount: bookings.length,
-      totalBookingAmountValue: bookings.reduce((sum, b) => sum + parseFloat(b.paymentAmount), 0)
-    };
-  }
+  return client.get<BookingsReportResponse>(`/api/reports/bookings?${query.toString()}`);
 }
 
 export async function getInventoryReportApi(categoryId?: string): Promise<InventoryReportRecord[]> {
-  try {
-    const query = categoryId ? `?categoryId=${categoryId}` : "";
-    return await client.get<InventoryReportRecord[]>(`/api/reports/inventory${query}`);
-  } catch (error) {
-    console.warn("Failed to fetch inventory report, returning mock.", error);
-    if (categoryId) {
-      return MOCK_INVENTORY_REPORT.filter((c) => c.categoryId === categoryId);
-    }
-    return MOCK_INVENTORY_REPORT;
-  }
+  const query = categoryId ? `?categoryId=${categoryId}` : "";
+  return client.get<InventoryReportRecord[]>(`/api/reports/inventory${query}`);
 }
 
 export async function getRevenueReportApi(filters: {
   startDate?: string;
   endDate?: string;
 }): Promise<RevenueReportResponse> {
-  try {
-    const query = new URLSearchParams();
-    if (filters.startDate) query.append("startDate", filters.startDate);
-    if (filters.endDate) query.append("endDate", filters.endDate);
+  const query = new URLSearchParams();
+  if (filters.startDate) query.append("startDate", filters.startDate);
+  if (filters.endDate) query.append("endDate", filters.endDate);
 
-    return await client.get<RevenueReportResponse>(`/api/reports/revenue?${query.toString()}`);
-  } catch (error) {
-    console.warn("Failed to fetch revenue report, returning mock.", error);
-    return MOCK_REVENUE_REPORT;
-  }
+  return client.get<RevenueReportResponse>(`/api/reports/revenue?${query.toString()}`);
 }
 
 export async function getCustomersReportApi(): Promise<CustomerReportRecord[]> {
-  try {
-    return await client.get<CustomerReportRecord[]>("/api/reports/customers");
-  } catch (error) {
-    console.warn("Failed to fetch customers report, returning mock.", error);
-    return MOCK_CUSTOMERS_REPORT;
-  }
+  return client.get<CustomerReportRecord[]>("/api/reports/customers");
 }
 
 export async function getEvaluationsReportApi(filters: {
   startDate?: string;
   endDate?: string;
 }): Promise<EvaluationsReportResponse> {
-  try {
-    const query = new URLSearchParams();
-    if (filters.startDate) query.append("startDate", filters.startDate);
-    if (filters.endDate) query.append("endDate", filters.endDate);
+  const query = new URLSearchParams();
+  if (filters.startDate) query.append("startDate", filters.startDate);
+  if (filters.endDate) query.append("endDate", filters.endDate);
 
-    return await client.get<EvaluationsReportResponse>(`/api/reports/evaluations?${query.toString()}`);
-  } catch (error) {
-    console.warn("Failed to fetch evaluations report, returning mock.", error);
-    return MOCK_EVALUATIONS_REPORT;
-  }
+  return client.get<EvaluationsReportResponse>(`/api/reports/evaluations?${query.toString()}`);
 }
 
 export async function getCanceledBookingsReportApi(filters: {
   startDate?: string;
   endDate?: string;
 }): Promise<CanceledBookingReportRecord[]> {
-  try {
-    const query = new URLSearchParams();
-    if (filters.startDate) query.append("startDate", filters.startDate);
-    if (filters.endDate) query.append("endDate", filters.endDate);
+  const query = new URLSearchParams();
+  if (filters.startDate) query.append("startDate", filters.startDate);
+  if (filters.endDate) query.append("endDate", filters.endDate);
 
-    return await client.get<CanceledBookingReportRecord[]>(`/api/reports/canceled-bookings?${query.toString()}`);
-  } catch (error) {
-    console.warn("Failed to fetch canceled bookings report, returning mock.", error);
-    return MOCK_CANCELED_REPORT;
-  }
+  return client.get<CanceledBookingReportRecord[]>(`/api/reports/canceled-bookings?${query.toString()}`);
 }
 
 export async function getUpcomingBookingsReportApi(days = 7): Promise<UpcomingBookingReportRecord[]> {
-  try {
-    return await client.get<UpcomingBookingReportRecord[]>(`/api/reports/upcoming-bookings?days=${days}`);
-  } catch (error) {
-    console.warn("Failed to fetch upcoming bookings report, returning mock.", error);
-    return MOCK_UPCOMING_REPORT;
-  }
+  return client.get<UpcomingBookingReportRecord[]>(`/api/reports/upcoming-bookings?days=${days}`);
 }

@@ -169,23 +169,11 @@ function mapBackendBookingToFrontend(b: any): Booking {
 }
 
 export async function getBookingsApi(): Promise<Booking[]> {
-  try {
-    const data = await client.get<any[]>("/api/bookings");
-    if (!data || data.length === 0) {
-      return MOCK_BOOKINGS;
-    }
-    return data.map((b) => mapBackendBookingToFrontend(b));
-  } catch (error) {
-    console.warn("Failed to fetch bookings from backend, falling back to mock data.", error);
-    return MOCK_BOOKINGS;
-  }
+  const data = await client.get<any[]>("/api/bookings");
+  return (data || []).map((b) => mapBackendBookingToFrontend(b));
 }
 
 export async function getBookingDetailApi(id: string): Promise<Booking> {
-  // If the id matches a mock booking code, return that mock booking to allow side-by-side testing
-  const mockMatch = MOCK_BOOKINGS.find((m) => m.code === id);
-  if (mockMatch) return mockMatch;
-
   const b = await client.get<any>(`/api/bookings/${id}`);
   return mapBackendBookingToFrontend(b);
 }
