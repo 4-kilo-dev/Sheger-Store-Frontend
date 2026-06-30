@@ -95,9 +95,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
   }),
   beforeLoad: ({ location }) => {
+    // Skip auth checks on the server-side (SSR). The browser's localStorage is only accessible on the client.
+    if (typeof window === "undefined") {
+      return;
+    }
+
     const token = authStorage.getToken();
     const isPublicRoute = ["/login", "/otp"].includes(location.pathname);
-    if (!token && !isPublicRoute) {
+    
+    // Treat stringified undefined/null as falsy
+    const hasValidToken = !!(token && token !== "undefined" && token !== "null");
+
+    if (!hasValidToken && !isPublicRoute) {
       throw redirect({
         to: "/login",
         search: {
@@ -105,7 +114,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         },
       });
     }
-    if (token && isPublicRoute) {
+    if (hasValidToken && isPublicRoute) {
       throw redirect({
         to: "/",
       });
