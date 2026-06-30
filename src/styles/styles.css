@@ -149,6 +149,9 @@
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
   }
+  button, select, input[type="button"], input[type="submit"], [role="button"] {
+    cursor: pointer;
+  }
   ::selection { background: var(--accent); color: var(--accent-foreground); }
 }
 
