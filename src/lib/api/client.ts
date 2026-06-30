@@ -57,7 +57,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   const token = authStorage.getToken();
-  if (token) {
+  if (token && token !== "undefined" && token !== "null") {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
