@@ -10,8 +10,9 @@ import { StatusStepper } from "@/components/status-stepper";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { PendingTasksWidget } from "@/features/notifications/components/PendingTasksWidget";
-import { MOCK_BOOKINGS } from "@/features/bookings/services/bookings.api";
-import { MOCK_INVENTORY } from "@/features/inventory/services/inventory.api";
+import { getBookingsApi } from "@/features/bookings/services/bookings.api";
+import { getCombinedInventoryApi } from "@/features/inventory/services/inventory.api";
+import { useQuery } from "@tanstack/react-query";
 
 const _Route = createFileRoute("/")({
   head: () => ({
@@ -34,28 +35,40 @@ export function AdminDashboard() {
     }
   }, [activeProfile.role]);
 
+  const { data: bookingsList = [] } = useQuery({
+    queryKey: ["bookings"],
+    queryFn: getBookingsApi,
+  });
+
+  const { data: inventoryList = [] } = useQuery({
+    queryKey: ["inventory"],
+    queryFn: getCombinedInventoryApi,
+  });
+
   const stats = useMemo(() => {
     const now = new Date();
-    const thisMonth = MOCK_BOOKINGS.filter((b) => {
+    const thisMonth = bookingsList.filter((b) => {
+      if (!b.eventDate) return false;
       const d = new Date(b.eventDate);
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
-    const revenue = thisMonth.reduce((s, b) => s + b.amount, 0);
-    const onsite = MOCK_BOOKINGS.filter((b) => b.status === "ONSITE");
-    const upcoming = MOCK_BOOKINGS.filter((b) => {
+    const revenue = thisMonth.reduce((s, b) => s + (b.amount || 0), 0);
+    const onsite = bookingsList.filter((b) => b.status === "ONSITE");
+    const upcoming = bookingsList.filter((b) => {
+      if (!b.assemblyDate) return false;
       const d = new Date(b.assemblyDate);
       const diff = (d.getTime() - now.getTime()) / 86400000;
       return diff >= 0 && diff <= 7;
     });
-    const paid = MOCK_BOOKINGS.filter((b) => b.payment === "PAID").length;
-    const totalInv = MOCK_INVENTORY.reduce((a, i) => a + i.total, 0);
-    const availInv = MOCK_INVENTORY.reduce((a, i) => a + i.available, 0);
+    const paid = bookingsList.filter((b) => b.payment === "PAID").length;
+    const totalInv = inventoryList.reduce((a, i) => a + (i.total || 0), 0);
+    const availInv = inventoryList.reduce((a, i) => a + (i.available || 0), 0);
     return { thisMonth: thisMonth.length, revenue, onsite: onsite.length, upcoming: upcoming.length, paid, totalInv, availInv };
-  }, []);
+  }, [bookingsList, inventoryList]);
 
-  const recentBookings = MOCK_BOOKINGS.slice(0, 6);
-  const onsiteBookings = MOCK_BOOKINGS.filter((b) => b.status === "ONSITE").slice(0, 4);
-  const featured = MOCK_BOOKINGS.find((b) => b.status === "PREPARATION") ?? MOCK_BOOKINGS[4];
+  const recentBookings = useMemo(() => bookingsList.slice(0, 6), [bookingsList]);
+  const onsiteBookings = useMemo(() => bookingsList.filter((b) => b.status === "ONSITE").slice(0, 4), [bookingsList]);
+  const featured = useMemo(() => bookingsList.find((b) => b.status === "PREPARATION") ?? bookingsList[0], [bookingsList]);
 
   return (
     <AppShell>
@@ -118,21 +131,31 @@ export function AdminDashboard() {
       <div className="mt-6 grid grid-cols-12 gap-4">
         {/* Featured Booking */}
         <div className="col-span-12 xl:col-span-8 rounded-lg border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-          <div className="mb-4 flex items-baseline justify-between">
-            <div>
-              <div className="label-eyebrow">{featured.code}</div>
-              <h2 className="mt-1 text-[18px] font-bold">{featured.client} · {featured.venue}</h2>
+          {featured ? (
+            <>
+              <div className="mb-4 flex items-baseline justify-between">
+                <div>
+                  <div className="label-eyebrow">{featured.code}</div>
+                  <h2 className="mt-1 text-[18px] font-bold">{featured.client} · {featured.venue}</h2>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={featured.status} />
+                  <Button variant="link" size="default" asChild>
+                    <Link to="/bookings/$code" params={{ code: featured.code }}>
+                      Open booking →
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+              <StatusStepper current={featured.status} />
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-8 text-center h-full">
+              <CalendarRange className="h-8 w-8 mb-2" style={{ color: "var(--text-3)" }} />
+              <div className="text-[13px] font-bold">No active bookings</div>
+              <p className="text-[11px]" style={{ color: "var(--text-3)" }}>When bookings are registered, they will show up here.</p>
             </div>
-            <div className="flex items-center gap-3">
-              <StatusBadge status={featured.status} />
-              <Button variant="link" size="default" asChild>
-                <Link to="/bookings/$code" params={{ code: featured.code }}>
-                  Open booking →
-                </Link>
-              </Button>
-            </div>
-          </div>
-          <StatusStepper current={featured.status} />
+          )}
         </div>
 
         {/* Equipment Summary & Task Center */}
@@ -153,8 +176,8 @@ export function AdminDashboard() {
               <div className="flex-1 space-y-2">
                 {[
                   { label: "Available", value: stats.availInv, color: "var(--color-bom-returned)" },
-                  { label: "Reserved", value: stats.totalInv - stats.availInv - MOCK_INVENTORY.reduce((a, i) => a + i.onsite, 0), color: "var(--color-pay-advance)" },
-                  { label: "Onsite", value: MOCK_INVENTORY.reduce((a, i) => a + i.onsite, 0), color: "var(--color-status-accepted)" },
+                  { label: "Reserved", value: stats.totalInv - stats.availInv - inventoryList.reduce((a, i) => a + (i.onsite || 0), 0), color: "var(--color-pay-advance)" },
+                  { label: "Onsite", value: inventoryList.reduce((a, i) => a + (i.onsite || 0), 0), color: "var(--color-status-accepted)" },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="flex items-center justify-between text-[11px]">
                     <span className="flex items-center gap-1.5">

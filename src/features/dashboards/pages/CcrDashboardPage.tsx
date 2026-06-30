@@ -3,7 +3,9 @@ import { DollarSign, Headphones, Phone, CalendarCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { MOCK_BOOKINGS, type Booking } from "@/features/bookings/services/bookings.api";
+import { getBookingsApi, type Booking } from "@/features/bookings/services/bookings.api";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 const _Route = createFileRoute("/dashboards/ccr")({
   head: () => ({
@@ -58,9 +60,14 @@ function QueueSection({ title, icon: Icon, count, children, accent }: { title: s
 }
 
 export function CcrDashboard() {
-  const reserved = MOCK_BOOKINGS.filter((b) => b.status === "RESERVED");
-  const unpaid = MOCK_BOOKINGS.filter((b) => b.payment === "UNPAID" || b.payment === "ADVANCE");
-  const confirmedToday = MOCK_BOOKINGS.filter((b) => b.status === "CONFIRMED").length;
+  const { data: bookingsList = [] } = useQuery({
+    queryKey: ["bookings"],
+    queryFn: getBookingsApi,
+  });
+
+  const reserved = useMemo(() => bookingsList.filter((b) => b.status === "RESERVED"), [bookingsList]);
+  const unpaid = useMemo(() => bookingsList.filter((b) => b.payment === "UNPAID" || b.payment === "ADVANCE"), [bookingsList]);
+  const confirmedToday = useMemo(() => bookingsList.filter((b) => b.status === "CONFIRMED").length, [bookingsList]);
 
   return (
     <AppShell>

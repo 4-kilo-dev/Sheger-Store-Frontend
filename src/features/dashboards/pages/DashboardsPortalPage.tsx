@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Headphones, Wrench, ClipboardCheck, RadioTower, PackageCheck, ArrowRight } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { AppShell } from "@/components/app-shell";
-import { MOCK_BOOKINGS } from "@/features/bookings/services/bookings.api";
+import { getBookingsApi } from "@/features/bookings/services/bookings.api";
 import { useActiveProfile } from "@/hooks/use-active-profile";
+import { useQuery } from "@tanstack/react-query";
 
 const _Route = createFileRoute("/dashboards/")({
   head: () => ({
@@ -26,12 +27,17 @@ export function DashboardsPortal() {
     }
   }, [activeProfile.role]);
 
+  const { data: bookingsList = [] } = useQuery({
+    queryKey: ["bookings"],
+    queryFn: getBookingsApi,
+  });
+
   // Compute active queues dynamically
-  const ccrQueue = MOCK_BOOKINGS.filter((b) => b.status === "RESERVED").length;
-  const ctoQueue = MOCK_BOOKINGS.filter((b) => b.status === "CONFIRMED").length;
-  const toQueue = MOCK_BOOKINGS.filter((b) => b.status === "ASSIGNED").length;
-  const ooQueue = MOCK_BOOKINGS.filter((b) => b.status === "PREPARATION").length;
-  const skQueue = MOCK_BOOKINGS.filter((b) => b.status === "COMPLETED").length;
+  const ccrQueue = useMemo(() => bookingsList.filter((b) => b.status === "RESERVED").length, [bookingsList]);
+  const ctoQueue = useMemo(() => bookingsList.filter((b) => b.status === "CONFIRMED").length, [bookingsList]);
+  const toQueue = useMemo(() => bookingsList.filter((b) => b.status === "ASSIGNED").length, [bookingsList]);
+  const ooQueue = useMemo(() => bookingsList.filter((b) => b.status === "PREPARATION").length, [bookingsList]);
+  const skQueue = useMemo(() => bookingsList.filter((b) => b.status === "COMPLETED").length, [bookingsList]);
 
   const ROLES = [
     {
