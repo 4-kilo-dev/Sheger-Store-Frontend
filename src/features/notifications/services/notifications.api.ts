@@ -108,43 +108,19 @@ function saveLocalNotifications(notifs: Notification[]) {
 // ----------------------------------------------------
 
 export async function getNotificationsApi(limit = 50, offset = 0): Promise<Notification[]> {
-  try {
-    return await client.get<Notification[]>(`/api/notifications?limit=${limit}&offset=${offset}`);
-  } catch (error) {
-    console.warn("Failed to fetch notifications from server, returning local mock.", error);
-    return getLocalNotifications();
-  }
+  return client.get<Notification[]>(`/api/notifications?limit=${limit}&offset=${offset}`);
 }
 
 export async function getPendingTasksApi(): Promise<Notification[]> {
-  try {
-    return await client.get<Notification[]>(`/api/notifications/tasks`);
-  } catch (error) {
-    console.warn("Failed to fetch pending tasks from server, returning local mock tasks.", error);
-    return getLocalNotifications().filter((n) => n.isTask && !n.readAt);
-  }
+  return client.get<Notification[]>(`/api/notifications/tasks`);
 }
 
 export async function markNotificationReadApi(id: string): Promise<void> {
-  try {
-    await client.patch(`/api/notifications/${id}/read`, {});
-  } catch (error) {
-    console.warn(`Failed to mark notification ${id} read on server, updating local mock.`, error);
-    const list = getLocalNotifications();
-    const updated = list.map((n) => n.id === id ? { ...n, readAt: new Date().toISOString() } : n);
-    saveLocalNotifications(updated);
-  }
+  return client.patch(`/api/notifications/${id}/read`, {});
 }
 
 export async function markAllNotificationsReadApi(): Promise<void> {
-  try {
-    await client.post(`/api/notifications/read-all`, {});
-  } catch (error) {
-    console.warn("Failed to mark all notifications read on server, updating local mock.", error);
-    const list = getLocalNotifications();
-    const updated = list.map((n) => ({ ...n, readAt: new Date().toISOString() }));
-    saveLocalNotifications(updated);
-  }
+  return client.post(`/api/notifications/read-all`, {});
 }
 
 // ----------------------------------------------------

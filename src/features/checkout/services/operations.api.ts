@@ -61,12 +61,7 @@ export const NOTIFICATIONS: Notification[] = [
 import { client } from "@/lib/api/client";
 
 export async function getBookingBomLinesApi(bookingId: string): Promise<any[]> {
-  try {
-    return await client.get<any[]>(`/api/bookings/${bookingId}/bom/lines`);
-  } catch (error) {
-    console.error("Failed to fetch BOM lines, returning empty list", error);
-    return [];
-  }
+  return client.get<any[]>(`/api/bookings/${bookingId}/bom/lines`);
 }
 
 export async function checkoutBookingApi(bookingId: string, payload: any): Promise<any> {

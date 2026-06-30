@@ -96,23 +96,8 @@ function saveLocalAttachments(bookingId: string, attachments: Attachment[]) {
 // ----------------------------------------------------
 
 export async function getBookingAttachmentsApi(bookingId: string): Promise<Attachment[]> {
-  let serverAttachments: Attachment[] = [];
-  try {
-    serverAttachments = await client.get<Attachment[]>(`/api/bookings/${bookingId}/attachments`);
-  } catch (error) {
-    console.warn(`Failed to fetch attachments for ${bookingId} from server, returning mock.`, error);
-    return getLocalAttachments(bookingId);
-  }
-
-  // Merge server-returned attachments with local mock entries so uploaded mock files show up
-  const local = getLocalAttachments(bookingId);
-  const merged = [...serverAttachments];
-  for (const locAtt of local) {
-    if (!merged.some(s => s.id === locAtt.id || s.objectKey === locAtt.objectKey)) {
-      merged.push(locAtt);
-    }
-  }
-  return merged;
+  const serverAttachments = await client.get<Attachment[]>(`/api/bookings/${bookingId}/attachments`);
+  return serverAttachments || [];
 }
 
 export async function getUploadUrlApi(
@@ -124,19 +109,10 @@ export async function getUploadUrlApi(
     relatedId?: string;
   }
 ): Promise<{ uploadUrl: string; objectKey: string }> {
-  try {
-    return await client.post<{ uploadUrl: string; objectKey: string }>(
-      `/api/bookings/${bookingId}/attachments/upload-url`,
-      payload
-    );
-  } catch (error) {
-    console.warn("Failed to retrieve upload URL from server, returning mock values.", error);
-    const mockUuid = Math.random().toString(36).substr(2, 9);
-    return {
-      uploadUrl: `mock://vortex-s3.local/attachments/${bookingId}/${mockUuid}_${payload.fileName}`,
-      objectKey: `attachments/${bookingId}/${mockUuid}_${payload.fileName}`
-    };
-  }
+  return client.post<{ uploadUrl: string; objectKey: string }>(
+    `/api/bookings/${bookingId}/attachments/upload-url`,
+    payload
+  );
 }
 
 /**
@@ -207,80 +183,13 @@ export async function confirmUploadApi(
     relatedId?: string;
   }
 ): Promise<Attachment> {
-  try {
-    return await client.post<Attachment>(`/api/bookings/${bookingId}/attachments/confirm`, payload);
-  } catch (error) {
-    console.warn("Failed to confirm upload metadata on server, saving to mock storage.", error);
-    
-    const activeProfile = isBrowser ? localStorage.getItem("vortex_active_profile") : null;
-    const uploaderName = activeProfile ? JSON.parse(activeProfile).name : "User";
-
-    const newAttachment: Attachment = {
-      id: `att-${Math.random().toString(36).substr(2, 9)}`,
-      bookingId,
-      objectKey: payload.objectKey,
-      originalName: payload.originalName,
-      fileType: payload.fileType,
-      fileSizeBytes: payload.fileSizeBytes,
-      relatedEntity: payload.relatedEntity,
-      relatedId: payload.relatedId,
-      uploaderName,
-      createdAt: new Date().toISOString()
-    };
-
-    const currentList = getLocalAttachments(bookingId);
-    // Add to list and save
-    const updatedList = [newAttachment, ...currentList];
-    saveLocalAttachments(bookingId, updatedList);
-    
-    // Copy the Object URL mapping to the new attachment ID as well
-    if (localFileUrls[payload.objectKey]) {
-      localFileUrls[newAttachment.id] = localFileUrls[payload.objectKey];
-    }
-    
-    return newAttachment;
-  }
+  return client.post<Attachment>(`/api/bookings/${bookingId}/attachments/confirm`, payload);
 }
 
 export async function getDownloadUrlApi(attachmentId: string): Promise<{ downloadUrl: string }> {
-  try {
-    return await client.get<{ downloadUrl: string }>(`/api/attachments/${attachmentId}/download-url`);
-  } catch (error) {
-    console.warn(`Failed to fetch download url for ${attachmentId} from server, returning mock.`, error);
-    
-    // Check if we have an in-memory local file URL
-    if (localFileUrls[attachmentId]) {
-      return { downloadUrl: localFileUrls[attachmentId] };
-    }
-    
-    // Otherwise, generate a simulated dummy download URL or a placeholder
-    return { downloadUrl: "#" };
-  }
+  return client.get<{ downloadUrl: string }>(`/api/attachments/${attachmentId}/download-url`);
 }
 
 export async function deleteAttachmentApi(attachmentId: string): Promise<void> {
-  try {
-    await client.delete(`/api/attachments/${attachmentId}`);
-  } catch (error) {
-    console.warn(`Failed to delete attachment ${attachmentId} on server, deleting from mock storage.`, error);
-    
-    // Look through all local storage files and filter out this attachment
-    if (isBrowser) {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith("vortex_attachments_")) {
-          try {
-            const list: Attachment[] = JSON.parse(localStorage.getItem(key) || "[]");
-            const filtered = list.filter((a) => a.id !== attachmentId);
-            localStorage.setItem(key, JSON.stringify(filtered));
-          } catch {
-            // ignore
-          }
-        }
-      }
-    }
-    
-    // Clean up in-memory object URL if present
-    delete localFileUrls[attachmentId];
-  }
+  return client.delete(`/api/attachments/${attachmentId}`);
 }

@@ -48,122 +48,105 @@ export async function getInventoryItemsApi(): Promise<any[]> {
 }
 
 export async function getCombinedInventoryApi(): Promise<InventoryItem[]> {
-  try {
-    const [categories, pools, items] = await Promise.all([
-      getInventoryCategoriesApi(),
-      getInventoryPoolsApi(),
-      getInventoryItemsApi(),
-    ]);
+  const [categories, pools, items] = await Promise.all([
+    getInventoryCategoriesApi(),
+    getInventoryPoolsApi(),
+    getInventoryItemsApi(),
+  ]);
 
-    const categoryMap = new Map(categories.map((c) => [c.id, c]));
+  const categoryMap = new Map(categories.map((c) => [c.id, c]));
 
-    const mappedPools: InventoryItem[] = pools.map((p) => {
-      const cat = categoryMap.get(p.categoryId);
-      const totalQty = parseInt(p.totalQuantity || "0");
-      return {
-        id: p.sku || p.id,
-        name: p.name,
-        category: cat?.name || "Bulk Pool",
-        model: "VV Standard",
-        total: totalQty,
-        available: totalQty,
-        reserved: 0,
-        onsite: 0,
-        damaged: 0,
-        condition: "GOOD",
-        availability: "AVAILABLE",
-        location: p.notes || "Main Warehouse",
-        lastService: new Date().toISOString().slice(0, 10),
-        nextService: new Date().toISOString().slice(0, 10),
-      };
-    });
+  const mappedPools: InventoryItem[] = pools.map((p) => {
+    const cat = categoryMap.get(p.categoryId);
+    const totalQty = parseInt(p.totalQuantity || "0");
+    return {
+      id: p.sku || p.id,
+      name: p.name,
+      category: cat?.name || "Bulk Pool",
+      model: "VV Standard",
+      total: totalQty,
+      available: totalQty,
+      reserved: 0,
+      onsite: 0,
+      damaged: 0,
+      condition: "GOOD",
+      availability: "AVAILABLE",
+      location: p.notes || "Main Warehouse",
+      lastService: new Date().toISOString().slice(0, 10),
+      nextService: new Date().toISOString().slice(0, 10),
+    };
+  });
 
-    const mappedItems: InventoryItem[] = items.map((i) => {
-      const cat = categoryMap.get(i.categoryId);
-      const isDamaged = i.condition === "DAMAGED";
-      return {
-        id: i.assetTag || i.id,
-        name: i.name,
-        category: cat?.name || "Serialized Asset",
-        model: i.notes || "VV Serialized",
-        total: 1,
-        available: isDamaged ? 0 : 1,
-        reserved: 0,
-        onsite: 0,
-        damaged: isDamaged ? 1 : 0,
-        condition: isDamaged ? "DAMAGED" : "GOOD",
-        availability: isDamaged ? "RESERVED" : "AVAILABLE",
-        location: "Main Warehouse",
-        lastService: i.purchasedAt ? i.purchasedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
-        nextService: new Date().toISOString().slice(0, 10),
-      };
-    });
+  const mappedItems: InventoryItem[] = items.map((i) => {
+    const cat = categoryMap.get(i.categoryId);
+    const isDamaged = i.condition === "DAMAGED";
+    return {
+      id: i.assetTag || i.id,
+      name: i.name,
+      category: cat?.name || "Serialized Asset",
+      model: i.notes || "VV Serialized",
+      total: 1,
+      available: isDamaged ? 0 : 1,
+      reserved: 0,
+      onsite: 0,
+      damaged: isDamaged ? 1 : 0,
+      condition: isDamaged ? "DAMAGED" : "GOOD",
+      availability: isDamaged ? "RESERVED" : "AVAILABLE",
+      location: "Main Warehouse",
+      lastService: i.purchasedAt ? i.purchasedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      nextService: new Date().toISOString().slice(0, 10),
+    };
+  });
 
-    const combined = [...mappedPools, ...mappedItems];
-    if (combined.length === 0) return MOCK_INVENTORY;
-    return combined;
-  } catch (error) {
-    console.warn("Failed to retrieve backend inventory, returning mock inventory.", error);
-    return MOCK_INVENTORY;
-  }
+  return [...mappedPools, ...mappedItems];
 }
 
 export async function getInventoryItemDetailApi(id: string): Promise<InventoryItem> {
-  // If matched in mock, return mock
-  const mockMatch = MOCK_INVENTORY.find((m) => m.id === id);
-  if (mockMatch) return mockMatch;
-
-  try {
-    // Try serialized item details first
-    const items = await getInventoryItemsApi();
-    const itemMatch = items.find((i) => i.assetTag === id || i.id === id);
-    if (itemMatch) {
-      const isDamaged = itemMatch.condition === "DAMAGED";
-      return {
-        id: itemMatch.assetTag || itemMatch.id,
-        name: itemMatch.name,
-        category: "Serialized Asset",
-        model: itemMatch.notes || "VV Serialized",
-        total: 1,
-        available: isDamaged ? 0 : 1,
-        reserved: 0,
-        onsite: 0,
-        damaged: isDamaged ? 1 : 0,
-        condition: isDamaged ? "DAMAGED" : "GOOD",
-        availability: isDamaged ? "RESERVED" : "AVAILABLE",
-        location: "Main Warehouse",
-        lastService: itemMatch.purchasedAt ? itemMatch.purchasedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
-        nextService: new Date().toISOString().slice(0, 10),
-      };
-    }
-
-    // Try pool match second
-    const pools = await getInventoryPoolsApi();
-    const poolMatch = pools.find((p) => p.sku === id || p.id === id);
-    if (poolMatch) {
-      const totalQty = parseInt(poolMatch.totalQuantity || "0");
-      return {
-        id: poolMatch.sku || poolMatch.id,
-        name: poolMatch.name,
-        category: "Bulk Pool",
-        model: "VV Standard",
-        total: totalQty,
-        available: totalQty,
-        reserved: 0,
-        onsite: 0,
-        damaged: 0,
-        condition: "GOOD",
-        availability: "AVAILABLE",
-        location: poolMatch.notes || "Main Warehouse",
-        lastService: new Date().toISOString().slice(0, 10),
-        nextService: new Date().toISOString().slice(0, 10),
-      };
-    }
-
-    throw new Error(`Inventory item not found for id ${id}`);
-  } catch (error) {
-    console.error(error);
-    // Return a mock placeholder if not found on backend
-    return MOCK_INVENTORY[0];
+  // Try serialized item details first
+  const items = await getInventoryItemsApi();
+  const itemMatch = items.find((i) => i.assetTag === id || i.id === id);
+  if (itemMatch) {
+    const isDamaged = itemMatch.condition === "DAMAGED";
+    return {
+      id: itemMatch.assetTag || itemMatch.id,
+      name: itemMatch.name,
+      category: "Serialized Asset",
+      model: itemMatch.notes || "VV Serialized",
+      total: 1,
+      available: isDamaged ? 0 : 1,
+      reserved: 0,
+      onsite: 0,
+      damaged: isDamaged ? 1 : 0,
+      condition: isDamaged ? "DAMAGED" : "GOOD",
+      availability: isDamaged ? "RESERVED" : "AVAILABLE",
+      location: "Main Warehouse",
+      lastService: itemMatch.purchasedAt ? itemMatch.purchasedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      nextService: new Date().toISOString().slice(0, 10),
+    };
   }
+
+  // Try pool match second
+  const pools = await getInventoryPoolsApi();
+  const poolMatch = pools.find((p) => p.sku === id || p.id === id);
+  if (poolMatch) {
+    const totalQty = parseInt(poolMatch.totalQuantity || "0");
+    return {
+      id: poolMatch.sku || poolMatch.id,
+      name: poolMatch.name,
+      category: "Bulk Pool",
+      model: "VV Standard",
+      total: totalQty,
+      available: totalQty,
+      reserved: 0,
+      onsite: 0,
+      damaged: 0,
+      condition: "GOOD",
+      availability: "AVAILABLE",
+      location: poolMatch.notes || "Main Warehouse",
+      lastService: new Date().toISOString().slice(0, 10),
+      nextService: new Date().toISOString().slice(0, 10),
+    };
+  }
+
+  throw new Error(`Inventory item not found for id ${id}`);
 }

@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { FilterDropdown, SortButton } from "@/components/filter-dropdown";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { useQuery } from "@tanstack/react-query";
-import { getBookingsApi, MOCK_BOOKINGS, STATUS_ORDER, STATUS_LABELS, type Booking, type BookingStatus, type PaymentStatus, type ScreenType } from "@/features/bookings/services/bookings.api";
+import { getBookingsApi, STATUS_ORDER, STATUS_LABELS, type Booking, type BookingStatus, type PaymentStatus, type ScreenType } from "@/features/bookings/services/bookings.api";
 
 const _Route = createFileRoute("/bookings/")({
   head: () => ({
@@ -22,7 +22,6 @@ const TABS = ["All", "This Week", "Upcoming", "Onsite", "Last Week", "Assigned t
 const ALL_STATUSES = STATUS_ORDER.map((s) => STATUS_LABELS[s]);
 const ALL_SCREEN_TYPES: ScreenType[] = ["P2.97", "P2.97-New", "P3.91 INDOOR", "P3.91 OUTDOOR", "P4", "P5"];
 const ALL_PAYMENTS: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
-const ALL_ASSIGNEES = [...new Set(MOCK_BOOKINGS.flatMap((b) => b.assignees))].sort();
 
 export function BookingsIndex() {
   const navigate = useNavigate();
@@ -38,10 +37,14 @@ export function BookingsIndex() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Query bookings from backend
-  const { data: bookingsList = MOCK_BOOKINGS } = useQuery({
+  const { data: bookingsList = [] } = useQuery({
     queryKey: ["bookings"],
     queryFn: getBookingsApi,
   });
+
+  const ALL_ASSIGNEES = useMemo(() => {
+    return [...new Set(bookingsList.flatMap((b) => b.assignees || []))].sort();
+  }, [bookingsList]);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());

@@ -229,77 +229,25 @@ export async function listPerformanceMetricsApi(params?: {
   category?: "internal" | "client_feedback";
   isActive?: boolean;
 }): Promise<PerformanceMetric[]> {
-  try {
-    const query = new URLSearchParams();
-    if (params?.category) query.append("category", params.category);
-    if (params?.isActive !== undefined) query.append("isActive", String(params.isActive));
-    
-    const queryString = query.toString() ? `?${query.toString()}` : "";
-    return await client.get<PerformanceMetric[]>(`/api/performance-metrics${queryString}`);
-  } catch (error) {
-    console.warn("Failed to fetch performance metrics from server, returning mock fallback.", error);
-    
-    const db = getLocalDb();
-    let result = db.metrics;
-    
-    if (params?.category) {
-      result = result.filter((m) => m.category === params.category);
-    }
-    if (params?.isActive !== undefined) {
-      result = result.filter((m) => m.isActive === params.isActive);
-    }
-    
-    return [...result].sort((a, b) => a.sortOrder - b.sortOrder);
-  }
+  const query = new URLSearchParams();
+  if (params?.category) query.append("category", params.category);
+  if (params?.isActive !== undefined) query.append("isActive", String(params.isActive));
+  
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return client.get<PerformanceMetric[]>(`/api/performance-metrics${queryString}`);
 }
 
 export async function createPerformanceMetricApi(
   payload: Omit<PerformanceMetric, "id" | "createdAt" | "updatedAt">
 ): Promise<PerformanceMetric> {
-  try {
-    return await client.post<PerformanceMetric>("/api/performance-metrics", payload);
-  } catch (error) {
-    console.warn("Failed to create metric on server, saving mock fallback.", error);
-    
-    const db = getLocalDb();
-    const newMetric: PerformanceMetric = {
-      ...payload,
-      id: `metric-${Math.random().toString(36).substr(2, 9)}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    
-    db.metrics.push(newMetric);
-    saveLocalDb(db);
-    return newMetric;
-  }
+  return client.post<PerformanceMetric>("/api/performance-metrics", payload);
 }
 
 export async function updatePerformanceMetricApi(
   id: string,
   payload: Partial<Omit<PerformanceMetric, "id" | "createdAt" | "updatedAt">>
 ): Promise<PerformanceMetric> {
-  try {
-    return await client.patch<PerformanceMetric>(`/api/performance-metrics/${id}`, payload);
-  } catch (error) {
-    console.warn(`Failed to update metric ${id} on server, updating mock fallback.`, error);
-    
-    const db = getLocalDb();
-    const index = db.metrics.findIndex((m) => m.id === id);
-    if (index === -1) {
-      throw new Error(`Metric not found: ${id}`);
-    }
-    
-    const updatedMetric: PerformanceMetric = {
-      ...db.metrics[index],
-      ...payload,
-      updatedAt: new Date().toISOString(),
-    };
-    
-    db.metrics[index] = updatedMetric;
-    saveLocalDb(db);
-    return updatedMetric;
-  }
+  return client.patch<PerformanceMetric>(`/api/performance-metrics/${id}`, payload);
 }
 
 // ----------------------------------------------------
@@ -307,65 +255,14 @@ export async function updatePerformanceMetricApi(
 // ----------------------------------------------------
 
 export async function getInternalEvaluationApi(bookingId: string): Promise<InternalEvaluation> {
-  try {
-    return await client.get<InternalEvaluation>(`/api/bookings/${bookingId}/evaluation`);
-  } catch (error) {
-    console.warn(`Failed to get internal evaluation for ${bookingId} from server, returning mock.`, error);
-    
-    const db = getLocalDb();
-    const evaluation = db.internal[bookingId];
-    if (!evaluation) {
-      throw new Error(`Internal evaluation not found for booking: ${bookingId}`);
-    }
-    return evaluation;
-  }
+  return client.get<InternalEvaluation>(`/api/bookings/${bookingId}/evaluation`);
 }
 
 export async function submitInternalEvaluationApi(
   bookingId: string,
   payload: SubmitInternalEvaluationPayload
 ): Promise<InternalEvaluation> {
-  try {
-    return await client.post<InternalEvaluation>(`/api/bookings/${bookingId}/evaluation`, payload);
-  } catch (error) {
-    console.warn(`Failed to submit internal evaluation for ${bookingId} on server, saving mock.`, error);
-    
-    const db = getLocalDb();
-    
-    // Enrich internal scores with key/label/description/valueType for display
-    const enrichedScores = payload.scores.map((s) => {
-      const metric = db.metrics.find((m) => m.id === s.metricId);
-      return {
-        metricId: s.metricId,
-        score: s.score,
-        key: metric?.key || "unknown",
-        label: metric?.label || "Unknown Metric",
-        description: metric?.description || "",
-        valueType: metric?.valueType || "boolean",
-      };
-    });
-
-    const activeProfile = isBrowser ? localStorage.getItem("vortex_active_profile") : null;
-    const evaluatorName = activeProfile ? JSON.parse(activeProfile).name : "Technician";
-
-    const newEvaluation: InternalEvaluation = {
-      id: `eval-int-${Math.random().toString(36).substr(2, 9)}`,
-      bookingId,
-      assignmentId: payload.assignmentId,
-      clientNameVenue: payload.clientNameVenue,
-      eventDate: payload.eventDate,
-      teamSize: payload.teamSize,
-      notes: payload.notes,
-      evaluatorId: evaluatorName,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      scores: enrichedScores,
-    };
-
-    db.internal[bookingId] = newEvaluation;
-    saveLocalDb(db);
-    return newEvaluation;
-  }
+  return client.post<InternalEvaluation>(`/api/bookings/${bookingId}/evaluation`, payload);
 }
 
 // ----------------------------------------------------
@@ -373,59 +270,16 @@ export async function submitInternalEvaluationApi(
 // ----------------------------------------------------
 
 export async function getClientEvaluationApi(bookingId: string): Promise<ClientEvaluation> {
-  try {
-    return await client.get<ClientEvaluation>(`/api/bookings/${bookingId}/client-evaluation`);
-  } catch (error) {
-    console.warn(`Failed to get client evaluation for ${bookingId} from server, returning mock.`, error);
-    
-    const db = getLocalDb();
-    const evaluation = db.client[bookingId];
-    if (!evaluation) {
-      throw new Error(`Client evaluation not found for booking: ${bookingId}`);
-    }
-    return evaluation;
-  }
+  return client.get<ClientEvaluation>(`/api/bookings/${bookingId}/client-evaluation`);
 }
 
 export async function submitClientEvaluationApi(
   bookingId: string,
   payload: SubmitClientEvaluationPayload
 ): Promise<ClientEvaluation> {
-  try {
-    return await client.post<ClientEvaluation>(`/api/bookings/${bookingId}/client-evaluation`, payload, {
-      headers: {
-        "X-Webhook-Secret": "GOOGLE_FORM_WEBHOOK_SECRET_MOCK",
-      },
-    });
-  } catch (error) {
-    console.warn(`Failed to post client evaluation for ${bookingId} webhook on server, saving mock.`, error);
-    
-    const db = getLocalDb();
-    
-    // Enrich scores
-    const enrichedScores = payload.scores.map((s) => {
-      const metric = db.metrics.find((m) => m.key === s.metricKey);
-      return {
-        metricId: metric?.id || `metric-${s.metricKey}`,
-        score: s.score,
-        key: s.metricKey,
-        label: metric?.label || s.metricKey.replace(/_/g, " "),
-        description: metric?.description || "",
-        valueType: metric?.valueType || "rating_10",
-      };
-    });
-
-    const newEvaluation: ClientEvaluation = {
-      id: `eval-cli-${Math.random().toString(36).substr(2, 9)}`,
-      bookingId,
-      respondentName: payload.respondentName,
-      submittedAt: payload.submittedAt || new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      scores: enrichedScores,
-    };
-
-    db.client[bookingId] = newEvaluation;
-    saveLocalDb(db);
-    return newEvaluation;
-  }
+  return client.post<ClientEvaluation>(`/api/bookings/${bookingId}/client-evaluation`, payload, {
+    headers: {
+      "X-Webhook-Secret": "GOOGLE_FORM_WEBHOOK_SECRET_MOCK",
+    },
+  });
 }
