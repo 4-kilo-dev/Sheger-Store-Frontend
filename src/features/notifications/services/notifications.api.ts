@@ -162,8 +162,9 @@ export interface SseHandlers {
  */
 export function connectNotificationsStream(handlers: SseHandlers): () => void {
   const token = authStorage.getToken();
-  if (!token) {
-    console.warn("No authentication token found. Unable to connect to notifications stream.");
+  const hasValidToken = token && token !== "undefined" && token !== "null";
+  if (!hasValidToken) {
+    console.warn("No valid authentication token found. Unable to connect to notifications stream.");
     return () => {};
   }
 
@@ -173,8 +174,9 @@ export function connectNotificationsStream(handlers: SseHandlers): () => void {
 
   const connectRealSse = () => {
     try {
-      // API endpoint expects token as query parameter: GET /notifications/stream?token=<token>
-      const sseUrl = `${window.location.origin}/api/notifications/stream?token=${encodeURIComponent(token)}`;
+      // Direct connection: use VITE_API_URL in production to bypass Vercel serverless function timeouts.
+      const backendBase = import.meta.env.VITE_API_URL || window.location.origin;
+      const sseUrl = `${backendBase}/api/notifications/stream?token=${encodeURIComponent(token)}`;
       eventSource = new EventSource(sseUrl);
 
       eventSource.onmessage = (event) => {
