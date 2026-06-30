@@ -1,4 +1,4 @@
-const BASE_URL = ""; // Relative to the same host in development (proxied via Vite) and production
+const BASE_URL = import.meta.env.VITE_API_URL || ""; // Use production backend API base URL when defined, default to relative for dev proxy
 
 class ApiError extends Error {
   status: number;
