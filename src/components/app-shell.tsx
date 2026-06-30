@@ -373,6 +373,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: "var(--text-3)" }} />
               <input
                 placeholder="Search bookings, clients, codes…"
+                value={(useRouterState({ select: (s) => s.location.search }) as any).q || ""}
+                onChange={(e) => {
+                  navigate({
+                    to: "/bookings",
+                    search: (prev: any) => ({ ...prev, q: e.target.value || undefined }),
+                    replace: true,
+                  });
+                }}
                 className="h-8 w-72 rounded-md border bg-[var(--surface-2)] pl-8 pr-3 text-[12px] outline-none placeholder:text-[var(--text-3)] focus:border-[var(--accent)]"
                 style={{ borderColor: "var(--border)" }}
               />

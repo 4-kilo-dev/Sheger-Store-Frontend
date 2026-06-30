@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Users, ClipboardCheck, Wrench } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
 import { MOCK_BOOKINGS, type Booking } from "@/features/bookings/services/bookings.api";
 
 const _Route = createFileRoute("/dashboards/cto")({
@@ -50,13 +51,11 @@ export function CtoDashboard() {
             Review confirmed bookings, verify screen specs, and assign lead technicians.
           </p>
         </div>
-        <Link
-          to="/dashboards"
-          className="rounded-md border px-3 py-1.5 text-[12px] font-semibold transition hover:bg-[var(--surface-2)]"
-          style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
-        >
-          All dashboards
-        </Link>
+        <Button variant="outline" size="default" asChild>
+          <Link to="/dashboards">
+            All dashboards
+          </Link>
+        </Button>
       </div>
 
       <div className="space-y-4">
@@ -88,9 +87,11 @@ export function CtoDashboard() {
               </div>
               <div className="flex items-center gap-3">
                 <span className="rounded-md border px-2 py-1 text-[10px] font-data" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.arrangement}</span>
-                <Link to="/bookings/$code" params={{ code: b.code }} className="rounded-md px-3 py-1 text-[10px] font-bold" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
-                  Review & assign
-                </Link>
+                <Button variant="default" size="sm" asChild className="h-auto py-1 text-[10px]">
+                  <Link to="/bookings/$code" params={{ code: b.code }}>
+                    Review & assign
+                  </Link>
+                </Button>
               </div>
             </div>
           ))}
