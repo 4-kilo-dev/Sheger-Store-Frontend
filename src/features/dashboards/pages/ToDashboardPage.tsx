@@ -2,7 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { CheckCircle2, ClipboardCheck, Package } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
-import { MOCK_BOOKINGS } from "@/features/bookings/services/bookings.api";
+import { getBookingsApi } from "@/features/bookings/services/bookings.api";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 const _Route = createFileRoute("/dashboards/to")({
   head: () => ({
@@ -35,9 +37,14 @@ function QueueSection({ title, icon: Icon, count, children, accent }: { title: s
 }
 
 export function ToDashboard() {
-  const myAssigned = MOCK_BOOKINGS.filter((b) => b.status === "ASSIGNED");
-  const accepted = MOCK_BOOKINGS.filter((b) => b.status === "ACCEPTED");
-  const inPrep = MOCK_BOOKINGS.filter((b) => b.status === "PREPARATION");
+  const { data: bookingsList = [] } = useQuery({
+    queryKey: ["bookings"],
+    queryFn: getBookingsApi,
+  });
+
+  const myAssigned = useMemo(() => bookingsList.filter((b) => b.status === "ASSIGNED"), [bookingsList]);
+  const accepted = useMemo(() => bookingsList.filter((b) => b.status === "ACCEPTED"), [bookingsList]);
+  const inPrep = useMemo(() => bookingsList.filter((b) => b.status === "PREPARATION"), [bookingsList]);
 
   return (
     <AppShell>

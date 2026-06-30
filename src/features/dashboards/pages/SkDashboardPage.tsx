@@ -4,7 +4,8 @@ import { Package, PackageCheck, Truck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { MOCK_BOOKINGS } from "@/features/bookings/services/bookings.api";
+import { getBookingsApi } from "@/features/bookings/services/bookings.api";
+import { useQuery } from "@tanstack/react-query";
 
 const _Route = createFileRoute("/dashboards/sk")({
   head: () => ({
@@ -37,10 +38,15 @@ function QueueSection({ title, icon: Icon, count, children, accent }: { title: s
 }
 
 export function SkDashboard() {
-  const onsiteBookings = MOCK_BOOKINGS.filter((b) => b.status === "ONSITE");
-  const completedBookings = MOCK_BOOKINGS.filter((b) => b.status === "COMPLETED");
-  const damaged = MOCK_BOOKINGS.filter((b) => b.bomItems.some((item) => item.status === "Checked Out"));
-  const totalAvail = useMemo(() => MOCK_BOOKINGS.reduce((s, b) => s + b.bomItems.filter((i) => i.status === "Reserved").length, 0), []);
+  const { data: bookingsList = [] } = useQuery({
+    queryKey: ["bookings"],
+    queryFn: getBookingsApi,
+  });
+
+  const onsiteBookings = useMemo(() => bookingsList.filter((b) => b.status === "ONSITE"), [bookingsList]);
+  const completedBookings = useMemo(() => bookingsList.filter((b) => b.status === "COMPLETED"), [bookingsList]);
+  const damaged = useMemo(() => bookingsList.filter((b) => b.bomItems && b.bomItems.some((item) => item.status === "Checked Out")), [bookingsList]);
+  const totalAvail = useMemo(() => bookingsList.reduce((s, b) => s + (b.bomItems ? b.bomItems.filter((i) => i.status === "Reserved").length : 0), 0), [bookingsList]);
 
   return (
     <AppShell>

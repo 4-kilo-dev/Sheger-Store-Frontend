@@ -2,7 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { RadioTower, Truck, Utensils, PackageCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
-import { MOCK_BOOKINGS } from "@/features/bookings/services/bookings.api";
+import { getBookingsApi } from "@/features/bookings/services/bookings.api";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 const _Route = createFileRoute("/dashboards/oo")({
   head: () => ({
@@ -35,9 +37,14 @@ function QueueSection({ title, icon: Icon, count, children, accent }: { title: s
 }
 
 export function OoDashboard() {
-  const readyToDispatch = MOCK_BOOKINGS.filter((b) => b.status === "PREPARATION");
-  const onsite = MOCK_BOOKINGS.filter((b) => b.status === "ONSITE");
-  const completed = MOCK_BOOKINGS.filter((b) => b.status === "COMPLETED");
+  const { data: bookingsList = [] } = useQuery({
+    queryKey: ["bookings"],
+    queryFn: getBookingsApi,
+  });
+
+  const readyToDispatch = useMemo(() => bookingsList.filter((b) => b.status === "PREPARATION"), [bookingsList]);
+  const onsite = useMemo(() => bookingsList.filter((b) => b.status === "ONSITE"), [bookingsList]);
+  const completed = useMemo(() => bookingsList.filter((b) => b.status === "COMPLETED"), [bookingsList]);
 
   return (
     <AppShell>

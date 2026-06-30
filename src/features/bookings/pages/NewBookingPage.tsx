@@ -37,9 +37,9 @@ export function NewBooking() {
     client: "", contactPerson: "", contactPhone: "",
     ctoConsulted: false, ctoNotes: "", screensAvailable: 3, ctoArrangement: "",
     venue: "", assemblyDate: "", eventDate: "",
-    screenType: "P4", size: 36, arrangement: "6M x 3M",
+    screenType: "P4", size: 0, arrangement: "",
     chief: "", technician: "", stageHand: "TEAM 1 · Abel",
-    amount: 75000, paymentTerms: "ADVANCE",
+    amount: 0, paymentTerms: "ADVANCE",
   });
   const set = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -63,7 +63,7 @@ export function NewBooking() {
           Cancel & return to Bookings
         </Link>
         <div className="text-[11px]" style={{ color: "var(--text-3)" }}>
-          Draft auto-saved · <span style={{ color: "var(--accent)" }}>SB-DRAFT-049</span>
+          New Booking Draft
         </div>
       </div>
 
@@ -376,8 +376,8 @@ export function NewBooking() {
             <div className="label-eyebrow mb-3">Booking Preview</div>
             <div className="rounded-md border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
               <div className="font-mono text-[20px] font-bold" style={{ color: "var(--accent)" }}>SB-DRAFT</div>
-              <div className="mt-1 text-[13px] font-semibold">{form.client || "Client name…"}</div>
-              <div className="text-[11px]" style={{ color: "var(--text-2)" }}>{form.venue || "Venue…"}</div>
+              <div className="mt-1 text-[13px] font-semibold">{form.client || ""}</div>
+              <div className="text-[11px]" style={{ color: "var(--text-2)" }}>{form.venue || ""}</div>
               {form.ctoConsulted && (
                 <div className="mt-2 flex items-center gap-1 text-[10px] font-semibold" style={{ color: "var(--color-bom-returned)" }}>
                   <CheckCircle2 className="h-3 w-3" /> CTO Consulted
@@ -394,16 +394,16 @@ export function NewBooking() {
                 </div>
                 <div>
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Screen</div>
-                  <div className="font-mono font-semibold">{form.screenType}</div>
+                  <div className="font-mono font-semibold">{form.screenType || "—"}</div>
                 </div>
                 <div>
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Size</div>
-                  <div className="font-mono font-semibold">{form.size} sqm</div>
+                  <div className="font-mono font-semibold">{form.size ? `${form.size} sqm` : "—"}</div>
                 </div>
               </div>
               <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
                 <div className="label-eyebrow">Contract</div>
-                <div className="font-mono text-[18px] font-bold">ETB {form.amount.toLocaleString()}</div>
+                <div className="font-mono text-[18px] font-bold">{form.amount ? `ETB ${form.amount.toLocaleString()}` : "—"}</div>
               </div>
             </div>
             <p className="mt-3 text-[10px] leading-relaxed" style={{ color: "var(--text-3)" }}>

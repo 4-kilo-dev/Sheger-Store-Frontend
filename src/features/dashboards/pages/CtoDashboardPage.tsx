@@ -2,7 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Users, ClipboardCheck, Wrench } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
-import { MOCK_BOOKINGS, type Booking } from "@/features/bookings/services/bookings.api";
+import { getBookingsApi, type Booking } from "@/features/bookings/services/bookings.api";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 const _Route = createFileRoute("/dashboards/cto")({
   head: () => ({
@@ -35,9 +37,14 @@ function QueueSection({ title, icon: Icon, count, children, accent }: { title: s
 }
 
 export function CtoDashboard() {
-  const confirmed = MOCK_BOOKINGS.filter((b) => b.status === "CONFIRMED");
-  const assigned = MOCK_BOOKINGS.filter((b) => b.status === "ASSIGNED");
-  const inPrep = MOCK_BOOKINGS.filter((b) => b.status === "PREPARATION");
+  const { data: bookingsList = [] } = useQuery({
+    queryKey: ["bookings"],
+    queryFn: getBookingsApi,
+  });
+
+  const confirmed = useMemo(() => bookingsList.filter((b) => b.status === "CONFIRMED"), [bookingsList]);
+  const assigned = useMemo(() => bookingsList.filter((b) => b.status === "ASSIGNED"), [bookingsList]);
+  const inPrep = useMemo(() => bookingsList.filter((b) => b.status === "PREPARATION"), [bookingsList]);
 
   return (
     <AppShell>
@@ -101,7 +108,7 @@ export function CtoDashboard() {
           <div className="label-eyebrow mb-3">Screen availability</div>
           <div className="grid gap-2 md:grid-cols-3">
             {["P2.97", "P4", "P3.91 INDOOR"].map((type) => {
-              const bookingsUsing = MOCK_BOOKINGS.filter((b) => b.screenType === type && ["RESERVED","CONFIRMED","ASSIGNED","ACCEPTED","PREPARATION","ONSITE"].includes(b.status));
+              const bookingsUsing = bookingsList.filter((b) => b.screenType === type && ["RESERVED","CONFIRMED","ASSIGNED","ACCEPTED","PREPARATION","ONSITE"].includes(b.status));
               return (
                 <div key={type} className="rounded-md border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
                   <div className="font-data text-[12px] font-bold">{type}</div>
