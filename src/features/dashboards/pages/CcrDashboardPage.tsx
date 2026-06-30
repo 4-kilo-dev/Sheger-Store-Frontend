@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { DollarSign, Headphones, Phone, CalendarCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { MOCK_BOOKINGS, type Booking } from "@/features/bookings/services/bookings.api";
 
 const _Route = createFileRoute("/dashboards/ccr")({
@@ -73,13 +74,11 @@ export function CcrDashboard() {
             Confirm reservations and follow up on outstanding payments.
           </p>
         </div>
-        <Link
-          to="/dashboards"
-          className="rounded-md border px-3 py-1.5 text-[12px] font-semibold transition hover:bg-[var(--surface-2)]"
-          style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
-        >
-          All dashboards
-        </Link>
+        <Button variant="outline" size="default" asChild>
+          <Link to="/dashboards">
+            All dashboards
+          </Link>
+        </Button>
       </div>
 
       <div className="space-y-4">
@@ -120,9 +119,11 @@ export function CcrDashboard() {
           </QueueSection>
         </div>
 
-        <Link to="/bookings/new" className="flex items-center justify-center gap-2 rounded-lg border border-dashed py-4 text-[13px] font-semibold transition hover:border-[var(--accent)] hover:bg-[var(--surface)]" style={{ borderColor: "var(--border)", color: "var(--accent)" }}>
-          <Phone className="h-4 w-4" /> Create booking from client call
-        </Link>
+        <Button variant="outline" size="default" asChild className="h-auto py-4">
+          <Link to="/bookings/new" className="flex items-center justify-center gap-2">
+            <Phone className="h-4 w-4" /> Create booking from client call
+          </Link>
+        </Button>
       </div>
     </AppShell>
   );

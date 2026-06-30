@@ -52,7 +52,10 @@ export function LoginPage() {
             }
         },
         onError: (error: any) => {
-            toast.error(error.message || "Failed to sign in");
+            const errorMessage = "Incorrect password or email";
+            form.setError("email", { type: "manual", message: errorMessage });
+            form.setError("password", { type: "manual", message: errorMessage });
+            toast.error(errorMessage);
         },
     });
 

@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CheckCircle2, ClipboardCheck, Package } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
 import { MOCK_BOOKINGS } from "@/features/bookings/services/bookings.api";
 
 const _Route = createFileRoute("/dashboards/to")({
@@ -50,13 +51,11 @@ export function ToDashboard() {
             Accept assigned bookings, prepare the bill of materials, and run your field setups.
           </p>
         </div>
-        <Link
-          to="/dashboards"
-          className="rounded-md border px-3 py-1.5 text-[12px] font-semibold transition hover:bg-[var(--surface-2)]"
-          style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
-        >
-          All dashboards
-        </Link>
+        <Button variant="outline" size="default" asChild>
+          <Link to="/dashboards">
+            All dashboards
+          </Link>
+        </Button>
       </div>
 
       <div className="space-y-4">
@@ -88,9 +87,11 @@ export function ToDashboard() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-data text-[11px]" style={{ color: "var(--text-2)" }}>{b.screenType} · {b.size}sqm</span>
-                <Link to="/bookings/$code" params={{ code: b.code }} className="rounded-md px-3 py-1 text-[10px] font-bold" style={{ background: "var(--color-status-accepted)", color: "#fff" }}>
-                  Accept assignment
-                </Link>
+                <Button variant="default" size="sm" asChild className="h-auto py-1 text-[10px]">
+                  <Link to="/bookings/$code" params={{ code: b.code }}>
+                    Accept assignment
+                  </Link>
+                </Button>
               </div>
             </div>
           ))}
@@ -105,9 +106,11 @@ export function ToDashboard() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] truncate max-w-[200px]" style={{ color: "var(--text-3)" }}>CTO: {b.ctoNotes}</span>
-                <Link to="/bookings/$code" params={{ code: b.code }} className="rounded-md border px-3 py-1 text-[10px] font-semibold shrink-0" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>
-                  Prepare BOM
-                </Link>
+                <Button variant="outline" size="sm" asChild className="h-auto py-1 text-[10px] shrink-0">
+                  <Link to="/bookings/$code" params={{ code: b.code }}>
+                    Prepare BOM
+                  </Link>
+                </Button>
               </div>
             </div>
           ))}
