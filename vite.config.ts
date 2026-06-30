@@ -23,4 +23,6 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Enable Nitro server compilation for production deployments (e.g. Vercel)
+  nitro: true,
 });

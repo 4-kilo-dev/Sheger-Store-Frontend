@@ -7,6 +7,7 @@ import {
 import { useState, useEffect, type ReactNode } from "react";
 import { useActiveProfile, PROFILES } from "@/hooks/use-active-profile";
 import { logoutApi } from "@/features/auth/services/auth.api";
+import { useNotifications } from "@/features/notifications/context/NotificationsContext";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -82,6 +83,8 @@ function Breadcrumb() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications();
+  const [bellOpen, setBellOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [rolesOpen, setRolesOpen] = useState(true);
   const [showSwitcher, setShowSwitcher] = useState(false);
@@ -405,10 +408,122 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               {theme === "dark" ? <Sun className="h-4 w-4" style={{ color: "var(--accent)" }} /> : <Moon className="h-4 w-4" style={{ color: "var(--accent)" }} />}
             </button>
-            <Link to="/notifications" aria-label="Open notifications" className="relative flex h-8 w-8 items-center justify-center rounded-md border" style={{ borderColor: "var(--border)" }}>
-              <Bell className="h-4 w-4" style={{ color: "var(--text-2)" }} />
-              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full" style={{ background: "var(--accent)" }} />
-            </Link>
+            {/* Notification Bell Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setBellOpen(!bellOpen)}
+                aria-label="Open notifications"
+                className="relative flex h-8 w-8 items-center justify-center rounded-md border hover:bg-[var(--surface-2)] transition"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <Bell className="h-4 w-4" style={{ color: "var(--text-2)" }} />
+                {unreadCount > 0 && (
+                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full animate-ping" style={{ background: "var(--accent)" }} />
+                )}
+                {unreadCount > 0 && (
+                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ background: "var(--accent)" }} />
+                )}
+              </button>
+
+              {bellOpen && (
+                <>
+                  {/* Backdrop to close dropdown on clicking outside */}
+                  <div className="fixed inset-0 z-40 bg-transparent cursor-default" onClick={() => setBellOpen(false)} />
+                  
+                  {/* Dropdown panel */}
+                  <div
+                    className="absolute right-0 mt-2 w-80 rounded-lg border shadow-xl z-50 p-1 flex flex-col max-h-[420px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+                    style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+                  >
+                    <div className="flex items-center justify-between border-b px-3.5 py-2.5" style={{ borderColor: "var(--border)" }}>
+                      <span className="text-[13px] font-bold">Notifications</span>
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={() => {
+                            markAllRead();
+                            setBellOpen(false);
+                          }}
+                          className="text-[10px] font-semibold hover:opacity-80 transition"
+                          style={{ color: "var(--accent)" }}
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto divide-y scrollbar-thin" style={{ borderColor: "var(--border)" }}>
+                      {notifications.length === 0 ? (
+                        <div className="py-8 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
+                          No notifications yet
+                        </div>
+                      ) : (
+                        notifications.slice(0, 5).map((n) => {
+                          const isUnread = !n.readAt;
+                          
+                          // Redirect mapping
+                          let redirectPath = "/notifications";
+                          if (n.relatedEntity === "booking") {
+                            redirectPath = `/bookings/${n.relatedId}`;
+                          } else if (n.relatedEntity === "assignment") {
+                            redirectPath = `/bookings/${n.relatedId}`;
+                          } else if (n.relatedEntity === "damage_missing_report") {
+                            redirectPath = `/damage-report`;
+                          }
+
+                          return (
+                            <div
+                              key={n.id}
+                              onClick={() => {
+                                navigate({ to: redirectPath as any });
+                                markAsRead(n.id);
+                                setBellOpen(false);
+                              }}
+                              className="group flex gap-2.5 p-3 text-left transition hover:bg-[var(--surface-2)] cursor-pointer"
+                            >
+                              <div className="mt-1 flex h-2 w-2 shrink-0 rounded-full" style={{ background: isUnread ? "var(--accent)" : "transparent" }} />
+                              <div className="flex-grow min-w-0">
+                                <div className="text-[12px] font-bold truncate" style={{ color: isUnread ? "var(--foreground)" : "var(--text-2)" }}>
+                                  {n.title}
+                                </div>
+                                <div className="text-[10.5px] mt-0.5 leading-relaxed truncate" style={{ color: "var(--text-3)" }}>
+                                  {n.detail}
+                                </div>
+                                <div className="text-[9px] font-mono mt-1" style={{ color: "var(--text-3)" }}>
+                                  {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                              </div>
+                              {isUnread && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    markAsRead(n.id);
+                                  }}
+                                  className="self-center opacity-0 group-hover:opacity-100 transition rounded-md border px-1.5 py-0.5 text-[9px] font-semibold hover:border-[var(--accent)]"
+                                  style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+                                >
+                                  Mark read
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <div className="border-t p-2 text-center" style={{ borderColor: "var(--border)" }}>
+                      <Link
+                        to="/notifications"
+                        onClick={() => setBellOpen(false)}
+                        className="block w-full py-1 text-[11px] font-bold text-center hover:opacity-80 transition"
+                        style={{ color: "var(--accent)" }}
+                      >
+                        View all notifications
+                      </Link>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </header>
         <main className="flex-1 p-6">{children}</main>
