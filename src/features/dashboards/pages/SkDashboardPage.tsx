@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { Package, PackageCheck, Truck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { MOCK_BOOKINGS } from "@/features/bookings/services/bookings.api";
 
 const _Route = createFileRoute("/dashboards/sk")({
@@ -53,13 +54,11 @@ export function SkDashboard() {
             Verify equipment returns, process check-outs, and flag damage.
           </p>
         </div>
-        <Link
-          to="/dashboards"
-          className="rounded-md border px-3 py-1.5 text-[12px] font-semibold transition hover:bg-[var(--surface-2)]"
-          style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
-        >
-          All dashboards
-        </Link>
+        <Button variant="outline" size="default" asChild>
+          <Link to="/dashboards">
+            All dashboards
+          </Link>
+        </Button>
       </div>
 
       <div className="space-y-4">
@@ -87,9 +86,11 @@ export function SkDashboard() {
                   <span>{b.client}</span>
                   <span className="text-[10px]" style={{ color: "var(--text-3)" }}>{b.bomItems.length} items</span>
                 </div>
-                <Link to="/checkout" className="rounded-md px-3 py-1 text-[10px] font-bold" style={{ background: "var(--color-bom-returned)", color: "#fff" }}>
-                  Check in
-                </Link>
+                <Button variant="default" size="sm" asChild className="h-auto py-1 text-[10px]">
+                  <Link to="/checkout">
+                    Check in
+                  </Link>
+                </Button>
               </div>
             ))}
           </QueueSection>
@@ -107,9 +108,11 @@ export function SkDashboard() {
           </QueueSection>
         </div>
 
-        <Link to="/damage-report" className="flex items-center justify-center gap-2 rounded-lg border border-dashed py-4 text-[13px] font-semibold transition hover:border-destructive hover:bg-[var(--surface)]" style={{ borderColor: "var(--border)", color: "var(--destructive)" }}>
-          <Package className="h-4 w-4" /> Report damaged equipment
-        </Link>
+        <Button variant="outline" size="default" asChild className="h-auto py-4">
+          <Link to="/damage-report" className="flex items-center justify-center gap-2">
+            <Package className="h-4 w-4" /> Report damaged equipment
+          </Link>
+        </Button>
       </div>
     </AppShell>
   );
