@@ -7,7 +7,7 @@ import {
   Phone, User, Building2, DollarSign, Paperclip, MessageSquare,
   Package, Users, Clock, CheckCircle2, AlertTriangle, Download, Upload,
   Truck, Wrench, FileText, ClipboardCheck, UserCheck, PackageCheck,
-  ChevronRight,
+  ChevronRight, Star, Send, Sparkles, Check, X, AlertCircle,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
@@ -20,6 +20,19 @@ import {
   MOCK_BOOKINGS,
   type BookingStatus 
 } from "@/features/bookings/services/bookings.api";
+import { useActiveProfile } from "@/hooks/use-active-profile";
+import {
+  listPerformanceMetricsApi,
+  getInternalEvaluationApi,
+  submitInternalEvaluationApi,
+  getClientEvaluationApi,
+  submitClientEvaluationApi,
+  type PerformanceMetric,
+  type InternalEvaluation,
+  type ClientEvaluation,
+  type SubmitInternalEvaluationPayload,
+  type SubmitClientEvaluationPayload
+} from "@/features/bookings/services/evaluations.api";
 
 const _Route = createFileRoute("/bookings/$code")({
   head: ({ params }) => ({
@@ -43,7 +56,7 @@ const _Route = createFileRoute("/bookings/$code")({
   component: BookingDetail,
 });
 
-const TABS = ["Overview", "Schedule", "Team", "Equipment", "Payments", "Files", "Activity"] as const;
+const TABS = ["Overview", "Schedule", "Team", "Equipment", "Payments", "Files", "Activity", "Evaluations"] as const;
 
 /* SOP-specific action config per status */
 const STATUS_ACTIONS: Record<string, { label: string; icon: any; nextStatus: string; role: string; color?: string }> = {
@@ -301,6 +314,7 @@ export function BookingDetail() {
       {tab === "Payments" && <PaymentsTab b={booking} />}
       {tab === "Files" && <FilesTab />}
       {tab === "Activity" && <ActivityTab />}
+      {tab === "Evaluations" && <EvaluationsTab b={booking} />}
     </AppShell>
   );
 }
@@ -617,5 +631,698 @@ function ActivityTab() {
         ))}
       </div>
     </Section>
+  );
+}
+
+function EvaluationsTab({ b }: { b: B }) {
+  const queryClient = useQueryClient();
+  const [activeProfile] = useActiveProfile();
+  
+  const canSubmitInternal = ["Admin", "CTO", "TO"].includes(activeProfile.role);
+
+  // States
+  const [showInternalModal, setShowInternalModal] = useState(false);
+  const [showWebhookModal, setShowWebhookModal] = useState(false);
+
+  // Internal Evaluation Form States
+  const [venueName, setVenueName] = useState(b.venue);
+  const [eventDate, setEventDate] = useState(b.eventDate);
+  const [teamSize, setTeamSize] = useState(b.assignees.length + 2);
+  const [notes, setNotes] = useState("");
+  const [internalScores, setInternalScores] = useState<Record<string, number>>({});
+
+  // Client Evaluation Form States
+  const [respondentName, setRespondentName] = useState("");
+  const [clientScores, setClientScores] = useState<Record<string, number>>({});
+
+  // Queries
+  const { data: internalEval, isLoading: loadingInternal } = useQuery({
+    queryKey: ["booking-internal-eval", b.code],
+    queryFn: () => getInternalEvaluationApi(b.code),
+    retry: false,
+  });
+
+  const { data: clientEval, isLoading: loadingClient } = useQuery({
+    queryKey: ["booking-client-eval", b.code],
+    queryFn: () => getClientEvaluationApi(b.code),
+    retry: false,
+  });
+
+  const { data: metrics } = useQuery({
+    queryKey: ["active-metrics"],
+    queryFn: () => listPerformanceMetricsApi({ isActive: true }),
+  });
+
+  // Filter metrics
+  const internalMetrics = metrics?.filter((m) => m.category === "internal") || [];
+  const clientMetrics = metrics?.filter((m) => m.category === "client_feedback") || [];
+
+  // Mutations
+  const { mutate: submitInternal, isPending: submittingInternal } = useMutation({
+    // Explicit return types matching Backend API
+    mutationFn: (payload: SubmitInternalEvaluationPayload) => submitInternalEvaluationApi(b.code, payload),
+    onSuccess: () => {
+      toast.success("Internal crew evaluation submitted!");
+      queryClient.invalidateQueries({ queryKey: ["booking-internal-eval", b.code] });
+      setShowInternalModal(false);
+      // Reset scores
+      setInternalScores({});
+      setNotes("");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to submit internal evaluation");
+    }
+  });
+
+  const { mutate: simulateWebhook, isPending: submittingWebhook } = useMutation({
+    mutationFn: (payload: SubmitClientEvaluationPayload) => submitClientEvaluationApi(b.code, payload),
+    onSuccess: () => {
+      toast.success("Client feedback simulated via webhook!");
+      queryClient.invalidateQueries({ queryKey: ["booking-client-eval", b.code] });
+      setShowWebhookModal(false);
+      setRespondentName("");
+      setClientScores({});
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to simulate client feedback");
+    }
+  });
+
+  // Initializing scores when metrics load or modal opens
+  const openInternalForm = () => {
+    const initialScores: Record<string, number> = {};
+    internalMetrics.forEach((m) => {
+      initialScores[m.id] = m.valueType === "boolean" ? 1 
+                          : m.valueType === "rating_5" ? 5 
+                          : m.valueType === "percentage" ? 100 
+                          : 10; // rating_10 default
+    });
+    setInternalScores(initialScores);
+    setVenueName(b.venue);
+    setEventDate(b.eventDate);
+    setTeamSize(b.assignees.length + 2);
+    setNotes("");
+    setShowInternalModal(true);
+  };
+
+  const openClientForm = () => {
+    const initialScores: Record<string, number> = {};
+    clientMetrics.forEach((m) => {
+      initialScores[m.key] = m.valueType === "boolean" ? 1 
+                           : m.valueType === "rating_5" ? 5 
+                           : m.valueType === "percentage" ? 100 
+                           : 10;
+    });
+    setClientScores(initialScores);
+    setRespondentName("");
+    setShowWebhookModal(true);
+  };
+
+  return (
+    <div className="grid grid-cols-12 gap-4">
+      {/* Internal Evaluation */}
+      <div className="col-span-12 md:col-span-6">
+        <Section 
+          title="Internal Crew Review" 
+          icon={ClipboardCheck}
+          action={
+            !loadingInternal && !internalEval && canSubmitInternal && (
+              <button 
+                onClick={openInternalForm}
+                className="rounded border bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-semibold transition hover:border-[var(--accent)]" 
+                style={{ borderColor: "var(--border)", color: "var(--accent)" }}
+              >
+                + Submit Review
+              </button>
+            )
+          }
+        >
+          {loadingInternal ? (
+            <div className="py-6 text-center text-[12px]" style={{ color: "var(--text-3)" }}>Loading review...</div>
+          ) : internalEval ? (
+            <div className="space-y-4">
+              <div className="rounded-md border p-3 bg-[var(--surface-2)]" style={{ borderColor: "var(--border)" }}>
+                <div className="flex items-center justify-between text-[11px]" style={{ color: "var(--text-3)" }}>
+                  <span>Evaluated by: <strong style={{ color: "var(--foreground)" }}>{internalEval.evaluatorId}</strong></span>
+                  <span className="font-mono">{new Date(internalEval.createdAt).toLocaleDateString()}</span>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-[12px]">
+                  <div><span style={{ color: "var(--text-3)" }}>Client/Venue:</span> {internalEval.clientNameVenue || b.venue}</div>
+                  <div><span style={{ color: "var(--text-3)" }}>Team Size:</span> {internalEval.teamSize || b.assignees.length + 2} crew</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <span className="label-eyebrow text-[10px]">Operations Checklist</span>
+                <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+                  {internalEval.scores.map((s) => (
+                    <div key={s.metricId} className="flex items-center justify-between py-2.5">
+                      <div>
+                        <div className="text-[13px] font-semibold">{s.label}</div>
+                        {s.description && <div className="text-[10px]" style={{ color: "var(--text-3)" }}>{s.description}</div>}
+                      </div>
+
+                      {/* Render display dynamically based on valueType */}
+                      {s.valueType === "boolean" && (
+                        <span 
+                          className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold`}
+                          style={{ 
+                            background: s.score === 1 ? "rgba(48, 164, 108, 0.15)" : "rgba(229, 70, 102, 0.15)",
+                            color: s.score === 1 ? "var(--color-status-done)" : "var(--destructive)",
+                            border: `1px solid ${s.score === 1 ? "rgba(48, 164, 108, 0.3)" : "rgba(229, 70, 102, 0.3)"}`
+                          }}
+                        >
+                          {s.score === 1 ? (
+                            <>
+                              <Check className="h-3 w-3" /> Met
+                            </>
+                          ) : (
+                            <>
+                              <X className="h-3 w-3" /> Not Met
+                            </>
+                          )}
+                        </span>
+                      )}
+
+                      {s.valueType === "rating_5" && (
+                        <div className="flex items-center gap-1">
+                          <div className="flex items-center">
+                            {Array.from({ length: 5 }).map((_, idx) => (
+                              <Star 
+                                key={idx} 
+                                className="h-3.5 w-3.5" 
+                                style={{ 
+                                  fill: idx < Math.round(s.score) ? "var(--color-status-reserved)" : "none", 
+                                  color: idx < Math.round(s.score) ? "var(--color-status-reserved)" : "var(--border)" 
+                                }} 
+                              />
+                            ))}
+                          </div>
+                          <span className="font-data font-bold text-[11px] ml-1.5" style={{ color: "var(--text-2)" }}>{s.score} / 5</span>
+                        </div>
+                      )}
+
+                      {s.valueType === "rating_10" && (
+                        <span className="font-data font-bold text-[12px]" style={{ color: "var(--accent)" }}>{s.score} / 10</span>
+                      )}
+
+                      {s.valueType === "percentage" && (
+                        <span className="font-data font-bold text-[12px]" style={{ color: "var(--accent)" }}>{s.score}%</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {internalEval.notes && (
+                <div className="rounded-md border p-3 bg-[var(--surface)] text-[12px] leading-relaxed" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
+                  <div className="flex items-center gap-1.5 label-eyebrow mb-1.5 text-[9px]">
+                    <MessageSquare className="h-3 w-3" style={{ color: "var(--accent)" }} /> Evaluator Notes
+                  </div>
+                  {internalEval.notes}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed rounded-lg" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+              <ClipboardCheck className="h-8 w-8 mb-2" style={{ color: "var(--text-3)" }} />
+              <div className="text-[13px] font-semibold">No Internal Review Submitted</div>
+              <p className="mt-1 max-w-[280px] text-[11px] px-4" style={{ color: "var(--text-3)" }}>
+                Technicians and administrators can complete the operations review for safety, PPE compliance, and load-in efficiency.
+              </p>
+              {canSubmitInternal && (
+                <button 
+                  onClick={openInternalForm}
+                  className="mt-4 rounded px-3 py-1.5 text-[11px] font-bold transition hover:brightness-110"
+                  style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+                >
+                  Start Crew Review
+                </button>
+              )}
+            </div>
+          )}
+        </Section>
+      </div>
+
+      {/* Client Feedback */}
+      <div className="col-span-12 md:col-span-6">
+        <Section 
+          title="Client Satisfaction Review" 
+          icon={Star}
+          action={
+            !loadingClient && !clientEval && (
+              <button 
+                onClick={openClientForm}
+                className="rounded border bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-semibold transition hover:border-[var(--accent)]" 
+                style={{ borderColor: "var(--border)", color: "var(--accent)" }}
+              >
+                Simulate Webhook
+              </button>
+            )
+          }
+        >
+          {loadingClient ? (
+            <div className="py-6 text-center text-[12px]" style={{ color: "var(--text-3)" }}>Loading feedback...</div>
+          ) : clientEval ? (
+            <div className="space-y-4">
+              <div className="rounded-md border p-3 bg-[var(--surface-2)]" style={{ borderColor: "var(--border)" }}>
+                <div className="flex items-center justify-between text-[11px]" style={{ color: "var(--text-3)" }}>
+                  <span>Respondent: <strong style={{ color: "var(--foreground)" }}>{clientEval.respondentName}</strong></span>
+                  <span className="font-mono">{new Date(clientEval.submittedAt).toLocaleDateString()}</span>
+                </div>
+                <div className="mt-1 text-[10px]" style={{ color: "var(--text-3)" }}>
+                  Ingested automatically via Google Forms Webhook API
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <span className="label-eyebrow text-[10px]">Client Survey Results</span>
+                <div className="space-y-3.5">
+                  {clientEval.scores.map((s) => {
+                    // Decide color dynamically
+                    const colorScore = s.valueType === "rating_5" ? s.score * 2 : s.score;
+                    const scoreColor = colorScore >= 8 ? "var(--color-status-done)" : colorScore >= 5 ? "var(--color-status-reserved)" : "var(--destructive)";
+                    
+                    // Progress Bar width percentage
+                    let progressWidth = "0%";
+                    if (s.valueType === "boolean") progressWidth = s.score === 1 ? "100%" : "0%";
+                    else if (s.valueType === "rating_5") progressWidth = `${s.score * 20}%`;
+                    else if (s.valueType === "percentage") progressWidth = `${s.score}%`;
+                    else progressWidth = `${s.score * 10}%`; // rating_10
+
+                    return (
+                      <div key={s.metricId} className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-[13px] font-semibold">{s.label}</span>
+                            {s.description && <span className="ml-2 text-[10px]" style={{ color: "var(--text-3)" }}>({s.description})</span>}
+                          </div>
+                          
+                          <span className="font-data text-[12px] font-bold" style={{ color: scoreColor }}>
+                            {s.valueType === "boolean" ? (s.score === 1 ? "Met" : "Not Met")
+                             : s.valueType === "rating_5" ? `${s.score} / 5`
+                             : s.valueType === "percentage" ? `${s.score}%`
+                             : `${s.score} / 10`}
+                          </span>
+                        </div>
+
+                        {s.valueType === "rating_5" ? (
+                          <div className="flex items-center gap-0.5">
+                            {Array.from({ length: 5 }).map((_, idx) => (
+                              <Star 
+                                key={idx} 
+                                className="h-4.5 w-4.5" 
+                                style={{ 
+                                  fill: idx < Math.round(s.score) ? "var(--color-status-reserved)" : "none", 
+                                  color: idx < Math.round(s.score) ? "var(--color-status-reserved)" : "var(--border)" 
+                                }} 
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="h-2 w-full rounded-full bg-[var(--surface-2)] overflow-hidden">
+                            <div 
+                              className="h-full rounded-full transition-all duration-500" 
+                              style={{ width: progressWidth, background: scoreColor }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed rounded-lg" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+              <Star className="h-8 w-8 mb-2" style={{ color: "var(--text-3)" }} />
+              <div className="text-[13px] font-semibold">Awaiting Client Feedback</div>
+              <p className="mt-1 max-w-[280px] text-[11px] px-4" style={{ color: "var(--text-3)" }}>
+                This card will update automatically once the client completes the Google Form evaluation link sent after event breakdown.
+              </p>
+              <button 
+                onClick={openClientForm}
+                className="mt-4 rounded px-3 py-1.5 text-[11px] font-bold transition hover:brightness-110"
+                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                Simulate Webhook Ingestion
+              </button>
+            </div>
+          )}
+        </Section>
+      </div>
+
+      {/* Submit Internal Evaluation Modal */}
+      {showInternalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div 
+            className="w-full max-w-lg rounded-lg border p-5 shadow-xl animate-in fade-in zoom-in duration-200"
+            style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+          >
+            <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: "var(--border)" }}>
+              <h3 className="text-[15px] font-bold flex items-center gap-2">
+                <ClipboardCheck className="h-4 w-4" style={{ color: "var(--accent)" }} /> Submit Crew Evaluation ({b.code})
+              </h3>
+              <button onClick={() => setShowInternalModal(false)} className="text-[12px] font-semibold hover:opacity-80" style={{ color: "var(--text-3)" }}>✕</button>
+            </div>
+
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                  Client / Venue Location
+                  <input 
+                    type="text" 
+                    value={venueName} 
+                    onChange={(e) => setVenueName(e.target.value)} 
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
+                    style={{ borderColor: "var(--border)" }} 
+                  />
+                </label>
+                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                  Event Date
+                  <input 
+                    type="date" 
+                    value={eventDate} 
+                    onChange={(e) => setEventDate(e.target.value)} 
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
+                    style={{ borderColor: "var(--border)" }} 
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                  Team Size (On-site Crew)
+                  <input 
+                    type="number" 
+                    value={teamSize} 
+                    onChange={(e) => setTeamSize(parseInt(e.target.value) || 0)} 
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
+                    style={{ borderColor: "var(--border)" }} 
+                  />
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                <span className="label-eyebrow text-[9px]">Crew Compliance & Standards Checklist</span>
+                <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                  {internalMetrics.length === 0 ? (
+                    <div className="text-[11px] text-center py-2" style={{ color: "var(--text-3)" }}>No metrics configured in settings.</div>
+                  ) : (
+                    internalMetrics.map((m) => {
+                      const score = internalScores[m.id] ?? (m.valueType === "boolean" ? 1 : m.valueType === "rating_5" ? 5 : m.valueType === "percentage" ? 100 : 10);
+                      return (
+                        <div key={m.id} className="rounded border p-2.5 bg-[var(--surface)] flex flex-col gap-2" style={{ borderColor: "var(--border)" }}>
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="text-[12px] font-semibold">{m.label}</div>
+                              {m.description && <div className="text-[10px]" style={{ color: "var(--text-3)" }}>{m.description}</div>}
+                            </div>
+                            
+                            {m.valueType === "boolean" && (
+                              <button
+                                type="button"
+                                onClick={() => setInternalScores(prev => ({ ...prev, [m.id]: score === 1 ? 0 : 1 }))}
+                                className={`rounded px-2.5 py-0.5 text-[10px] font-bold uppercase transition`}
+                                style={{ 
+                                  background: score === 1 ? "var(--color-status-done)" : "var(--surface-2)",
+                                  color: score === 1 ? "#fff" : "var(--text-2)"
+                                }}
+                              >
+                                {score === 1 ? "Met" : "Not Met"}
+                              </button>
+                            )}
+
+                            {m.valueType === "rating_5" && (
+                              <span className="font-data text-[11px] font-bold" style={{ color: "var(--accent)" }}>{score} / 5</span>
+                            )}
+
+                            {m.valueType === "rating_10" && (
+                              <span className="font-data text-[11px] font-bold" style={{ color: "var(--accent)" }}>{score} / 10</span>
+                            )}
+
+                            {m.valueType === "percentage" && (
+                              <span className="font-data text-[11px] font-bold" style={{ color: "var(--accent)" }}>{score}%</span>
+                            )}
+                          </div>
+
+                          {m.valueType === "rating_5" && (
+                            <div className="flex items-center gap-1 mt-1 animate-in fade-in duration-200">
+                              {Array.from({ length: 5 }).map((_, idx) => {
+                                const starVal = idx + 1;
+                                return (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => setInternalScores(prev => ({ ...prev, [m.id]: starVal }))}
+                                    className="transition hover:scale-110"
+                                  >
+                                    <Star 
+                                      className="h-4.5 w-4.5" 
+                                      style={{ 
+                                        fill: starVal <= score ? "var(--color-status-reserved)" : "none", 
+                                        color: starVal <= score ? "var(--color-status-reserved)" : "var(--border)" 
+                                      }} 
+                                    />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {m.valueType === "rating_10" && (
+                            <div className="flex items-center gap-2 mt-1 animate-in fade-in duration-200">
+                              <input 
+                                type="range" 
+                                min="0" 
+                                max="10" 
+                                step="0.5"
+                                value={score} 
+                                onChange={(e) => setInternalScores(prev => ({ ...prev, [m.id]: parseFloat(e.target.value) || 0 }))}
+                                className="w-full h-1 bg-[var(--border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" 
+                              />
+                            </div>
+                          )}
+
+                          {m.valueType === "percentage" && (
+                            <div className="flex items-center gap-2 mt-1 animate-in fade-in duration-200">
+                              <input 
+                                type="range" 
+                                min="0" 
+                                max="100" 
+                                step="1"
+                                value={score} 
+                                onChange={(e) => setInternalScores(prev => ({ ...prev, [m.id]: parseInt(e.target.value) || 0 }))}
+                                className="w-full h-1 bg-[var(--border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" 
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                Evaluator Notes
+                <textarea 
+                  value={notes} 
+                  onChange={(e) => setNotes(e.target.value)} 
+                  placeholder="Summarize setup/teardown details, structural rigidity, or any component malfunctions..."
+                  className="mt-1 h-20 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px]" 
+                  style={{ borderColor: "var(--border)" }} 
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+              <button
+                onClick={() => {
+                  const scoresList = Object.entries(internalScores).map(([metricId, score]) => ({
+                    metricId,
+                    score,
+                  }));
+                  submitInternal({
+                    assignmentId: `assign-${b.code}`,
+                    clientNameVenue: venueName,
+                    eventDate: eventDate ? new Date(eventDate).toISOString() : undefined,
+                    teamSize,
+                    notes,
+                    scores: scoresList,
+                  });
+                }}
+                disabled={submittingInternal}
+                className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                {submittingInternal ? "Submitting..." : "Submit Evaluation"}
+              </button>
+              <button 
+                onClick={() => setShowInternalModal(false)} 
+                className="rounded border px-4 py-2 text-[12px]" 
+                style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Simulate Client Webhook Modal */}
+      {showWebhookModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div 
+            className="w-full max-w-lg rounded-lg border p-5 shadow-xl animate-in fade-in zoom-in duration-200"
+            style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+          >
+            <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: "var(--border)" }}>
+              <h3 className="text-[15px] font-bold flex items-center gap-2">
+                <Sparkles className="h-4 w-4" style={{ color: "var(--accent)" }} /> Google Forms Webhook Simulator
+              </h3>
+              <button onClick={() => setShowWebhookModal(false)} className="text-[12px] font-semibold hover:opacity-80" style={{ color: "var(--text-3)" }}>✕</button>
+            </div>
+
+            <div className="space-y-4 pr-1">
+              <div className="rounded border p-3 bg-[var(--surface-2)] text-[11px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
+                This simulating modal issues a webhook trigger matching the Apps Script signature payload to: 
+                <code className="block mt-1 font-mono text-[10px] bg-[var(--surface)] p-1 rounded" style={{ color: "var(--accent)" }}>
+                  POST /bookings/{b.code}/client-evaluation
+                </code>
+              </div>
+
+              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                Respondent Name
+                <input 
+                  type="text" 
+                  value={respondentName} 
+                  onChange={(e) => setRespondentName(e.target.value)} 
+                  placeholder="e.g. John Doe (Event Organizer)"
+                  className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
+                  style={{ borderColor: "var(--border)" }} 
+                />
+              </label>
+
+              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1 scrollbar-thin">
+                <span className="label-eyebrow text-[9px]">Ingested Client Metrics & Dynamic Scales</span>
+                {clientMetrics.map((m) => {
+                  const score = clientScores[m.key] ?? (m.valueType === "boolean" ? 1 : m.valueType === "rating_5" ? 5 : m.valueType === "percentage" ? 100 : 10);
+                  return (
+                    <div key={m.id} className="space-y-1.5 rounded border p-2.5 bg-[var(--surface-2)] animate-in fade-in duration-200" style={{ borderColor: "var(--border)" }}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[12px] font-semibold">{m.label}</span>
+                        <span className="font-data text-[12px] font-bold" style={{ color: "var(--accent)" }}>
+                          {m.valueType === "boolean" ? (score === 1 ? "Met" : "Not Met")
+                           : m.valueType === "rating_5" ? `${score} / 5`
+                           : m.valueType === "percentage" ? `${score}%`
+                           : `${score} / 10`}
+                        </span>
+                      </div>
+
+                      {m.valueType === "boolean" && (
+                        <div className="flex items-center gap-2 mt-1">
+                          <button
+                            type="button"
+                            onClick={() => setClientScores(prev => ({ ...prev, [m.key]: score === 1 ? 0 : 1 }))}
+                            className="rounded px-3 py-1 text-[10px] font-bold uppercase transition"
+                            style={{
+                              background: score === 1 ? "var(--color-status-done)" : "var(--surface)",
+                              color: score === 1 ? "#fff" : "var(--text-2)"
+                            }}
+                          >
+                            {score === 1 ? "Met" : "Not Met"}
+                          </button>
+                        </div>
+                      )}
+
+                      {m.valueType === "rating_5" && (
+                        <div className="flex items-center gap-1 mt-1">
+                          {Array.from({ length: 5 }).map((StarIdx) => {
+                            const starVal = StarIdx + 1;
+                            return (
+                              <button
+                                key={StarIdx}
+                                type="button"
+                                onClick={() => setClientScores(prev => ({ ...prev, [m.key]: starVal }))}
+                                className="transition hover:scale-110"
+                              >
+                                <Star 
+                                  className="h-4.5 w-4.5" 
+                                  style={{ 
+                                    fill: starVal <= score ? "var(--color-status-reserved)" : "none", 
+                                    color: starVal <= score ? "var(--color-status-reserved)" : "var(--border)" 
+                                  }} 
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {m.valueType === "rating_10" && (
+                        <input 
+                          type="range" 
+                          min="0" 
+                          max="10" 
+                          step="0.5"
+                          value={score} 
+                          onChange={(e) => setClientScores(prev => ({ ...prev, [m.key]: parseFloat(e.target.value) || 0 }))}
+                          className="w-full h-1 bg-[var(--border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" 
+                        />
+                      )}
+
+                      {m.valueType === "percentage" && (
+                        <input 
+                          type="range" 
+                          min="0" 
+                          max="100" 
+                          step="1"
+                          value={score} 
+                          onChange={(e) => setClientScores(prev => ({ ...prev, [m.key]: parseInt(e.target.value) || 0 }))}
+                          className="w-full h-1 bg-[var(--border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" 
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+              <button
+                onClick={() => {
+                  if (!respondentName.trim()) {
+                    toast.error("Please enter a respondent name!");
+                    return;
+                  }
+                  const scoresList = Object.entries(clientScores).map(([metricKey, score]) => ({
+                    metricKey,
+                    score,
+                  }));
+                  simulateWebhook({
+                    respondentName,
+                    scores: scoresList,
+                  });
+                }}
+                disabled={submittingWebhook}
+                className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 flex items-center gap-1.5"
+                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                <Send className="h-3 w-3" />
+                {submittingWebhook ? "Simulating..." : "Trigger Webhook"}
+              </button>
+              <button 
+                onClick={() => setShowWebhookModal(false)} 
+                className="rounded border px-4 py-2 text-[12px]" 
+                style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
