@@ -43,6 +43,7 @@ export interface InventoryReportRecord {
 export interface RevenuePaymentRecord {
   id: string;
   bookingId: string;
+  bookingCode?: string;
   amount: string;
   createdAt: string;
   toStatus: string;
@@ -77,6 +78,7 @@ export interface EvaluationReportScore {
 export interface EvaluationReportRecord {
   id: string;
   bookingId: string;
+  bookingCode?: string;
   clientNameVenue: string;
   eventDate: string;
   teamSize: number;
@@ -109,6 +111,7 @@ export interface CanceledBookingReportRecord {
 
 export interface UpcomingBookingReportRecord {
   id: string;
+  bookingCode?: string;
   status: string;
   eventDate: string;
   eventLocation: string;

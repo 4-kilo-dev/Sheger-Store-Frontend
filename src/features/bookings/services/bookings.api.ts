@@ -143,7 +143,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
   const teamLeader = leadAssignee?.user?.name || "";
 
   return {
-    code: b.id, // Backend uses UUID. Map ID to code
+    code: b.bookingCode || b.id, // Use human-readable bookingCode if available, fallback to id
     client: customerName,
     contactPerson: customerName,
     contactPhone: customerPhone,

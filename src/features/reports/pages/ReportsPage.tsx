@@ -443,11 +443,11 @@ export function ReportsPage() {
                             <td className="px-4 py-2.5 font-mono text-[11px]" style={{ color: "var(--text-2)" }}>{p.id}</td>
                             <td className="px-4 py-2.5 font-bold">
                               <Link 
-                                to={`/bookings/${p.bookingId}` as any} 
+                                to={`/bookings/${p.bookingCode || p.bookingId}` as any} 
                                 className="hover:underline cursor-pointer"
                                 style={{ color: "var(--accent)" }}
                               >
-                                {p.bookingId}
+                                {p.bookingCode || p.bookingId}
                               </Link>
                             </td>
                             <td className="px-4 py-2.5 font-medium">{p.customerName}</td>
@@ -665,7 +665,7 @@ export function ReportsPage() {
                             <span className="font-bold text-[13px] text-foreground">{e.clientNameVenue}</span>
                             <span className="text-[10px] text-zinc-500 font-mono">({new Date(e.eventDate).toLocaleDateString()})</span>
                             <span className="text-[11px] font-bold">
-                              Booking: <Link to={`/bookings/${e.bookingId}` as any} className="text-[var(--accent)] hover:underline cursor-pointer">{e.bookingId}</Link>
+                              Booking: <Link to={`/bookings/${e.bookingCode || e.bookingId}` as any} className="text-[var(--accent)] hover:underline cursor-pointer">{e.bookingCode || e.bookingId}</Link>
                             </span>
                           </div>
                           <p className="text-[11.5px] leading-relaxed text-zinc-300 italic mb-2.5">"{e.notes}"</p>
@@ -779,7 +779,7 @@ export function ReportsPage() {
                       >
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-[12.5px]" style={{ color: "var(--accent)" }}>{u.id}</span>
+                            <span className="font-bold text-[12.5px]" style={{ color: "var(--accent)" }}>{u.bookingCode || u.id}</span>
                             <span 
                               className="rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider"
                               style={{ 
@@ -817,7 +817,7 @@ export function ReportsPage() {
                         {/* Navigation link to details */}
                         <div className="mt-1 flex justify-end">
                           <Link 
-                            to={`/bookings/${u.id}` as any}
+                            to={`/bookings/${u.bookingCode || u.id}` as any}
                             className="text-[11px] font-bold hover:underline cursor-pointer"
                             style={{ color: "var(--accent)" }}
                           >
