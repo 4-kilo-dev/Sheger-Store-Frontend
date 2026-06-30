@@ -175,8 +175,10 @@ export function connectNotificationsStream(handlers: SseHandlers): () => void {
   const connectRealSse = () => {
     try {
       // Direct connection: use VITE_API_URL in production to bypass Vercel serverless function timeouts.
+      // Also strip /api prefix from the path when connecting directly because backend doesn't use it.
       const backendBase = import.meta.env.VITE_API_URL || window.location.origin;
-      const sseUrl = `${backendBase}/api/notifications/stream?token=${encodeURIComponent(token)}`;
+      const ssePath = import.meta.env.VITE_API_URL ? "/notifications/stream" : "/api/notifications/stream";
+      const sseUrl = `${backendBase}${ssePath}?token=${encodeURIComponent(token)}`;
       eventSource = new EventSource(sseUrl);
 
       eventSource.onmessage = (event) => {

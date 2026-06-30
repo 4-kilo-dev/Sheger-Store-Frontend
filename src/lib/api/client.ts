@@ -49,7 +49,14 @@ export const authStorage = {
 };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const url = path.startsWith("http") ? path : `${BASE_URL}${path}`;
+  // Strip the "/api" prefix in production because the NestJS backend controllers are mapped directly (no global /api prefix).
+  // This mirrors the local Vite dev proxy's rewrite behavior.
+  let targetPath = path;
+  if (BASE_URL && targetPath.startsWith("/api")) {
+    targetPath = targetPath.replace(/^\/api/, "");
+  }
+  
+  const url = targetPath.startsWith("http") ? targetPath : `${BASE_URL}${targetPath}`;
   
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
