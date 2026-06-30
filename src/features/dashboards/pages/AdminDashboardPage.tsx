@@ -8,6 +8,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { StatusStepper } from "@/components/status-stepper";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { MOCK_BOOKINGS } from "@/features/bookings/services/bookings.api";
 import { MOCK_INVENTORY } from "@/features/inventory/services/inventory.api";
 
@@ -67,9 +68,11 @@ export function AdminDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link to="/bookings" className="flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: "var(--accent)" }}>
-            All bookings <ArrowRight className="h-4 w-4" />
-          </Link>
+          <Button variant="link" size="default" asChild>
+            <Link to="/bookings">
+              All bookings <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -95,31 +98,19 @@ export function AdminDashboard() {
       {/* Quick Actions */}
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         {[
-          { label: "New booking", icon: Plus, to: "/bookings/new" as const, accent: true },
-          { label: "Check out equipment", icon: Package, to: "/checkout" as const, accent: false },
-          { label: "Report damage", icon: ShieldAlert, to: "/damage-report" as const, accent: false },
-          { label: "View reports", icon: BarChart3, to: "/reports" as const, accent: false },
-        ].map(({ label, icon: Icon, to, accent }) => (
-          <Link
-            key={label}
-            to={to}
-            className="flex items-center gap-3 rounded-lg border p-3.5 text-[12px] font-semibold transition hover:border-[var(--accent)]"
-            style={{
-              borderColor: accent ? "var(--accent)" : "var(--border)",
-              background: accent ? "color-mix(in oklab, var(--accent) 8%, var(--surface))" : "var(--surface)",
-            }}
-          >
-            <div
-              className="flex h-8 w-8 items-center justify-center rounded-md"
-              style={{
-                background: accent ? "var(--accent)" : "var(--surface-2)",
-                color: accent ? "var(--accent-foreground)" : "var(--accent)",
-              }}
-            >
-              <Icon className="h-4 w-4" />
-            </div>
-            {label}
-          </Link>
+          { label: "New booking", icon: Plus, to: "/bookings/new" as const, variant: "default" as const },
+          { label: "Check out equipment", icon: Package, to: "/checkout" as const, variant: "outline" as const },
+          { label: "Report damage", icon: ShieldAlert, to: "/damage-report" as const, variant: "outline" as const },
+          { label: "View reports", icon: BarChart3, to: "/reports" as const, variant: "outline" as const },
+        ].map(({ label, icon: Icon, to, variant }) => (
+          <Button key={label} variant={variant} size="default" asChild className="h-auto p-3.5">
+            <Link to={to} className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md">
+                <Icon className="h-4 w-4" />
+              </div>
+              <span className="text-[12px] font-semibold">{label}</span>
+            </Link>
+          </Button>
         ))}
       </div>
 
@@ -133,9 +124,11 @@ export function AdminDashboard() {
             </div>
             <div className="flex items-center gap-3">
               <StatusBadge status={featured.status} />
-              <Link to="/bookings/$code" params={{ code: featured.code }} className="text-[11px] font-semibold" style={{ color: "var(--accent)" }}>
-                Open booking →
-              </Link>
+              <Button variant="link" size="default" asChild>
+                <Link to="/bookings/$code" params={{ code: featured.code }}>
+                  Open booking →
+                </Link>
+              </Button>
             </div>
           </div>
           <StatusStepper current={featured.status} />
@@ -171,9 +164,11 @@ export function AdminDashboard() {
               ))}
             </div>
           </div>
-          <Link to="/inventory" className="mt-4 flex items-center justify-center gap-1.5 rounded-md border py-2 text-[11px] font-semibold transition hover:border-[var(--accent)]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
-            View inventory <ArrowRight className="h-3 w-3" />
-          </Link>
+          <Button variant="outline" size="default" asChild className="mt-4">
+            <Link to="/inventory">
+              View inventory <ArrowRight className="h-3 w-3" />
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -184,7 +179,9 @@ export function AdminDashboard() {
             <CalendarRange className="h-3.5 w-3.5" style={{ color: "var(--accent)" }} />
             <span className="label-eyebrow">Recent bookings</span>
           </div>
-          <Link to="/bookings" className="text-[11px] font-semibold" style={{ color: "var(--accent)" }}>All bookings →</Link>
+          <Button variant="link" size="default" asChild>
+            <Link to="/bookings">All bookings →</Link>
+          </Button>
         </div>
         <div className="overflow-x-auto scrollbar-thin">
           <table className="w-full text-[12px]">
@@ -199,7 +196,11 @@ export function AdminDashboard() {
               {recentBookings.map((b, i) => (
                 <tr key={b.code} className="transition hover:bg-[var(--surface-2)]" style={{ background: i % 2 === 0 ? "var(--surface)" : "transparent" }}>
                   <td className="border-b px-4 py-2.5 font-bold" style={{ borderColor: "var(--border)" }}>
-                    <Link to="/bookings/$code" params={{ code: b.code }} style={{ color: "var(--accent)" }} className="hover:underline">{b.code}</Link>
+                    <Button variant="link" size="default" asChild>
+                      <Link to="/bookings/$code" params={{ code: b.code }}>
+                        {b.code}
+                      </Link>
+                    </Button>
                   </td>
                   <td className="border-b px-4 py-2.5 font-medium" style={{ borderColor: "var(--border)" }}>{b.client}</td>
                   <td className="border-b px-4 py-2.5" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.venue}</td>
@@ -226,25 +227,23 @@ export function AdminDashboard() {
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {onsiteBookings.map((b) => (
-              <Link
-                key={b.code}
-                to="/bookings/$code"
-                params={{ code: b.code }}
-                className="rounded-md border p-3 transition hover:border-[var(--accent)]"
-                style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-data text-[12px] font-bold" style={{ color: "var(--accent)" }}>{b.code}</span>
-                  <StatusBadge status={b.status} />
-                </div>
-                <div className="mt-2 text-[13px] font-semibold">{b.client}</div>
-                <div className="mt-1 flex items-center gap-1.5 text-[11px]" style={{ color: "var(--text-2)" }}>
-                  <MapPin className="h-3 w-3" /> {b.venue}
-                </div>
-                <div className="mt-2 flex items-center gap-1.5 text-[10px]" style={{ color: "var(--text-3)" }}>
-                  <Users className="h-3 w-3" /> {b.assignees.join(" · ")}
-                </div>
-              </Link>
+              <Button key={b.code} variant="outline" size="default" asChild className="h-auto text-left p-3">
+                <Link to="/bookings/$code" params={{ code: b.code }}>
+                  <div className="w-full">
+                    <div className="flex items-center justify-between">
+                      <span className="font-data text-[12px] font-bold" style={{ color: "var(--accent)" }}>{b.code}</span>
+                      <StatusBadge status={b.status} />
+                    </div>
+                    <div className="mt-2 text-[13px] font-semibold">{b.client}</div>
+                    <div className="mt-1 flex items-center gap-1.5 text-[11px]" style={{ color: "var(--text-2)" }}>
+                      <MapPin className="h-3 w-3" /> {b.venue}
+                    </div>
+                    <div className="mt-2 flex items-center gap-1.5 text-[10px]" style={{ color: "var(--text-3)" }}>
+                      <Users className="h-3 w-3" /> {b.assignees.join(" · ")}
+                    </div>
+                  </div>
+                </Link>
+              </Button>
             ))}
           </div>
         </div>

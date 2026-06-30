@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Plus, Filter, ArrowUpDown, MoreVertical, Calendar } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -25,9 +25,17 @@ const ALL_PAYMENTS: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
 const ALL_ASSIGNEES = [...new Set(MOCK_BOOKINGS.flatMap((b) => b.assignees))].sort();
 
 export function BookingsIndex() {
+  const navigate = useNavigate();
+  const searchParams = useRouterState({ select: (s) => s.location.search }) as any;
+  const query = searchParams.q || "";
+  const setQuery = (val: string) => {
+    navigate({
+      search: (prev: any) => ({ ...prev, q: val || undefined }),
+      replace: true,
+    });
+  };
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [query, setQuery] = useState("");
 
   // Query bookings from backend
   const { data: bookingsList = MOCK_BOOKINGS } = useQuery({

@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { RadioTower, Truck, Utensils, PackageCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
 import { MOCK_BOOKINGS } from "@/features/bookings/services/bookings.api";
 
 const _Route = createFileRoute("/dashboards/oo")({
@@ -50,13 +51,11 @@ export function OoDashboard() {
             Dispatch teams and vehicles, manage onsite operations, and approve meal budgets.
           </p>
         </div>
-        <Link
-          to="/dashboards"
-          className="rounded-md border px-3 py-1.5 text-[12px] font-semibold transition hover:bg-[var(--surface-2)]"
-          style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
-        >
-          All dashboards
-        </Link>
+        <Button variant="outline" size="default" asChild>
+          <Link to="/dashboards">
+            All dashboards
+          </Link>
+        </Button>
       </div>
 
       <div className="space-y-4">
@@ -87,9 +86,11 @@ export function OoDashboard() {
                     Team: {b.stageHand} · Driver: {b.driver} · Meal: ETB {b.mealBudget.toLocaleString()}
                   </div>
                 </div>
-                <Link to="/bookings/$code" params={{ code: b.code }} className="rounded-md px-3 py-1 text-[10px] font-bold" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
-                  Dispatch team
-                </Link>
+                <Button variant="default" size="sm" asChild className="h-auto py-1 text-[10px]">
+                  <Link to="/bookings/$code" params={{ code: b.code }}>
+                    Dispatch team
+                  </Link>
+                </Button>
               </div>
             ))}
           </QueueSection>
@@ -101,9 +102,11 @@ export function OoDashboard() {
                   <span className="font-data font-bold" style={{ color: "var(--accent)" }}>{b.code}</span>
                   <span style={{ color: "var(--text-2)" }}>{b.bomItems.length} items in BOM</span>
                 </div>
-                <Link to="/checkout" className="rounded-md border px-3 py-1 text-[10px] font-semibold" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>
-                  Check out
-                </Link>
+                <Button variant="outline" size="sm" asChild className="h-auto py-1 text-[10px]">
+                  <Link to="/checkout">
+                    Check out
+                  </Link>
+                </Button>
               </div>
             ))}
           </QueueSection>

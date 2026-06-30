@@ -124,7 +124,17 @@ export function NewBooking() {
                   <input value={form.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} placeholder="Full name" className={inputCls} />
                 </Field>
                 <Field label="Phone" icon={Phone}>
-                  <input value={form.contactPhone} onChange={(e) => set("contactPhone", e.target.value)} placeholder="+251 9.. ... ...." className={inputCls} />
+                  <input 
+                    value={form.contactPhone} 
+                    onChange={(e) => set("contactPhone", e.target.value)} 
+                    placeholder="+251 9.. ... ...." 
+                    className={`${inputCls} ${/[a-zA-Z]/.test(form.contactPhone) ? "border-destructive focus:border-destructive" : ""}`} 
+                  />
+                  {/[a-zA-Z]/.test(form.contactPhone) && (
+                    <p className="text-[11px] mt-1" style={{ color: "var(--destructive)" }}>
+                      Phone number cannot contain letters
+                    </p>
+                  )}
                 </Field>
               </div>
             </Group>
@@ -340,8 +350,9 @@ export function NewBooking() {
             </button>
             {step < STEPS.length - 1 ? (
               <button
+                disabled={step === 0 && /[a-zA-Z]/.test(form.contactPhone)}
                 onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
-                className="rounded-md px-4 py-2 text-[12px] font-semibold"
+                className="rounded-md px-4 py-2 text-[12px] font-semibold disabled:opacity-40"
                 style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
               >
                 Continue →
