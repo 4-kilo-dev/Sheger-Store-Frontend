@@ -21,12 +21,24 @@ const NAV = [
 ] as const;
 
 const ROLE_SUBLINKS = [
-  { to: "/dashboards/ccr", label: "Client Relations (CCR)" },
-  { to: "/dashboards/cto", label: "Chief Technician (CTO)" },
-  { to: "/dashboards/to", label: "Technician (TO)" },
-  { to: "/dashboards/oo", label: "Operations (OO)" },
-  { to: "/dashboards/sk", label: "Storekeeper (SK)" },
+  { to: "/?role=ccr", label: "Client Relations (CCR)" },
+  { to: "/?role=chief_tech", label: "Chief Technician (CTO)" },
+  { to: "/?role=technician", label: "Technician (TO)" },
+  { to: "/?role=oo", label: "Operations (OO)" },
+  { to: "/?role=storekeeper", label: "Storekeeper (SK)" },
 ] as const;
+
+const mapProfileToRoleKey = (profileRole: string): string => {
+  switch (profileRole) {
+    case "CTO": return "chief_tech";
+    case "TO": return "technician";
+    case "OO": return "oo";
+    case "SK": return "storekeeper";
+    case "SH": return "stagehand";
+    case "FL": return "freelancer";
+    default: return profileRole.toLowerCase();
+  }
+};
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   Admin: ["/", "/bookings", "/inventory", "/checkout", "/damage-report", "/staff", "/reports", "/settings"],
@@ -101,7 +113,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     setTheme(document.documentElement.classList.contains("light") ? "light" : "dark");
   }, []);
 
-  const path = useRouterState({ select: (s) => s.location.pathname });
+  const location = useRouterState({ select: (s) => s.location });
+  const path = location.pathname;
+  const searchRole = (location.search as any)?.role;
 
   return (
     <div className="flex min-h-screen" style={{ background: "var(--background)" }}>
@@ -114,7 +128,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-2 scrollbar-thin">
           {/* Dashboard (Home) */}
           {(() => {
-            const active = path === "/";
+            const active = path === "/" && !searchRole;
             return (
               <Link
                 to="/"
@@ -137,7 +151,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {activeProfile.role === "Admin" ? (
             <div className="space-y-0.5">
               <Link
-                to="/dashboards"
+                to="/"
                 onClick={() => {
                   if (!collapsed) {
                     setRolesOpen(!rolesOpen);
@@ -145,15 +159,15 @@ export function AppShell({ children }: { children: ReactNode }) {
                 }}
                 className="group relative flex items-center justify-between rounded-md px-3 py-2 text-[13px] font-medium transition"
                 style={{
-                  background: path === "/dashboards" ? "var(--surface-2)" : "transparent",
-                  color: path.startsWith("/dashboards") ? "var(--foreground)" : "var(--text-2)",
+                  background: path === "/" && searchRole ? "var(--surface-2)" : "transparent",
+                  color: path === "/" && searchRole ? "var(--foreground)" : "var(--text-2)",
                 }}
               >
                 <div className="flex items-center gap-3">
-                  {path.startsWith("/dashboards") && (
+                  {path === "/" && searchRole && (
                     <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r" style={{ background: "var(--accent)" }} />
                   )}
-                  <LayoutDashboard className="h-4 w-4 shrink-0" style={{ color: path.startsWith("/dashboards") ? "var(--accent)" : "currentColor" }} />
+                  <LayoutDashboard className="h-4 w-4 shrink-0" style={{ color: path === "/" && searchRole ? "var(--accent)" : "currentColor" }} />
                   {!collapsed && <span>Role Workspaces</span>}
                 </div>
                 {!collapsed && (
@@ -164,11 +178,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               {rolesOpen && !collapsed && (
                 <div className="pl-6 space-y-0.5 border-l ml-5" style={{ borderColor: "var(--border)" }}>
                   {ROLE_SUBLINKS.map(({ to, label }) => {
-                    const active = path === to;
+                    const active = path === "/" && `/?role=${searchRole}` === to;
                     return (
                       <Link
                         key={to}
-                        to={to}
+                        to={to as any}
                         className="group relative flex items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-medium transition"
                         style={{
                           background: active ? "var(--surface-2)" : "transparent",
@@ -187,10 +201,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           ) : (
             (() => {
-              const myRoleKey = activeProfile.role.toLowerCase();
+              const myRoleKey = mapProfileToRoleKey(activeProfile.role);
               const myRoleLabel = activeProfile.role === "CTO" ? "Chief Tech Workspace" : `${activeProfile.role} Workspace`;
-              const myPath = `/dashboards/${myRoleKey}` as any;
-              const active = path === myPath;
+              const myPath = `/?role=${myRoleKey}` as any;
+              const active = path === "/" && searchRole === myRoleKey;
               return (
                 <Link
                   to={myPath}
