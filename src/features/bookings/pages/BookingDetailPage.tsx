@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ import {
   type BookingStatus 
 } from "@/features/bookings/services/bookings.api";
 import { useActiveProfile } from "@/hooks/use-active-profile";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import {
   listPerformanceMetricsApi,
   getInternalEvaluationApi,
@@ -68,15 +69,55 @@ const _Route = createFileRoute("/bookings/$code")({
 
 const TABS = ["Overview", "Schedule", "Team", "Equipment", "Payments", "Files", "Activity", "Evaluations"] as const;
 
-/* SOP-specific action config per status */
-const STATUS_ACTIONS: Record<string, { label: string; icon: any; nextStatus: string; role: string; color?: string }> = {
-  RESERVED: { label: "Confirm & Record Payment", icon: DollarSign, nextStatus: "CONFIRMED", role: "CCR" },
-  CONFIRMED: { label: "Assign Technician", icon: UserCheck, nextStatus: "ASSIGNED", role: "CTO" },
-  ASSIGNED: { label: "Accept Task", icon: CheckCircle2, nextStatus: "ACCEPTED", role: "Technician" },
-  ACCEPTED: { label: "Submit BOM & Mark Preparation", icon: Package, nextStatus: "PREPARATION", role: "Technician" },
-  PREPARATION: { label: "Dispatch to Site", icon: Truck, nextStatus: "ONSITE", role: "Operation Officer" },
-  ONSITE: { label: "Mark Completed", icon: CheckCircle2, nextStatus: "COMPLETED", role: "TO / OO", color: "var(--color-bom-returned)" },
-  COMPLETED: { label: "Check-In Materials & Close", icon: PackageCheck, nextStatus: "DONE", role: "Storekeeper", color: "var(--color-status-done)" },
+interface BookingAction {
+  id: string;
+  label: string;
+  icon: any;
+  targetStatus: BookingStatus;
+  allowedRoles: string[];
+  variant: "primary" | "outline" | "destructive";
+  requiresReason?: boolean;
+  requiresForm?: string;
+  color?: string;
+}
+
+const BOOKING_ACTIONS: Record<BookingStatus, BookingAction[]> = {
+  RESERVED: [
+    { id: "booking.confirm", label: "Confirm Booking", icon: DollarSign, targetStatus: "CONFIRMED", allowedRoles: ["admin", "supervisor", "ccr", "chief_tech"], variant: "primary", requiresForm: "payment" },
+    { id: "booking.cancel", label: "Cancel Booking", icon: X, targetStatus: "CANCELED", allowedRoles: ["admin", "supervisor", "ccr", "chief_tech", "oo"], variant: "destructive" },
+  ],
+  CONFIRMED: [
+    { id: "assignment.assign_technician", label: "Assign Technician", icon: UserCheck, targetStatus: "ASSIGNED", allowedRoles: ["admin", "supervisor", "chief_tech"], variant: "primary", requiresForm: "assign" },
+    { id: "booking.cancel", label: "Cancel Booking", icon: X, targetStatus: "CANCELED", allowedRoles: ["admin", "supervisor", "ccr", "chief_tech", "oo"], variant: "destructive" },
+  ],
+  ASSIGNED: [
+    { id: "assignment.accept", label: "Accept Assignment", icon: CheckCircle2, targetStatus: "ACCEPTED", allowedRoles: ["admin", "supervisor", "technician"], variant: "primary" },
+    { id: "assignment.decline", label: "Decline", icon: X, targetStatus: "CONFIRMED", allowedRoles: ["admin", "supervisor", "technician"], variant: "outline", requiresReason: true },
+    { id: "booking.cancel", label: "Cancel Booking", icon: X, targetStatus: "CANCELED", allowedRoles: ["admin", "supervisor", "ccr", "chief_tech", "oo"], variant: "destructive" },
+  ],
+  ACCEPTED: [
+    { id: "bom.create", label: "Prepare Checklist (BOM)", icon: Package, targetStatus: "PREPARATION", allowedRoles: ["admin", "supervisor", "chief_tech"], variant: "primary" },
+    { id: "booking.cancel", label: "Cancel Booking", icon: X, targetStatus: "CANCELED", allowedRoles: ["admin", "supervisor", "ccr", "chief_tech", "oo"], variant: "destructive" },
+  ],
+  PREPARATION: [
+    { id: "inventory.checkout", label: "Check-out Gear", icon: Truck, targetStatus: "ONSITE", allowedRoles: ["admin", "supervisor", "storekeeper", "oo"], variant: "primary", requiresForm: "dispatch" },
+    { id: "booking.cancel_override", label: "Force Cancel", icon: AlertTriangle, targetStatus: "CANCELED", allowedRoles: ["admin", "supervisor"], variant: "destructive", requiresReason: true },
+  ],
+  ONSITE: [
+    { id: "eval.submit_internal", label: "Submit Event Evaluation", icon: CheckCircle2, targetStatus: "COMPLETED", allowedRoles: ["admin", "supervisor", "chief_tech", "technician", "oo"], variant: "primary" },
+    { id: "inventory.checkin", label: "Check-in Gear", icon: PackageCheck, targetStatus: "DONE", allowedRoles: ["admin", "supervisor", "storekeeper", "oo"], variant: "outline" },
+    { id: "booking.cancel_override", label: "Force Cancel", icon: AlertTriangle, targetStatus: "CANCELED", allowedRoles: ["admin", "supervisor"], variant: "destructive", requiresReason: true },
+  ],
+  COMPLETED: [
+    { id: "inventory.checkin", label: "Check-in Remaining Gear", icon: PackageCheck, targetStatus: "DONE", allowedRoles: ["admin", "supervisor", "storekeeper", "oo"], variant: "primary" },
+    { id: "booking.cancel_override", label: "Force Cancel", icon: AlertTriangle, targetStatus: "CANCELED", allowedRoles: ["admin", "supervisor"], variant: "destructive", requiresReason: true },
+  ],
+  PARTIALLY_RETURNED: [
+    { id: "inventory.checkin", label: "Check-in Remaining Gear", icon: PackageCheck, targetStatus: "DONE", allowedRoles: ["admin", "supervisor", "storekeeper", "oo"], variant: "primary" },
+    { id: "inventory.checkout", label: "Check-out Equipment", icon: Truck, targetStatus: "ONSITE", allowedRoles: ["admin", "supervisor", "storekeeper", "oo"], variant: "outline" },
+  ],
+  DONE: [],
+  CANCELED: [],
 };
 
 export function BookingDetail() {
@@ -84,11 +125,25 @@ export function BookingDetail() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [showActionModal, setShowActionModal] = useState(false);
+  const [selectedAction, setSelectedAction] = useState<BookingAction | null>(null);
+  const [cancellationReason, setCancellationReason] = useState("");
+  
+  const [paymentType, setPaymentType] = useState<"advance" | "fully_paid">("advance");
+  const [paymentMethod, setPaymentMethod] = useState("Bank Transfer");
+  const [amountReceived, setAmountReceived] = useState(0);
+
+  const authUser = useAuthUser();
 
   const { data: booking, isLoading, error } = useQuery({
     queryKey: ["booking", code],
     queryFn: () => getBookingDetailApi(code),
   });
+
+  useEffect(() => {
+    if (booking && amountReceived === 0) {
+      setAmountReceived(booking.amount);
+    }
+  }, [booking]);
 
   const { mutate: transitionStatus, isPending: isTransitioning } = useMutation({
     mutationFn: ({ toStatus, reason }: { toStatus: BookingStatus; reason?: string }) => 
@@ -98,6 +153,7 @@ export function BookingDetail() {
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       setShowActionModal(false);
+      setSelectedAction(null);
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to advance booking state");
@@ -112,11 +168,49 @@ export function BookingDetail() {
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       setShowActionModal(false);
+      setSelectedAction(null);
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to record payment");
     }
   });
+
+  const { mutate: confirmBookingWithPayment, isPending: isConfirmingWithPayment } = useMutation({
+    mutationFn: async ({ toPaymentStatus, amount }: { toPaymentStatus: string; amount: number }) => {
+      await recordBookingPaymentApi(code, toPaymentStatus, amount);
+      await transitionBookingStatusApi(code, "CONFIRMED");
+    },
+    onSuccess: () => {
+      toast.success("Booking confirmed and payment recorded successfully!");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      setShowActionModal(false);
+      setSelectedAction(null);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to confirm booking");
+    }
+  });
+
+  const userRole = authUser?.role?.toLowerCase() || "";
+  const isUserDriver = authUser?.id && booking?.driverUserId && authUser.id === booking.driverUserId;
+
+  const actions = useState(() => [] as BookingAction[])[0]; // initialize empty, will compute below
+  const computedActions = (() => {
+    if (!booking || !userRole) return [];
+    const list = BOOKING_ACTIONS[booking.status] || [];
+    return list.filter((act) => {
+      const isRoleAllowed = act.allowedRoles.includes(userRole);
+      if (!isRoleAllowed) return false;
+
+      // Special case: Accept/Decline is driver-restricted
+      if (booking.status === "ASSIGNED" && (act.id === "assignment.accept" || act.id === "assignment.decline")) {
+        const isSupervisorOrAdmin = ["admin", "supervisor"].includes(userRole);
+        return isUserDriver || isSupervisorOrAdmin;
+      }
+      return true;
+    });
+  })();
 
   if (isLoading) {
     return (
@@ -140,8 +234,6 @@ export function BookingDetail() {
     );
   }
 
-  const action = STATUS_ACTIONS[booking.status];
-
   return (
     <AppShell>
       {/* Top action row */}
@@ -161,16 +253,25 @@ export function BookingDetail() {
               {label}
             </button>
           ))}
-          {action && (
+          {computedActions.map((act) => (
             <button
-              onClick={() => setShowActionModal(true)}
+              key={act.id}
+              onClick={() => {
+                setSelectedAction(act);
+                setShowActionModal(true);
+                setCancellationReason(""); // reset reason
+              }}
               className="flex h-8 items-center gap-1.5 rounded-md px-3 text-[12px] font-semibold transition hover:brightness-110"
-              style={{ background: action.color || "var(--accent)", color: action.color ? "#fff" : "var(--accent-foreground)" }}
+              style={{
+                background: act.variant === "destructive" ? "var(--destructive)" : act.variant === "outline" ? "transparent" : "var(--accent)",
+                color: act.variant === "outline" ? "var(--text-1)" : "var(--accent-foreground)",
+                border: act.variant === "outline" ? "1px solid var(--border)" : "none"
+              }}
             >
-              <action.icon className="h-3.5 w-3.5" />
-              {action.label}
+              <act.icon className="h-3.5 w-3.5" />
+              {act.label}
             </button>
-          )}
+          ))}
           <button className="flex h-8 w-8 items-center justify-center rounded-md border" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
             <MoreHorizontal className="h-4 w-4" />
           </button>
@@ -178,37 +279,62 @@ export function BookingDetail() {
       </div>
 
       {/* SOP Action Modal */}
-      {showActionModal && action && (
-        <div className="mb-4 rounded-lg border-2 p-5" style={{ borderColor: action.color || "var(--accent)", background: `color-mix(in oklab, ${action.color || "var(--accent)"} 6%, var(--surface))` }}>
+      {showActionModal && selectedAction && (
+        <div className="mb-4 rounded-lg border-2 p-5" style={{ borderColor: selectedAction.variant === "destructive" ? "var(--destructive)" : "var(--accent)", background: `color-mix(in oklab, ${selectedAction.variant === "destructive" ? "var(--destructive)" : "var(--accent)"} 6%, var(--surface))` }}>
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: action.color || "var(--accent)", color: action.color ? "#fff" : "var(--accent-foreground)" }}>
-                <action.icon className="h-5 w-5" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: selectedAction.variant === "destructive" ? "var(--destructive)" : "var(--accent)", color: "#fff" }}>
+                <selectedAction.icon className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-[14px] font-bold">{action.label}</h3>
+                <h3 className="text-[14px] font-bold">{selectedAction.label}</h3>
                 <p className="mt-1 text-[11px]" style={{ color: "var(--text-2)" }}>
-                  This will advance the booking from <strong>{booking.status}</strong> to <strong>{action.nextStatus}</strong>.
+                  This will transition the booking from <strong>{booking.status}</strong> to <strong>{selectedAction.targetStatus}</strong>.
                   <br />
-                  Responsible role: <strong>{action.role}</strong>
+                  Permission required: <strong>{selectedAction.id}</strong>
                 </p>
 
-                {booking.status === "RESERVED" && (
-                  <div className="mt-3 grid grid-cols-2 gap-3">
+                {booking.status === "RESERVED" && selectedAction.id === "booking.confirm" && booking.payment === "UNPAID" && (
+                  <div className="mt-3 grid grid-cols-3 gap-3">
+                    <label className="text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+                      Payment Type
+                      <select
+                        value={paymentType}
+                        onChange={(e) => setPaymentType(e.target.value as "advance" | "fully_paid")}
+                        className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 text-[12px]"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <option value="advance">Advance Deposit</option>
+                        <option value="fully_paid">Fully Paid</option>
+                      </select>
+                    </label>
                     <label className="text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
                       Payment Method
-                      <select className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 text-[12px]" style={{ borderColor: "var(--border)" }}>
-                        <option>Bank Transfer</option><option>Cash</option><option>Mobile Money</option>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 text-[12px]"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <option>Bank Transfer</option>
+                        <option>Cash</option>
+                        <option>Mobile Money</option>
                       </select>
                     </label>
                     <label className="text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
                       Amount Received
-                      <input type="number" defaultValue={booking.amount} className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px]" style={{ borderColor: "var(--border)" }} />
+                      <input
+                        type="number"
+                        value={amountReceived}
+                        onChange={(e) => setAmountReceived(parseFloat(e.target.value) || 0)}
+                        className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px]"
+                        style={{ borderColor: "var(--border)" }}
+                      />
                     </label>
                   </div>
                 )}
 
-                {booking.status === "CONFIRMED" && (
+                {booking.status === "CONFIRMED" && selectedAction.id === "assignment.assign_technician" && (
                   <div className="mt-3 grid grid-cols-2 gap-3">
                     <label className="text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
                       Assign Chief Technician
@@ -225,7 +351,7 @@ export function BookingDetail() {
                   </div>
                 )}
 
-                {booking.status === "PREPARATION" && (
+                {booking.status === "PREPARATION" && selectedAction.id === "inventory.checkout" && (
                   <div className="mt-3 grid grid-cols-3 gap-3">
                     <label className="text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
                       Team Leader
@@ -241,26 +367,41 @@ export function BookingDetail() {
                     </label>
                   </div>
                 )}
+
+                {selectedAction.requiresReason && (
+                  <div className="mt-3">
+                    <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                      Reason for action / override (minimum 10 characters)
+                      <textarea
+                        value={cancellationReason}
+                        onChange={(e) => setCancellationReason(e.target.value)}
+                        placeholder="Please write the operational reason..."
+                        className="mt-1 w-full rounded-md border bg-[var(--surface-2)] p-2 text-[12px] h-20 block resize-none"
+                        style={{ borderColor: "var(--border)" }}
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
-            <button onClick={() => setShowActionModal(false)} className="text-[12px] font-semibold" style={{ color: "var(--text-3)" }}>✕</button>
+            <button onClick={() => { setShowActionModal(false); setSelectedAction(null); }} className="text-[12px] font-semibold" style={{ color: "var(--text-3)" }}>✕</button>
           </div>
-           <div className="mt-4 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+          <div className="mt-4 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
             <button
               onClick={() => {
-                if (booking.status === "RESERVED") {
-                  recordPayment({ toStatus: "advance", amount: booking.amount });
+                if (selectedAction.id === "booking.confirm" && booking.payment === "UNPAID") {
+                  confirmBookingWithPayment({ toPaymentStatus: paymentType, amount: amountReceived });
                 } else {
-                  transitionStatus({ toStatus: action.nextStatus as BookingStatus });
+                  transitionStatus({ toStatus: selectedAction.targetStatus, reason: cancellationReason || undefined });
                 }
               }}
-              disabled={isTransitioning || isRecordingPayment}
+              disabled={isTransitioning || isRecordingPayment || isConfirmingWithPayment || (selectedAction.requiresReason && cancellationReason.trim().length < 10)}
               className="rounded-md px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
-              style={{ background: action.color || "var(--accent)", color: action.color ? "#fff" : "var(--accent-foreground)" }}
+              style={{ background: selectedAction.variant === "destructive" ? "var(--destructive)" : "var(--accent)", color: selectedAction.variant === "destructive" ? "#fff" : "var(--accent-foreground)" }}
             >
-              {isTransitioning || isRecordingPayment ? "Processing..." : `Confirm: ${action.label}`}
+              {isTransitioning || isRecordingPayment || isConfirmingWithPayment ? "Processing..." : `Confirm: ${selectedAction.label}`}
             </button>
-            <button onClick={() => setShowActionModal(false)} className="rounded-md border px-4 py-2 text-[12px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
+            <button onClick={() => { setShowActionModal(false); setSelectedAction(null); }} className="rounded-md border px-4 py-2 text-[12px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
               Cancel
             </button>
           </div>

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 
 export interface Profile {
   name: string;
-  role: "Admin" | "CCR" | "CTO" | "TO" | "OO" | "SK";
+  role: "Admin" | "CCR" | "CTO" | "TO" | "OO" | "SK" | "SH" | "FL";
   initials: string;
   color: string;
 }

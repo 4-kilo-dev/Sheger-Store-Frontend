@@ -48,6 +48,8 @@
   --color-status-onsite:      #8B8B97;
   --color-status-completed:   #0091B2;
   --color-status-done:        #30A46C;
+  --color-status-canceled:    #E54666;
+  --color-status-partially-returned: #E8A030;
 
   /* Payment */
   --color-pay-paid:    #6E56CF;

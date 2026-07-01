@@ -21,13 +21,15 @@ export async function loginApi(payload: any): Promise<LoginResponse> {
 
   if (typeof window !== "undefined") {
     const backendRole = data.user.role?.toLowerCase() || "";
-    let matchedRole: "Admin" | "CCR" | "CTO" | "TO" | "OO" | "SK" = "Admin";
+    let matchedRole: "Admin" | "CCR" | "CTO" | "TO" | "OO" | "SK" | "SH" | "FL" = "Admin";
     if (backendRole === "admin" || backendRole === "supervisor") matchedRole = "Admin";
     else if (backendRole === "ccr") matchedRole = "CCR";
     else if (backendRole === "chief_tech") matchedRole = "CTO";
     else if (backendRole === "technician") matchedRole = "TO";
-    else if (backendRole === "ops_officer") matchedRole = "OO";
+    else if (backendRole === "oo" || backendRole === "ops_officer") matchedRole = "OO";
     else if (backendRole === "storekeeper") matchedRole = "SK";
+    else if (backendRole === "stagehand") matchedRole = "SH";
+    else if (backendRole === "freelancer") matchedRole = "FL";
 
     const initials = data.user.name
       .split(" ")
