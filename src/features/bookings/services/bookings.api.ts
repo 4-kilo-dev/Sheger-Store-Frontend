@@ -1,6 +1,7 @@
 export type BookingStatus =
   | "RESERVED" | "CONFIRMED" | "ASSIGNED" | "ACCEPTED"
-  | "PREPARATION" | "ONSITE" | "COMPLETED" | "DONE";
+  | "PREPARATION" | "ONSITE" | "COMPLETED" | "DONE"
+  | "CANCELED" | "PARTIALLY_RETURNED";
 
 export type PaymentStatus = "PAID" | "ADVANCE" | "UNPAID";
 
@@ -34,6 +35,7 @@ export interface Booking {
   bomItems: BomItem[];
   teamLeader: string;
   driver: string;
+  driverUserId?: string;
   mealBudget: number;
   createdAt: string;
 }
@@ -112,7 +114,8 @@ export const MOCK_BOOKINGS: Booking[] = Array.from({ length: 28 }).map((_, i) =>
 export const STATUS_LABELS: Record<BookingStatus, string> = {
   RESERVED: "Reserved", CONFIRMED: "Confirmed", ASSIGNED: "Assigned",
   ACCEPTED: "Accepted", PREPARATION: "Preparation", ONSITE: "Onsite",
-  COMPLETED: "Completed", DONE: "Done",
+  COMPLETED: "Completed", DONE: "Done", CANCELED: "Canceled",
+  PARTIALLY_RETURNED: "Partially Returned",
 };
 
 export const STATUS_ORDER: BookingStatus[] = [
@@ -138,9 +141,26 @@ function mapBackendBookingToFrontend(b: any): Booking {
   // Extract assignees
   const assignees = (b.assignments || []).map((a: any) => a.user?.name).filter(Boolean);
   
-  // Extract team lead & driver
+  // Extract team lead, driver, stagehands dynamically
   const leadAssignee = (b.assignments || []).find((a: any) => a.isTeamLead);
   const teamLeader = leadAssignee?.user?.name || "";
+
+  const crewNames = (b.assignments || [])
+    .filter((a: any) => a.roleContext === "CREW")
+    .map((a: any) => a.user?.name)
+    .filter(Boolean);
+  const stageHand = crewNames.length > 0 ? `TEAM · ${crewNames.join(", ")}` : "None Assigned";
+
+  const driver = b.driver?.name || (b.assignments || []).find((a: any) => a.roleContext === "OO")?.user?.name || "None Assigned";
+  const mealBudget = parseFloat(b.mealProvision) || 0;
+
+  let payment: PaymentStatus = "UNPAID";
+  const rawPayment = b.paymentStatus?.toLowerCase();
+  if (rawPayment === "fully_paid" || rawPayment === "paid") {
+    payment = "PAID";
+  } else if (rawPayment === "advance") {
+    payment = "ADVANCE";
+  }
 
   return {
     code: b.bookingCode || b.id, // Use human-readable bookingCode if available, fallback to id
@@ -155,15 +175,16 @@ function mapBackendBookingToFrontend(b: any): Booking {
     size: b.rentedDays || 24,
     arrangement: b.itemServiceSpec || "Standard layout",
     assignees: assignees.length > 0 ? assignees : ["Bereket", "Nathan"],
-    stageHand: "TEAM 1 · Abel",
+    stageHand,
     status: (b.status || "RESERVED") as BookingStatus,
-    payment: (b.paymentStatus || "UNPAID") as PaymentStatus,
-    amount: parseFloat(b.amount || "0") || 75000,
+    payment,
+    amount: parseFloat(b.paymentAmount || b.amount || "0"),
     ctoNotes: b.notes || "",
     bomItems: bomItems,
     teamLeader: teamLeader || "Bereket",
-    driver: "Abebe G.",
-    mealBudget: 2000,
+    driver,
+    driverUserId: b.driverUserId || "",
+    mealBudget,
     createdAt: b.createdAt ? b.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
   };
 }
