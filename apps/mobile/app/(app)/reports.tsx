@@ -1,11 +1,11 @@
 import {
+  AlertTriangle,
   Banknote,
   BarChart3,
   CalendarCheck,
   Download,
   Gauge,
   PieChart,
-  TrendingUp,
   Users,
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
@@ -24,10 +24,38 @@ import { colors } from "@/theme/tokens";
 import { STATUS_LABELS, STATUS_ORDER } from "@/types/domain";
 import { formatCompactCurrency, formatCurrency, pct } from "@/utils/format";
 
-const PERIODS = ["month", "quarter", "year"] as const;
+const TABS = [
+  "Revenue & Bookings",
+  "Inventory Health",
+  "Client Directory",
+  "Quality & Crew",
+  "Audit Logs",
+] as const;
 
 export default function ReportsScreen() {
-  const [period, setPeriod] = useState<(typeof PERIODS)[number]>("month");
+  const [tab, setTab] = useState<(typeof TABS)[number]>("Revenue & Bookings");
+
+  return (
+    <Screen>
+      <View>
+        <AppText variant="eyebrow">Business Intelligence</AppText>
+        <AppText variant="title">Operations Reports</AppText>
+        <AppText variant="subtitle">
+          A consolidated view of booking volume, collections, stock use, and crew output.
+        </AppText>
+      </View>
+      <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
+
+      {tab === "Revenue & Bookings" ? <RevenueBookingsTab /> : null}
+      {tab === "Inventory Health" ? <InventoryHealthTab /> : null}
+      {tab === "Client Directory" ? <ClientDirectoryTab /> : null}
+      {tab === "Quality & Crew" ? <QualityCrewTab /> : null}
+      {tab === "Audit Logs" ? <AuditLogsTab /> : null}
+    </Screen>
+  );
+}
+
+function RevenueBookingsTab() {
   const stats = useMemo(() => {
     const totalRevenue = BOOKINGS.reduce((sum, booking) => sum + booking.amount, 0);
     const completedJobs = BOOKINGS.filter(
@@ -45,15 +73,7 @@ export default function ReportsScreen() {
   const maxRevenue = Math.max(...MONTHS.map((month) => month.revenue));
 
   return (
-    <Screen>
-      <View>
-        <AppText variant="eyebrow">Business Intelligence</AppText>
-        <AppText variant="title">Operations Reports</AppText>
-        <AppText variant="subtitle">
-          A consolidated view of booking volume, collections, stock use, and crew output.
-        </AppText>
-      </View>
-      <SegmentedTabs tabs={PERIODS} value={period} onChange={setPeriod} />
+    <>
       <View style={{ gap: 12 }}>
         <StatCard
           label="Booked Revenue"
@@ -77,7 +97,7 @@ export default function ReportsScreen() {
           label="Avg. Job Value"
           value={`${stats.avgJobValue}K`}
           note="+6.8% this quarter"
-          icon={TrendingUp}
+          icon={Banknote}
         />
       </View>
       <Section title="Revenue Trend" icon={BarChart3} aside="Last 6 months">
@@ -96,40 +116,6 @@ export default function ReportsScreen() {
             </View>
           ))}
         </View>
-      </Section>
-      <Section title="Equipment Utilization" icon={Gauge} aside="Current">
-        {[
-          { name: "P2.97 New", used: 64, total: 192 },
-          { name: "P3.91 Outdoor", used: 68, total: 144 },
-          { name: "P4 Cabinets", used: 74, total: 96 },
-          { name: "Novastar Proc.", used: 5, total: 12 },
-          { name: "Generators", used: 2, total: 3 },
-        ].map((item) => {
-          const value = pct(item.used, item.total);
-          return (
-            <View key={item.name} style={{ gap: 7 }}>
-              <View style={styles.lineTop}>
-                <AppText style={{ fontWeight: "800" }}>{item.name}</AppText>
-                <AppText variant="data" style={{ fontWeight: "900" }}>
-                  {value}%
-                </AppText>
-              </View>
-              <ProgressBar
-                value={value}
-                tone={
-                  value > 80
-                    ? colors.destructive
-                    : value > 60
-                      ? colors.payment.ADVANCE
-                      : colors.accent
-                }
-              />
-              <AppText variant="data" color={colors.text3}>
-                {item.used} used / {item.total} total
-              </AppText>
-            </View>
-          );
-        })}
       </Section>
       <Section title="Booking Status Distribution" icon={PieChart}>
         {STATUS_ORDER.map((status) => {
@@ -162,33 +148,178 @@ export default function ReportsScreen() {
           );
         })}
       </Section>
-      <Section title="Crew Performance" icon={Users} aside="This quarter">
-        {STAFF.slice(0, 6).map((staff) => (
-          <View key={staff.name} style={{ gap: 6 }}>
-            <View style={styles.lineTop}>
-              <View>
-                <AppText style={{ fontWeight: "800" }}>{staff.name}</AppText>
-                <AppText variant="small" color={colors.text2}>
-                  {staff.role}
-                </AppText>
-              </View>
-              <AppText variant="data">
-                {staff.jobs}/{staff.capacity}
-              </AppText>
-            </View>
-            <ProgressBar value={pct(staff.jobs, staff.capacity)} />
-          </View>
-        ))}
-      </Section>
       <Section title="Export operational report" icon={Download}>
         <AppText variant="subtitle">
           Generate a booking, payment, inventory, or team performance report.
         </AppText>
         <Button variant="outline" icon={Download}>
-          Export CSV
+          Export Revenue & Bookings CSV
         </Button>
       </Section>
-    </Screen>
+    </>
+  );
+}
+
+function InventoryHealthTab() {
+  const categories = useMemo(() => {
+    const byCategory = new Map<string, typeof INVENTORY>();
+    for (const item of INVENTORY) {
+      const list = byCategory.get(item.category) ?? [];
+      list.push(item);
+      byCategory.set(item.category, list);
+    }
+    return Array.from(byCategory.entries()).map(([category, items]) => {
+      const total = items.reduce((sum, item) => sum + item.total, 0);
+      const available = items.reduce((sum, item) => sum + item.available, 0);
+      const onsite = items.reduce((sum, item) => sum + item.onsite, 0);
+      const damaged = items.reduce((sum, item) => sum + item.damaged, 0);
+      return { category, total, available, onsite, damaged };
+    });
+  }, []);
+
+  return (
+    <View style={{ gap: 12 }}>
+      {categories.map((c) => {
+        const availPct = pct(c.available, c.total);
+        const onsitePct = pct(c.onsite, c.total);
+        const damagedPct = pct(c.damaged, c.total);
+        return (
+          <Section key={c.category} title={c.category} icon={Gauge} aside={`${c.total} total`}>
+            <View style={styles.healthBar}>
+              <View style={[styles.healthSegment, { flex: Math.max(availPct, 0.001), backgroundColor: colors.success }]} />
+              <View style={[styles.healthSegment, { flex: Math.max(onsitePct, 0.001), backgroundColor: colors.status.ACCEPTED }]} />
+              <View style={[styles.healthSegment, { flex: Math.max(damagedPct, 0.001), backgroundColor: colors.destructive }]} />
+            </View>
+            <View style={styles.healthLegendRow}>
+              <LegendDot label={`Available ${c.available}`} tone={colors.success} />
+              <LegendDot label={`Onsite ${c.onsite}`} tone={colors.status.ACCEPTED} />
+              <LegendDot label={`Damaged ${c.damaged}`} tone={colors.destructive} />
+            </View>
+          </Section>
+        );
+      })}
+    </View>
+  );
+}
+
+function LegendDot({ label, tone }: { label: string; tone: string }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tone }} />
+      <AppText variant="small" color={colors.text2}>
+        {label}
+      </AppText>
+    </View>
+  );
+}
+
+function ClientDirectoryTab() {
+  const clients = useMemo(() => {
+    const byClient = new Map<string, { bookings: number; completed: number; revenue: number }>();
+    for (const booking of BOOKINGS) {
+      const entry = byClient.get(booking.client) ?? { bookings: 0, completed: 0, revenue: 0 };
+      entry.bookings += 1;
+      if (booking.status === "COMPLETED" || booking.status === "DONE") entry.completed += 1;
+      entry.revenue += booking.amount;
+      byClient.set(booking.client, entry);
+    }
+    return Array.from(byClient.entries())
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, []);
+
+  return (
+    <Section title="Repeat clients & lifetime valuations" icon={Users}>
+      <View style={{ gap: 14 }}>
+        {clients.map((client) => (
+          <View key={client.name} style={{ gap: 4 }}>
+            <View style={styles.lineTop}>
+              <AppText style={{ fontWeight: "800" }}>{client.name}</AppText>
+              {client.bookings >= 5 ? (
+                <View style={styles.repeatBadge}>
+                  <AppText variant="small" color={colors.accent} style={{ fontWeight: "800" }}>
+                    Repeat Client
+                  </AppText>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.lineTop}>
+              <AppText variant="small" color={colors.text2}>
+                {client.bookings} bookings · {client.completed} completed
+              </AppText>
+              <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
+                {formatCurrency(client.revenue)}
+              </AppText>
+            </View>
+          </View>
+        ))}
+      </View>
+    </Section>
+  );
+}
+
+function QualityCrewTab() {
+  return (
+    <Section title="Crew Performance" icon={Users} aside="This quarter">
+      {STAFF.map((staff) => (
+        <View key={staff.name} style={{ gap: 6 }}>
+          <View style={styles.lineTop}>
+            <View>
+              <AppText style={{ fontWeight: "800" }}>{staff.name}</AppText>
+              <AppText variant="small" color={colors.text2}>
+                {staff.role} · {staff.team}
+              </AppText>
+            </View>
+            <AppText variant="data">
+              {staff.jobs}/{staff.capacity}
+            </AppText>
+          </View>
+          <ProgressBar value={pct(staff.jobs, staff.capacity)} />
+        </View>
+      ))}
+    </Section>
+  );
+}
+
+function AuditLogsTab() {
+  const upcoming = useMemo(() => {
+    const now = new Date();
+    return BOOKINGS.filter((booking) => {
+      const date = new Date(booking.assemblyDate);
+      const diff = (date.getTime() - now.getTime()) / 86400000;
+      return diff >= 0 && diff <= 7;
+    }).sort((a, b) => a.assemblyDate.localeCompare(b.assemblyDate));
+  }, []);
+
+  return (
+    <>
+      <Section title="Canceled Bookings Audit Log" icon={AlertTriangle} aside="0 canceled">
+        <AppText variant="subtitle">No cancellations recorded in the current period.</AppText>
+      </Section>
+      <Section title="Upcoming Operations" icon={CalendarCheck} aside="Next 7 days">
+        {upcoming.length === 0 ? (
+          <AppText variant="subtitle">Nothing scheduled to assemble in the next 7 days.</AppText>
+        ) : (
+          <View style={{ gap: 10 }}>
+            {upcoming.map((booking) => (
+              <View key={booking.code} style={styles.lineTop}>
+                <View>
+                  <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
+                    {booking.code}
+                  </AppText>
+                  <AppText variant="small" color={colors.text2}>
+                    {booking.client} · {booking.venue}
+                  </AppText>
+                </View>
+                <AppText variant="data" color={colors.text3}>
+                  {booking.assemblyDate}
+                </AppText>
+              </View>
+            ))}
+          </View>
+        )}
+      </Section>
+    </>
   );
 }
 
@@ -221,5 +352,27 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
+  },
+  healthBar: {
+    flexDirection: "row",
+    height: 10,
+    borderRadius: 5,
+    overflow: "hidden",
+    backgroundColor: colors.surface2,
+  },
+  healthSegment: {
+    height: "100%",
+  },
+  healthLegendRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 8,
+  },
+  repeatBadge: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: "rgba(245,183,49,0.12)",
   },
 });

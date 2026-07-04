@@ -3,23 +3,42 @@ import { to } from "@/utils/routes";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ArrowRight, LockKeyhole } from "lucide-react-native";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { z } from "zod";
 import { AppText, BrandMark, Button, Field, Input } from "@/components/ui";
+import { useAppContext } from "@/context/AppContext";
 import { colors } from "@/theme/tokens";
 
 const loginSchema = z.object({
-  phone: z.string().min(5, "Phone number is required"),
+  email: z.string().email("Enter a valid email address"),
+  password: z.string().min(1, "Password is required"),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginScreen() {
+  const { login, mustChangePassword } = useAppContext();
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const { control, handleSubmit } = useForm<LoginForm>({
-    defaultValues: { phone: "+251 " },
+    defaultValues: { email: "", password: "" },
     resolver: zodResolver(loginSchema),
   });
+
+  const onSubmit = async (values: LoginForm) => {
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      await login(values.email, values.password);
+      router.replace(to(mustChangePassword ? "/change-password" : "/dashboard"));
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Incorrect email or password");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -51,15 +70,19 @@ export default function LoginScreen() {
         <AppText variant="title" style={{ fontSize: 24 }}>
           Sign in to operations
         </AppText>
-        <AppText variant="subtitle">
-          Use your staff phone number to receive a one-time code.
-        </AppText>
+        <AppText variant="subtitle">Enter your credentials to sign in.</AppText>
         <Controller
           control={control}
-          name="phone"
+          name="email"
           render={({ field, fieldState }) => (
-            <Field label="Phone number">
-              <Input value={field.value} onChangeText={field.onChange} keyboardType="phone-pad" />
+            <Field label="Email address">
+              <Input
+                value={field.value}
+                onChangeText={field.onChange}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                placeholder="your-email@example.com"
+              />
               {fieldState.error ? (
                 <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
                   {fieldState.error.message}
@@ -68,8 +91,32 @@ export default function LoginScreen() {
             </Field>
           )}
         />
-        <Button icon={ArrowRight} onPress={handleSubmit(() => router.push(to("/otp")))}>
-          Continue
+        <Controller
+          control={control}
+          name="password"
+          render={({ field, fieldState }) => (
+            <Field label="Password">
+              <Input
+                value={field.value}
+                onChangeText={field.onChange}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+              {fieldState.error ? (
+                <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
+                  {fieldState.error.message}
+                </AppText>
+              ) : null}
+            </Field>
+          )}
+        />
+        {formError ? (
+          <AppText variant="small" color={colors.destructive}>
+            {formError}
+          </AppText>
+        ) : null}
+        <Button icon={ArrowRight} disabled={submitting} onPress={handleSubmit(onSubmit)}>
+          {submitting ? "Signing in..." : "Sign In"}
         </Button>
         <AppText variant="small" color={colors.text3} style={{ textAlign: "center" }}>
           Access is restricted to authorized Vortex Visual staff.
