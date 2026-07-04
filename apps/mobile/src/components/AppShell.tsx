@@ -97,7 +97,8 @@ function canOpen(role: string, href: string) {
 
 export function AppShell() {
   const pathname = usePathname();
-  const { activeProfile, profiles, setActiveProfile, theme, toggleTheme } = useAppContext();
+  const { activeProfile, profiles, setActiveProfile, theme, toggleTheme, logout } =
+    useAppContext();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -243,7 +244,13 @@ export function AppShell() {
               <Button variant="outline" icon={theme === "dark" ? Sun : Moon} onPress={toggleTheme}>
                 Toggle theme
               </Button>
-              <Button variant="ghost" onPress={() => router.replace(to("/login"))}>
+              <Button
+                variant="ghost"
+                onPress={() => {
+                  logout();
+                  router.replace(to("/login"));
+                }}
+              >
                 Sign out
               </Button>
             </View>

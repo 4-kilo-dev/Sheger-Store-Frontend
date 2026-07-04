@@ -118,11 +118,30 @@ function makeBom(screenType: ScreenType, size: number, index: number): BomItem[]
   ];
 }
 
+const today = new Date();
+const bookingsAnchor = new Date(today.getFullYear(), today.getMonth(), 1 - 10);
+
 export const BOOKINGS: Booking[] = Array.from({ length: 28 }).map((_, index) => {
-  const assembly = new Date(2026, 5, 1 + index);
-  const event = new Date(2026, 5, 3 + index);
-  const dismantle = new Date(2026, 5, 4 + index);
-  const created = new Date(2026, 4, 20 + (index % 10));
+  const assembly = new Date(
+    bookingsAnchor.getFullYear(),
+    bookingsAnchor.getMonth(),
+    bookingsAnchor.getDate() + index,
+  );
+  const event = new Date(
+    bookingsAnchor.getFullYear(),
+    bookingsAnchor.getMonth(),
+    bookingsAnchor.getDate() + index + 2,
+  );
+  const dismantle = new Date(
+    bookingsAnchor.getFullYear(),
+    bookingsAnchor.getMonth(),
+    bookingsAnchor.getDate() + index + 3,
+  );
+  const created = new Date(
+    bookingsAnchor.getFullYear(),
+    bookingsAnchor.getMonth() - 1,
+    20 + (index % 10),
+  );
   const size = [24, 36, 48, 60, 72][index % 5];
   return {
     code: `SB${String(20 + index).padStart(3, "0")}`,
@@ -634,6 +653,27 @@ export const PROFILES: Profile[] = [
     description: "Operations scheduling & dispatch",
   },
   { name: "Selam Worku", role: "SK", initials: "SW", description: "Inventory checkout & damages" },
+];
+
+export interface MockAccount {
+  email: string;
+  password: string;
+  mustChangePassword?: boolean;
+  profile: Profile;
+}
+
+export const MOCK_ACCOUNTS: MockAccount[] = [
+  { email: "nathan@vortexvisual.et", password: "password123", profile: PROFILES[0] },
+  { email: "hanna@vortexvisual.et", password: "password123", profile: PROFILES[1] },
+  {
+    email: "bereket@vortexvisual.et",
+    password: "temp1234",
+    mustChangePassword: true,
+    profile: PROFILES[2],
+  },
+  { email: "dawit@vortexvisual.et", password: "password123", profile: PROFILES[3] },
+  { email: "samuel@vortexvisual.et", password: "password123", profile: PROFILES[4] },
+  { email: "selam@vortexvisual.et", password: "password123", profile: PROFILES[5] },
 ];
 
 export const MONTHS = [

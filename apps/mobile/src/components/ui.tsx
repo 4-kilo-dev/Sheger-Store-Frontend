@@ -28,7 +28,9 @@ export function Screen({
   scroll?: boolean;
   footer?: ReactNode;
 }) {
-  const content = <View style={styles.screenContent}>{children}</View>;
+  const content = (
+    <View style={[styles.screenContent, !scroll && styles.screenContentFlex]}>{children}</View>
+  );
   return (
     <SafeAreaView style={styles.screen} edges={["left", "right"]}>
       {scroll ? (
@@ -404,6 +406,9 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 24,
+  },
+  screenContentFlex: {
+    flex: 1,
   },
   scrollContent: {
     paddingBottom: 112,
