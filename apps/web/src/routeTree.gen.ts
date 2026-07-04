@@ -16,20 +16,14 @@ import { Route as OtpRouteImport } from './routes/otp'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InventoryRouteImport } from './routes/inventory'
-import { Route as DashboardsRouteImport } from './routes/dashboards'
 import { Route as DamageReportRouteImport } from './routes/damage-report'
 import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as ChangePasswordRouteImport } from './routes/change-password'
 import { Route as BookingsRouteImport } from './routes/bookings'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory.index'
-import { Route as DashboardsIndexRouteImport } from './routes/dashboards.index'
 import { Route as BookingsIndexRouteImport } from './routes/bookings.index'
 import { Route as InventoryItemIdRouteImport } from './routes/inventory.$itemId'
-import { Route as DashboardsToRouteImport } from './routes/dashboards.to'
-import { Route as DashboardsSkRouteImport } from './routes/dashboards.sk'
-import { Route as DashboardsOoRouteImport } from './routes/dashboards.oo'
-import { Route as DashboardsCtoRouteImport } from './routes/dashboards.cto'
-import { Route as DashboardsCcrRouteImport } from './routes/dashboards.ccr'
 import { Route as BookingsNewRouteImport } from './routes/bookings.new'
 import { Route as BookingsCodeRouteImport } from './routes/bookings.$code'
 
@@ -68,11 +62,6 @@ const InventoryRoute = InventoryRouteImport.update({
   path: '/inventory',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardsRoute = DashboardsRouteImport.update({
-  id: '/dashboards',
-  path: '/dashboards',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const DamageReportRoute = DamageReportRouteImport.update({
   id: '/damage-report',
   path: '/damage-report',
@@ -81,6 +70,11 @@ const DamageReportRoute = DamageReportRouteImport.update({
 const CheckoutRoute = CheckoutRouteImport.update({
   id: '/checkout',
   path: '/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChangePasswordRoute = ChangePasswordRouteImport.update({
+  id: '/change-password',
+  path: '/change-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BookingsRoute = BookingsRouteImport.update({
@@ -98,11 +92,6 @@ const InventoryIndexRoute = InventoryIndexRouteImport.update({
   path: '/',
   getParentRoute: () => InventoryRoute,
 } as any)
-const DashboardsIndexRoute = DashboardsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => DashboardsRoute,
-} as any)
 const BookingsIndexRoute = BookingsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -112,31 +101,6 @@ const InventoryItemIdRoute = InventoryItemIdRouteImport.update({
   id: '/$itemId',
   path: '/$itemId',
   getParentRoute: () => InventoryRoute,
-} as any)
-const DashboardsToRoute = DashboardsToRouteImport.update({
-  id: '/to',
-  path: '/to',
-  getParentRoute: () => DashboardsRoute,
-} as any)
-const DashboardsSkRoute = DashboardsSkRouteImport.update({
-  id: '/sk',
-  path: '/sk',
-  getParentRoute: () => DashboardsRoute,
-} as any)
-const DashboardsOoRoute = DashboardsOoRouteImport.update({
-  id: '/oo',
-  path: '/oo',
-  getParentRoute: () => DashboardsRoute,
-} as any)
-const DashboardsCtoRoute = DashboardsCtoRouteImport.update({
-  id: '/cto',
-  path: '/cto',
-  getParentRoute: () => DashboardsRoute,
-} as any)
-const DashboardsCcrRoute = DashboardsCcrRouteImport.update({
-  id: '/ccr',
-  path: '/ccr',
-  getParentRoute: () => DashboardsRoute,
 } as any)
 const BookingsNewRoute = BookingsNewRouteImport.update({
   id: '/new',
@@ -152,9 +116,9 @@ const BookingsCodeRoute = BookingsCodeRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/bookings': typeof BookingsRouteWithChildren
+  '/change-password': typeof ChangePasswordRoute
   '/checkout': typeof CheckoutRoute
   '/damage-report': typeof DamageReportRoute
-  '/dashboards': typeof DashboardsRouteWithChildren
   '/inventory': typeof InventoryRouteWithChildren
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
@@ -164,18 +128,13 @@ export interface FileRoutesByFullPath {
   '/staff': typeof StaffRoute
   '/bookings/$code': typeof BookingsCodeRoute
   '/bookings/new': typeof BookingsNewRoute
-  '/dashboards/ccr': typeof DashboardsCcrRoute
-  '/dashboards/cto': typeof DashboardsCtoRoute
-  '/dashboards/oo': typeof DashboardsOoRoute
-  '/dashboards/sk': typeof DashboardsSkRoute
-  '/dashboards/to': typeof DashboardsToRoute
   '/inventory/$itemId': typeof InventoryItemIdRoute
   '/bookings/': typeof BookingsIndexRoute
-  '/dashboards/': typeof DashboardsIndexRoute
   '/inventory/': typeof InventoryIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/change-password': typeof ChangePasswordRoute
   '/checkout': typeof CheckoutRoute
   '/damage-report': typeof DamageReportRoute
   '/login': typeof LoginRoute
@@ -186,23 +145,17 @@ export interface FileRoutesByTo {
   '/staff': typeof StaffRoute
   '/bookings/$code': typeof BookingsCodeRoute
   '/bookings/new': typeof BookingsNewRoute
-  '/dashboards/ccr': typeof DashboardsCcrRoute
-  '/dashboards/cto': typeof DashboardsCtoRoute
-  '/dashboards/oo': typeof DashboardsOoRoute
-  '/dashboards/sk': typeof DashboardsSkRoute
-  '/dashboards/to': typeof DashboardsToRoute
   '/inventory/$itemId': typeof InventoryItemIdRoute
   '/bookings': typeof BookingsIndexRoute
-  '/dashboards': typeof DashboardsIndexRoute
   '/inventory': typeof InventoryIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/bookings': typeof BookingsRouteWithChildren
+  '/change-password': typeof ChangePasswordRoute
   '/checkout': typeof CheckoutRoute
   '/damage-report': typeof DamageReportRoute
-  '/dashboards': typeof DashboardsRouteWithChildren
   '/inventory': typeof InventoryRouteWithChildren
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
@@ -212,14 +165,8 @@ export interface FileRoutesById {
   '/staff': typeof StaffRoute
   '/bookings/$code': typeof BookingsCodeRoute
   '/bookings/new': typeof BookingsNewRoute
-  '/dashboards/ccr': typeof DashboardsCcrRoute
-  '/dashboards/cto': typeof DashboardsCtoRoute
-  '/dashboards/oo': typeof DashboardsOoRoute
-  '/dashboards/sk': typeof DashboardsSkRoute
-  '/dashboards/to': typeof DashboardsToRoute
   '/inventory/$itemId': typeof InventoryItemIdRoute
   '/bookings/': typeof BookingsIndexRoute
-  '/dashboards/': typeof DashboardsIndexRoute
   '/inventory/': typeof InventoryIndexRoute
 }
 export interface FileRouteTypes {
@@ -227,9 +174,9 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/bookings'
+    | '/change-password'
     | '/checkout'
     | '/damage-report'
-    | '/dashboards'
     | '/inventory'
     | '/login'
     | '/notifications'
@@ -239,18 +186,13 @@ export interface FileRouteTypes {
     | '/staff'
     | '/bookings/$code'
     | '/bookings/new'
-    | '/dashboards/ccr'
-    | '/dashboards/cto'
-    | '/dashboards/oo'
-    | '/dashboards/sk'
-    | '/dashboards/to'
     | '/inventory/$itemId'
     | '/bookings/'
-    | '/dashboards/'
     | '/inventory/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/change-password'
     | '/checkout'
     | '/damage-report'
     | '/login'
@@ -261,22 +203,16 @@ export interface FileRouteTypes {
     | '/staff'
     | '/bookings/$code'
     | '/bookings/new'
-    | '/dashboards/ccr'
-    | '/dashboards/cto'
-    | '/dashboards/oo'
-    | '/dashboards/sk'
-    | '/dashboards/to'
     | '/inventory/$itemId'
     | '/bookings'
-    | '/dashboards'
     | '/inventory'
   id:
     | '__root__'
     | '/'
     | '/bookings'
+    | '/change-password'
     | '/checkout'
     | '/damage-report'
-    | '/dashboards'
     | '/inventory'
     | '/login'
     | '/notifications'
@@ -286,23 +222,17 @@ export interface FileRouteTypes {
     | '/staff'
     | '/bookings/$code'
     | '/bookings/new'
-    | '/dashboards/ccr'
-    | '/dashboards/cto'
-    | '/dashboards/oo'
-    | '/dashboards/sk'
-    | '/dashboards/to'
     | '/inventory/$itemId'
     | '/bookings/'
-    | '/dashboards/'
     | '/inventory/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BookingsRoute: typeof BookingsRouteWithChildren
+  ChangePasswordRoute: typeof ChangePasswordRoute
   CheckoutRoute: typeof CheckoutRoute
   DamageReportRoute: typeof DamageReportRoute
-  DashboardsRoute: typeof DashboardsRouteWithChildren
   InventoryRoute: typeof InventoryRouteWithChildren
   LoginRoute: typeof LoginRoute
   NotificationsRoute: typeof NotificationsRoute
@@ -363,13 +293,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InventoryRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboards': {
-      id: '/dashboards'
-      path: '/dashboards'
-      fullPath: '/dashboards'
-      preLoaderRoute: typeof DashboardsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/damage-report': {
       id: '/damage-report'
       path: '/damage-report'
@@ -382,6 +305,13 @@ declare module '@tanstack/react-router' {
       path: '/checkout'
       fullPath: '/checkout'
       preLoaderRoute: typeof CheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/change-password': {
+      id: '/change-password'
+      path: '/change-password'
+      fullPath: '/change-password'
+      preLoaderRoute: typeof ChangePasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bookings': {
@@ -405,13 +335,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InventoryIndexRouteImport
       parentRoute: typeof InventoryRoute
     }
-    '/dashboards/': {
-      id: '/dashboards/'
-      path: '/'
-      fullPath: '/dashboards/'
-      preLoaderRoute: typeof DashboardsIndexRouteImport
-      parentRoute: typeof DashboardsRoute
-    }
     '/bookings/': {
       id: '/bookings/'
       path: '/'
@@ -425,41 +348,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/inventory/$itemId'
       preLoaderRoute: typeof InventoryItemIdRouteImport
       parentRoute: typeof InventoryRoute
-    }
-    '/dashboards/to': {
-      id: '/dashboards/to'
-      path: '/to'
-      fullPath: '/dashboards/to'
-      preLoaderRoute: typeof DashboardsToRouteImport
-      parentRoute: typeof DashboardsRoute
-    }
-    '/dashboards/sk': {
-      id: '/dashboards/sk'
-      path: '/sk'
-      fullPath: '/dashboards/sk'
-      preLoaderRoute: typeof DashboardsSkRouteImport
-      parentRoute: typeof DashboardsRoute
-    }
-    '/dashboards/oo': {
-      id: '/dashboards/oo'
-      path: '/oo'
-      fullPath: '/dashboards/oo'
-      preLoaderRoute: typeof DashboardsOoRouteImport
-      parentRoute: typeof DashboardsRoute
-    }
-    '/dashboards/cto': {
-      id: '/dashboards/cto'
-      path: '/cto'
-      fullPath: '/dashboards/cto'
-      preLoaderRoute: typeof DashboardsCtoRouteImport
-      parentRoute: typeof DashboardsRoute
-    }
-    '/dashboards/ccr': {
-      id: '/dashboards/ccr'
-      path: '/ccr'
-      fullPath: '/dashboards/ccr'
-      preLoaderRoute: typeof DashboardsCcrRouteImport
-      parentRoute: typeof DashboardsRoute
     }
     '/bookings/new': {
       id: '/bookings/new'
@@ -494,28 +382,6 @@ const BookingsRouteWithChildren = BookingsRoute._addFileChildren(
   BookingsRouteChildren,
 )
 
-interface DashboardsRouteChildren {
-  DashboardsCcrRoute: typeof DashboardsCcrRoute
-  DashboardsCtoRoute: typeof DashboardsCtoRoute
-  DashboardsOoRoute: typeof DashboardsOoRoute
-  DashboardsSkRoute: typeof DashboardsSkRoute
-  DashboardsToRoute: typeof DashboardsToRoute
-  DashboardsIndexRoute: typeof DashboardsIndexRoute
-}
-
-const DashboardsRouteChildren: DashboardsRouteChildren = {
-  DashboardsCcrRoute: DashboardsCcrRoute,
-  DashboardsCtoRoute: DashboardsCtoRoute,
-  DashboardsOoRoute: DashboardsOoRoute,
-  DashboardsSkRoute: DashboardsSkRoute,
-  DashboardsToRoute: DashboardsToRoute,
-  DashboardsIndexRoute: DashboardsIndexRoute,
-}
-
-const DashboardsRouteWithChildren = DashboardsRoute._addFileChildren(
-  DashboardsRouteChildren,
-)
-
 interface InventoryRouteChildren {
   InventoryItemIdRoute: typeof InventoryItemIdRoute
   InventoryIndexRoute: typeof InventoryIndexRoute
@@ -533,9 +399,9 @@ const InventoryRouteWithChildren = InventoryRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BookingsRoute: BookingsRouteWithChildren,
+  ChangePasswordRoute: ChangePasswordRoute,
   CheckoutRoute: CheckoutRoute,
   DamageReportRoute: DamageReportRoute,
-  DashboardsRoute: DashboardsRouteWithChildren,
   InventoryRoute: InventoryRouteWithChildren,
   LoginRoute: LoginRoute,
   NotificationsRoute: NotificationsRoute,
