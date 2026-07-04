@@ -8,19 +8,22 @@ import {
   BottomSheet,
   Button,
   EmptyState,
+  ErrorState,
   Field,
   Input,
+  LoadingState,
   NativeList,
   Screen,
   SegmentedTabs,
 } from "@/components/ui";
-import { BOOKINGS } from "@/data/mock";
 import { colors } from "@/theme/tokens";
 import type { Booking } from "@/types/domain";
+import { useBookings } from "@/hooks/useOperations";
 
 const TABS = ["All", "This Week", "Upcoming", "Onsite", "Last Week", "Assigned to Me"] as const;
 
 export default function BookingsScreen() {
+  const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings();
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
   const [query, setQuery] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -51,6 +54,22 @@ export default function BookingsScreen() {
       return next;
     });
   };
+
+  if (isLoading) {
+    return (
+      <Screen>
+        <LoadingState label="Loading bookings..." />
+      </Screen>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Screen>
+        <ErrorState detail="Could not load bookings from the server." onRetry={() => refetch()} />
+      </Screen>
+    );
+  }
 
   return (
     <Screen scroll={false}>

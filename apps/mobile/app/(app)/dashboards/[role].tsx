@@ -17,21 +17,38 @@ import {
 } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
 import { StatusBadge } from "@/components/status";
-import { AppText, Button, Screen, Section, StatCard } from "@/components/ui";
-import { BOOKINGS } from "@/data/mock";
+import { AppText, Button, ErrorState, LoadingState, Screen, Section, StatCard } from "@/components/ui";
 import { colors } from "@/theme/tokens";
 import type { Booking } from "@/types/domain";
 import { formatCurrency } from "@/utils/format";
+import { useBookings } from "@/hooks/useOperations";
 
 export default function RoleDashboardScreen() {
   const { role } = useLocalSearchParams<{ role: string }>();
   const normalized = (role ?? "ccr").toLowerCase();
+  const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings();
 
-  if (normalized === "ccr") return <CCR />;
-  if (normalized === "cto") return <CTO />;
-  if (normalized === "to") return <TO />;
-  if (normalized === "oo") return <OO />;
-  return <SK />;
+  if (isLoading) {
+    return (
+      <Screen>
+        <LoadingState label="Loading workspace..." />
+      </Screen>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Screen>
+        <ErrorState detail="Could not load bookings from the server." onRetry={() => refetch()} />
+      </Screen>
+    );
+  }
+
+  if (normalized === "ccr") return <CCR BOOKINGS={BOOKINGS} />;
+  if (normalized === "cto") return <CTO BOOKINGS={BOOKINGS} />;
+  if (normalized === "to") return <TO BOOKINGS={BOOKINGS} />;
+  if (normalized === "oo") return <OO BOOKINGS={BOOKINGS} />;
+  return <SK BOOKINGS={BOOKINGS} />;
 }
 
 function WorkspaceHeader({
@@ -115,7 +132,7 @@ function QueueRow({
   );
 }
 
-function CCR() {
+function CCR({ BOOKINGS }: { BOOKINGS: Booking[] }) {
   const reserved = BOOKINGS.filter((b) => b.status === "RESERVED");
   const unpaid = BOOKINGS.filter((b) => b.payment === "UNPAID" || b.payment === "ADVANCE");
   const confirmedToday = BOOKINGS.filter((b) => b.status === "CONFIRMED").length;
@@ -168,7 +185,7 @@ function CCR() {
   );
 }
 
-function CTO() {
+function CTO({ BOOKINGS }: { BOOKINGS: Booking[] }) {
   const confirmed = BOOKINGS.filter((b) => b.status === "CONFIRMED");
   const assigned = BOOKINGS.filter((b) => b.status === "ASSIGNED");
   const inPrep = BOOKINGS.filter((b) => b.status === "PREPARATION");
@@ -218,7 +235,7 @@ function CTO() {
   );
 }
 
-function TO() {
+function TO({ BOOKINGS }: { BOOKINGS: Booking[] }) {
   const assigned = BOOKINGS.filter((b) => b.status === "ASSIGNED");
   const accepted = BOOKINGS.filter((b) => b.status === "ACCEPTED");
   const inPrep = BOOKINGS.filter((b) => b.status === "PREPARATION");
@@ -257,7 +274,7 @@ function TO() {
   );
 }
 
-function OO() {
+function OO({ BOOKINGS }: { BOOKINGS: Booking[] }) {
   const ready = BOOKINGS.filter((b) => b.status === "PREPARATION");
   const onsite = BOOKINGS.filter((b) => b.status === "ONSITE");
   const completed = BOOKINGS.filter((b) => b.status === "COMPLETED");
@@ -292,7 +309,7 @@ function OO() {
   );
 }
 
-function SK() {
+function SK({ BOOKINGS }: { BOOKINGS: Booking[] }) {
   const onsite = BOOKINGS.filter((b) => b.status === "ONSITE");
   const completed = BOOKINGS.filter((b) => b.status === "COMPLETED");
   const checkedOut = BOOKINGS.filter((b) =>

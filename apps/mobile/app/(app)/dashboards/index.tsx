@@ -9,68 +9,91 @@ import {
   Wrench,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
-import { AppText, Screen, StatCard } from "@/components/ui";
-import { BOOKINGS } from "@/data/mock";
+import { AppText, ErrorState, LoadingState, Screen, StatCard } from "@/components/ui";
 import { colors, radius } from "@/theme/tokens";
+import { useBookings } from "@/hooks/useOperations";
+import type { Booking } from "@/types/domain";
 
-const ROLES = [
-  {
-    key: "ccr",
-    name: "Client Relations (CCR)",
-    icon: Headphones,
-    subtitle: "Intake & payments",
-    description: "Register screen reservations, track payments, and confirm bookings with clients.",
-    count: BOOKINGS.filter((b) => b.status === "RESERVED").length,
-    label: "awaiting confirmation",
-    tone: colors.accent,
-  },
-  {
-    key: "cto",
-    name: "Chief Technician (CTO)",
-    icon: Wrench,
-    subtitle: "Technical design",
-    description:
-      "Check setup feasibility, approve screen configurations, and assign lead technicians.",
-    count: BOOKINGS.filter((b) => b.status === "CONFIRMED").length,
-    label: "pending assignment",
-    tone: colors.accent,
-  },
-  {
-    key: "to",
-    name: "Technician (TO)",
-    icon: ClipboardCheck,
-    subtitle: "Field setup & prep",
-    description:
-      "Accept briefs, prepare the bill of materials and cabling, then run the onsite setup.",
-    count: BOOKINGS.filter((b) => b.status === "ASSIGNED").length,
-    label: "new assignments",
-    tone: colors.status.ACCEPTED,
-  },
-  {
-    key: "oo",
-    name: "Operations Officer (OO)",
-    icon: RadioTower,
-    subtitle: "Logistics & crew",
-    description:
-      "Dispatch transport, assign drivers and support crew, and manage onsite logistics.",
-    count: BOOKINGS.filter((b) => b.status === "PREPARATION").length,
-    label: "ready for dispatch",
-    tone: colors.accent,
-  },
-  {
-    key: "sk",
-    name: "Storekeeper (SK)",
-    icon: PackageCheck,
-    subtitle: "Warehouse & inventory",
-    description:
-      "Track physical inventory, process equipment check-ins and check-outs, and flag damages.",
-    count: BOOKINGS.filter((b) => b.status === "COMPLETED").length,
-    label: "pending return",
-    tone: colors.success,
-  },
-] as const;
+function buildRoles(BOOKINGS: Booking[]) {
+  return [
+    {
+      key: "ccr",
+      name: "Client Relations (CCR)",
+      icon: Headphones,
+      subtitle: "Intake & payments",
+      description: "Register screen reservations, track payments, and confirm bookings with clients.",
+      count: BOOKINGS.filter((b) => b.status === "RESERVED").length,
+      label: "awaiting confirmation",
+      tone: colors.accent,
+    },
+    {
+      key: "cto",
+      name: "Chief Technician (CTO)",
+      icon: Wrench,
+      subtitle: "Technical design",
+      description:
+        "Check setup feasibility, approve screen configurations, and assign lead technicians.",
+      count: BOOKINGS.filter((b) => b.status === "CONFIRMED").length,
+      label: "pending assignment",
+      tone: colors.accent,
+    },
+    {
+      key: "to",
+      name: "Technician (TO)",
+      icon: ClipboardCheck,
+      subtitle: "Field setup & prep",
+      description:
+        "Accept briefs, prepare the bill of materials and cabling, then run the onsite setup.",
+      count: BOOKINGS.filter((b) => b.status === "ASSIGNED").length,
+      label: "new assignments",
+      tone: colors.status.ACCEPTED,
+    },
+    {
+      key: "oo",
+      name: "Operations Officer (OO)",
+      icon: RadioTower,
+      subtitle: "Logistics & crew",
+      description:
+        "Dispatch transport, assign drivers and support crew, and manage onsite logistics.",
+      count: BOOKINGS.filter((b) => b.status === "PREPARATION").length,
+      label: "ready for dispatch",
+      tone: colors.accent,
+    },
+    {
+      key: "sk",
+      name: "Storekeeper (SK)",
+      icon: PackageCheck,
+      subtitle: "Warehouse & inventory",
+      description:
+        "Track physical inventory, process equipment check-ins and check-outs, and flag damages.",
+      count: BOOKINGS.filter((b) => b.status === "COMPLETED").length,
+      label: "pending return",
+      tone: colors.success,
+    },
+  ] as const;
+}
 
 export default function DashboardsIndexScreen() {
+  const { data: bookings = [], isLoading, isError, refetch } = useBookings();
+
+  if (isLoading) {
+    return (
+      <Screen>
+        <LoadingState label="Loading dashboards..." />
+      </Screen>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Screen>
+        <ErrorState detail="Could not load bookings from the server." onRetry={() => refetch()} />
+      </Screen>
+    );
+  }
+
+  const ROLES = buildRoles(bookings);
+
   return (
     <Screen>
       <View>

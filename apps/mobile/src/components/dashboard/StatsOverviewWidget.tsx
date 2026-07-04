@@ -3,13 +3,15 @@ import { useMemo } from "react";
 import { View, StyleSheet } from "react-native";
 import { StatCard } from "@/components/ui";
 import { useAppContext } from "@/context/AppContext";
-import { BOOKINGS, INVENTORY, STAFF } from "@/data/mock";
+import { useBookings, useStaff } from "@/hooks/useOperations";
 import { colors } from "@/theme/tokens";
 import { formatCompactCurrency } from "@/utils/format";
 
 export function StatsOverviewWidget() {
   const { activeProfile } = useAppContext();
   const role = activeProfile.role;
+  const { data: BOOKINGS = [] } = useBookings();
+  const { data: STAFF = [] } = useStaff();
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -52,7 +54,7 @@ export function StatsOverviewWidget() {
       inPrep,
       availableStaff,
     };
-  }, [activeProfile.name]);
+  }, [activeProfile.name, BOOKINGS, STAFF]);
 
   const cards = useMemo(() => {
     if (role === "CCR") {

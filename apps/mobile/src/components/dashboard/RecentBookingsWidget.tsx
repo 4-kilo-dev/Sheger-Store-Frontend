@@ -4,10 +4,11 @@ import { CalendarRange } from "lucide-react-native";
 import { Pressable, View } from "react-native";
 import { AppText, Button, Section } from "@/components/ui";
 import { PaymentBadge, StatusBadge } from "@/components/status";
-import { BOOKINGS } from "@/data/mock";
+import { useBookings } from "@/hooks/useOperations";
 import { colors } from "@/theme/tokens";
 
 export function RecentBookingsWidget() {
+  const { data: BOOKINGS = [] } = useBookings();
   const recent = BOOKINGS.slice(0, 6);
 
   return (

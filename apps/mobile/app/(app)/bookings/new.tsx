@@ -28,6 +28,7 @@ import {
 } from "@/components/ui";
 import { colors, radius } from "@/theme/tokens";
 import { formatCurrency } from "@/utils/format";
+import { useCreateBooking } from "@/hooks/useOperations";
 
 const STEPS = [
   "Client",
@@ -63,6 +64,8 @@ type BookingDraft = {
 export default function NewBookingScreen() {
   const [step, setStep] = useState<(typeof STEPS)[number]>("Client");
   const index = STEPS.indexOf(step);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const createBooking = useCreateBooking();
   const [form, setForm] = useState<BookingDraft>({
     client: "",
     contactPerson: "",
@@ -86,6 +89,29 @@ export default function NewBookingScreen() {
   const set = <K extends keyof BookingDraft>(key: K, value: BookingDraft[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
 
+  const handleCreateBooking = async () => {
+    setSubmitError(null);
+    try {
+      const booking = await createBooking.mutateAsync({
+        client: form.client,
+        contactPerson: form.contactPerson,
+        contactPhone: form.contactPhone,
+        venue: form.venue,
+        assemblyDate: form.assemblyDate,
+        eventDate: form.eventDate,
+        screenType: form.screenType,
+        size: form.size,
+        arrangement: form.arrangement,
+        amount: form.amount,
+        paymentTerms: form.paymentTerms as "UNPAID" | "ADVANCE" | "PAID",
+        ctoNotes: form.ctoNotes || form.ctoArrangement,
+      });
+      router.push(to(`/bookings/${booking.code}`));
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Failed to create booking.");
+    }
+  };
+
   return (
     <Screen
       footer={
@@ -102,8 +128,8 @@ export default function NewBookingScreen() {
               Continue
             </Button>
           ) : (
-            <Button icon={Save} onPress={() => router.push(to("/bookings"))}>
-              Confirm & Create Booking
+            <Button icon={Save} disabled={createBooking.isPending} onPress={handleCreateBooking}>
+              {createBooking.isPending ? "Creating..." : "Confirm & Create Booking"}
             </Button>
           )}
         </View>
@@ -300,6 +326,11 @@ export default function NewBookingScreen() {
 
       {step === "Review" ? (
         <Section title="Review & Confirm" icon={CheckCircle2}>
+          {submitError ? (
+            <AppText variant="small" color={colors.destructive}>
+              {submitError}
+            </AppText>
+          ) : null}
           {[
             ["Client", form.client || "-"],
             ["Contact", `${form.contactPerson || "-"} · ${form.contactPhone || "-"}`],

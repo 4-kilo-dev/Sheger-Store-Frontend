@@ -24,6 +24,8 @@ export const colors = {
     ONSITE: "#8B8B97",
     COMPLETED: "#0091B2",
     DONE: "#30A46C",
+    CANCELED: "#E5484D",
+    PARTIALLY_RETURNED: "#E8A030",
   } satisfies Record<BookingStatus, string>,
   payment: {
     PAID: "#6E56CF",
@@ -49,10 +51,7 @@ export const radius = {
   round: 999,
 } as const;
 
-export const typography = {
-  data: "Menlo",
-  sans: undefined,
-} as const;
+export { fontFamily as typography } from "./fonts";
 
 export function alpha(hex: string, opacity: number) {
   const clean = hex.replace("#", "");
