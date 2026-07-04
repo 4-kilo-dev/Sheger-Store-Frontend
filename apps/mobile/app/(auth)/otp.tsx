@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { to } from "@/utils/routes";
 import { StatusBar } from "expo-status-bar";
 import { ArrowRight, RotateCcw } from "lucide-react-native";
 import { useMemo, useRef, useState } from "react";
@@ -13,7 +14,9 @@ export default function OtpScreen() {
 
   const setDigit = (index: number, value: string) => {
     const nextValue = value.slice(-1);
-    setDigits((current) => current.map((digit, itemIndex) => (itemIndex === index ? nextValue : digit)));
+    setDigits((current) =>
+      current.map((digit, itemIndex) => (itemIndex === index ? nextValue : digit)),
+    );
     if (nextValue && index < 5) inputs.current[index + 1]?.focus();
   };
 
@@ -28,7 +31,8 @@ export default function OtpScreen() {
           Enter your 6-digit code
         </AppText>
         <AppText variant="subtitle">
-          We sent a one-time code to <AppText variant="data">+251 911 ... 611</AppText>. It expires in 05:00.
+          We sent a one-time code to <AppText variant="data">+251 911 ... 611</AppText>. It expires
+          in 05:00.
         </AppText>
         <View style={styles.digitRow}>
           {digits.map((digit, index) => (
@@ -47,7 +51,11 @@ export default function OtpScreen() {
             />
           ))}
         </View>
-        <Button icon={ArrowRight} disabled={!complete} onPress={() => router.replace("/dashboard")}>
+        <Button
+          icon={ArrowRight}
+          disabled={!complete}
+          onPress={() => router.replace(to("/dashboard"))}
+        >
           Verify & open dashboard
         </Button>
         <Button variant="ghost" icon={RotateCcw}>

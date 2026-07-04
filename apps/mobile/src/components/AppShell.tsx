@@ -1,4 +1,5 @@
 import { Slot, router, usePathname } from "expo-router";
+import { to } from "@/utils/routes";
 import {
   BarChart3,
   Bell,
@@ -120,7 +121,12 @@ export function AppShell() {
             </AppText>
           </View>
           <IconButton icon={Search} label="Search" onPress={() => setSearchOpen(true)} />
-          <Pressable accessibilityRole="button" accessibilityLabel="Open notifications" onPress={() => router.push("/notifications")} style={styles.headerIcon}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open notifications"
+            onPress={() => router.push(to("/notifications"))}
+            style={styles.headerIcon}
+          >
             <Bell size={18} color={colors.text2} />
             {unreadHint ? <View style={styles.unreadDot} /> : null}
           </Pressable>
@@ -134,12 +140,21 @@ export function AppShell() {
       <SafeAreaView edges={["bottom"]} style={styles.bottomSafe}>
         <View style={styles.bottomNav}>
           {PRIMARY_NAV.map((item) => (
-            <NavItem key={item.href} {...item} active={pathname === item.href || pathname.startsWith(`${item.href}/`)} />
+            <NavItem
+              key={item.href}
+              {...item}
+              active={pathname === item.href || pathname.startsWith(`${item.href}/`)}
+            />
           ))}
         </View>
       </SafeAreaView>
 
-      <Modal visible={drawerOpen} animationType="slide" transparent onRequestClose={() => setDrawerOpen(false)}>
+      <Modal
+        visible={drawerOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setDrawerOpen(false)}
+      >
         <View style={styles.drawerWrap}>
           <Pressable style={styles.drawerBackdrop} onPress={() => setDrawerOpen(false)} />
           <SafeAreaView style={styles.drawer} edges={["top", "bottom"]}>
@@ -162,25 +177,42 @@ export function AppShell() {
               </View>
             </Pressable>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.drawerBody}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.drawerBody}
+            >
               <DrawerGroup title="Navigation">
                 {[...PRIMARY_NAV, ...visibleSecondary].map((item) => (
-                  <DrawerLink key={item.href} item={item} active={pathname === item.href || pathname.startsWith(`${item.href}/`)} onClose={() => setDrawerOpen(false)} />
+                  <DrawerLink
+                    key={item.href}
+                    item={item}
+                    active={pathname === item.href || pathname.startsWith(`${item.href}/`)}
+                    onClose={() => setDrawerOpen(false)}
+                  />
                 ))}
               </DrawerGroup>
 
-              <DrawerGroup title={activeProfile.role === "Admin" ? "Role Workspaces" : "My Workspace"}>
+              <DrawerGroup
+                title={activeProfile.role === "Admin" ? "Role Workspaces" : "My Workspace"}
+              >
                 {activeProfile.role === "Admin" ? (
                   ROLE_LINKS.map((item) => (
                     <Pressable
                       key={item.href}
                       onPress={() => {
                         setDrawerOpen(false);
-                        router.push(item.href);
+                        router.push(to(item.href));
                       }}
-                      style={[styles.roleLink, pathname === item.href ? styles.roleLinkActive : null]}
+                      style={[
+                        styles.roleLink,
+                        pathname === item.href ? styles.roleLinkActive : null,
+                      ]}
                     >
-                      <AppText variant="small" color={pathname === item.href ? colors.foreground : colors.text2} style={{ fontWeight: "700" }}>
+                      <AppText
+                        variant="small"
+                        color={pathname === item.href ? colors.foreground : colors.text2}
+                        style={{ fontWeight: "700" }}
+                      >
                         {item.label}
                       </AppText>
                     </Pressable>
@@ -189,7 +221,13 @@ export function AppShell() {
                   <Pressable
                     onPress={() => {
                       setDrawerOpen(false);
-                      router.push(ROLE_WORKSPACE_PATHS[activeProfile.role as keyof typeof ROLE_WORKSPACE_PATHS]);
+                      router.push(
+                        to(
+                          ROLE_WORKSPACE_PATHS[
+                            activeProfile.role as keyof typeof ROLE_WORKSPACE_PATHS
+                          ],
+                        ),
+                      );
                     }}
                     style={styles.roleLink}
                   >
@@ -205,7 +243,7 @@ export function AppShell() {
               <Button variant="outline" icon={theme === "dark" ? Sun : Moon} onPress={toggleTheme}>
                 Toggle theme
               </Button>
-              <Button variant="ghost" onPress={() => router.replace("/login")}>
+              <Button variant="ghost" onPress={() => router.replace(to("/login"))}>
                 Sign out
               </Button>
             </View>
@@ -213,7 +251,12 @@ export function AppShell() {
         </View>
       </Modal>
 
-      <Modal visible={profileOpen} transparent animationType="slide" onRequestClose={() => setProfileOpen(false)}>
+      <Modal
+        visible={profileOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setProfileOpen(false)}
+      >
         <Pressable style={styles.modalBackdrop} onPress={() => setProfileOpen(false)} />
         <View style={styles.profileSheet}>
           <View style={styles.sheetHandle} />
@@ -230,12 +273,18 @@ export function AppShell() {
                 style={[styles.profileOption, active ? styles.profileOptionActive : null]}
               >
                 <View style={[styles.avatar, active ? styles.avatarActive : null]}>
-                  <AppText style={styles.avatarText} color={active ? colors.accentForeground : colors.foreground}>
+                  <AppText
+                    style={styles.avatarText}
+                    color={active ? colors.accentForeground : colors.foreground}
+                  >
                     {profile.initials}
                   </AppText>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <AppText color={active ? colors.accent : colors.foreground} style={{ fontWeight: "800" }}>
+                  <AppText
+                    color={active ? colors.accent : colors.foreground}
+                    style={{ fontWeight: "800" }}
+                  >
                     {profile.name}
                   </AppText>
                   <AppText variant="small" color={colors.text3}>
@@ -248,7 +297,12 @@ export function AppShell() {
         </View>
       </Modal>
 
-      <Modal visible={searchOpen} transparent animationType="fade" onRequestClose={() => setSearchOpen(false)}>
+      <Modal
+        visible={searchOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSearchOpen(false)}
+      >
         <SafeAreaView style={styles.searchOverlay}>
           <View style={styles.searchPanel}>
             <View style={styles.searchInputWrap}>
@@ -271,11 +325,30 @@ export function AppShell() {
   );
 }
 
-function NavItem({ href, label, icon: Icon, active }: { href: string; label: string; icon: LucideIcon; active: boolean }) {
+function NavItem({
+  href,
+  label,
+  icon: Icon,
+  active,
+}: {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  active: boolean;
+}) {
   return (
-    <Pressable accessibilityRole="button" onPress={() => router.push(href as any)} style={styles.navItem}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => router.push(to(href))}
+      style={styles.navItem}
+    >
       <Icon size={20} color={active ? colors.accent : colors.text3} />
-      <AppText variant="small" color={active ? colors.foreground : colors.text3} style={styles.navLabel} numberOfLines={1}>
+      <AppText
+        variant="small"
+        color={active ? colors.foreground : colors.text3}
+        style={styles.navLabel}
+        numberOfLines={1}
+      >
         {label}
       </AppText>
     </Pressable>
@@ -305,7 +378,7 @@ function DrawerLink({
     <Pressable
       onPress={() => {
         onClose();
-        router.push(item.href as any);
+        router.push(to(item.href));
       }}
       style={[styles.drawerLink, active ? styles.drawerLinkActive : null]}
     >
@@ -393,7 +466,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   drawerBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: "rgba(0,0,0,0.55)",
   },
   drawer: {

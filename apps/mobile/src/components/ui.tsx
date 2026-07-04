@@ -10,11 +10,14 @@ import {
   Text,
   TextInput,
   View,
+  type StyleProp,
   type TextInputProps,
+  type TextStyle,
   type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { alpha, colors, radius, typography } from "@/theme/tokens";
+import { to } from "@/utils/routes";
 
 export function Screen({
   children,
@@ -29,7 +32,10 @@ export function Screen({
   return (
     <SafeAreaView style={styles.screen} edges={["left", "right"]}>
       {scroll ? (
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           {content}
         </ScrollView>
       ) : (
@@ -50,7 +56,7 @@ export function AppText({
   children: ReactNode;
   variant?: "title" | "subtitle" | "body" | "small" | "eyebrow" | "data" | "stat";
   color?: string;
-  style?: ViewStyle | any;
+  style?: StyleProp<TextStyle>;
   numberOfLines?: number;
 }) {
   return (
@@ -95,7 +101,13 @@ export function Button({
 }) {
   const buttonStyle = buttonStyles[variant];
   const textColor =
-    variant === "primary" ? colors.accentForeground : variant === "danger" ? colors.destructive : variant === "success" ? colors.white : colors.foreground;
+    variant === "primary"
+      ? colors.accentForeground
+      : variant === "danger"
+        ? colors.destructive
+        : variant === "success"
+          ? colors.white
+          : colors.foreground;
   return (
     <Pressable
       accessibilityRole="button"
@@ -117,9 +129,22 @@ export function Button({
   );
 }
 
-export function IconButton({ icon: Icon, onPress, label }: { icon: LucideIcon; onPress?: () => void; label: string }) {
+export function IconButton({
+  icon: Icon,
+  onPress,
+  label,
+}: {
+  icon: LucideIcon;
+  onPress?: () => void;
+  label: string;
+}) {
   return (
-    <Pressable accessibilityLabel={label} accessibilityRole="button" onPress={onPress} style={styles.iconButton}>
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={styles.iconButton}
+    >
       <Icon size={18} color={colors.text2} />
     </Pressable>
   );
@@ -197,12 +222,24 @@ export function SegmentedTabs<T extends string>({
   onChange: (next: T) => void;
 }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.tabs}
+    >
       {tabs.map((tab) => {
         const active = value === tab;
         return (
-          <Pressable key={tab} onPress={() => onChange(tab)} style={[styles.tab, active ? styles.tabActive : null]}>
-            <AppText variant="small" color={active ? colors.foreground : colors.text2} style={styles.tabText}>
+          <Pressable
+            key={tab}
+            onPress={() => onChange(tab)}
+            style={[styles.tab, active ? styles.tabActive : null]}
+          >
+            <AppText
+              variant="small"
+              color={active ? colors.foreground : colors.text2}
+              style={styles.tabText}
+            >
               {tab}
             </AppText>
             {active ? <View style={styles.tabLine} /> : null}
@@ -238,10 +275,16 @@ export function Input(props: TextInputProps) {
 }
 
 export function TextArea(props: TextInputProps) {
-  return placeholderSafeInput({ ...props, multiline: true, textAlignVertical: "top" }, [styles.input, styles.textarea]);
+  return placeholderSafeInput({ ...props, multiline: true, textAlignVertical: "top" }, [
+    styles.input,
+    styles.textarea,
+  ]);
 }
 
-function placeholderSafeInput(props: TextInputProps, style = styles.input) {
+function placeholderSafeInput(
+  props: TextInputProps,
+  style: TextInputProps["style"] = styles.input,
+) {
   return (
     <TextInput
       placeholderTextColor={colors.text3}
@@ -268,7 +311,9 @@ export function KV({ label, value, mono }: { label: string; value: ReactNode; mo
 export function ProgressBar({ value, tone = colors.accent }: { value: number; tone?: string }) {
   return (
     <View style={styles.progressTrack}>
-      <View style={[styles.progressFill, { width: `${Math.min(value, 100)}%`, backgroundColor: tone }]} />
+      <View
+        style={[styles.progressFill, { width: `${Math.min(value, 100)}%`, backgroundColor: tone }]}
+      />
     </View>
   );
 }
@@ -290,7 +335,7 @@ export function BackLink({ label = "Back", href }: { label?: string; href?: stri
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={() => (href ? router.push(href as any) : router.back())}
+      onPress={() => (href ? router.push(to(href)) : router.back())}
       style={styles.backLink}
     >
       <AppText variant="small" color={colors.text2} style={{ fontWeight: "700" }}>
@@ -306,7 +351,10 @@ export function NativeList<T>({
   keyExtractor,
   ListEmptyComponent,
   contentContainerStyle,
-}: Pick<FlashListProps<T>, "data" | "renderItem" | "keyExtractor" | "ListEmptyComponent" | "contentContainerStyle">) {
+}: Pick<
+  FlashListProps<T>,
+  "data" | "renderItem" | "keyExtractor" | "ListEmptyComponent" | "contentContainerStyle"
+>) {
   return (
     <FlashList
       data={data}

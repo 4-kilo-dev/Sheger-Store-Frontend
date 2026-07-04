@@ -1,4 +1,6 @@
 import { router } from "expo-router";
+import { to } from "@/utils/routes";
+import type { LucideIcon } from "lucide-react-native";
 import {
   ArrowRight,
   BarChart3,
@@ -39,7 +41,16 @@ export default function DashboardScreen() {
     const totalInventory = INVENTORY.reduce((sum, item) => sum + item.total, 0);
     const availableInventory = INVENTORY.reduce((sum, item) => sum + item.available, 0);
     const onsiteInventory = INVENTORY.reduce((sum, item) => sum + item.onsite, 0);
-    return { thisMonth, revenue, onsite, upcoming, paid, totalInventory, availableInventory, onsiteInventory };
+    return {
+      thisMonth,
+      revenue,
+      onsite,
+      upcoming,
+      paid,
+      totalInventory,
+      availableInventory,
+      onsiteInventory,
+    };
   }, []);
 
   const featured = BOOKINGS.find((booking) => booking.status === "PREPARATION") ?? BOOKINGS[4];
@@ -54,16 +65,39 @@ export default function DashboardScreen() {
           <AppText variant="title">Dashboard</AppText>
           <AppText variant="subtitle">Bookings, equipment, and crew at a glance.</AppText>
         </View>
-        <Button variant="ghost" icon={ArrowRight} onPress={() => router.push("/bookings")}>
+        <Button variant="ghost" icon={ArrowRight} onPress={() => router.push(to("/bookings"))}>
           All bookings
         </Button>
       </View>
 
       <View style={styles.grid}>
-        <StatCard label="Bookings this month" value={stats.thisMonth.length} note={`${stats.paid} paid`} icon={CalendarRange} />
-        <StatCard label="Revenue" value={formatCompactCurrency(stats.revenue)} note="+14.2% from last month" icon={TrendingUp} tone={colors.success} />
-        <StatCard label="Screens onsite" value={stats.onsite.length} note="Active right now" icon={Package} tone={colors.status.ACCEPTED} />
-        <StatCard label="Assemblies this week" value={stats.upcoming.length} note="Next 7 days" icon={Clock} tone={colors.payment.ADVANCE} />
+        <StatCard
+          label="Bookings this month"
+          value={stats.thisMonth.length}
+          note={`${stats.paid} paid`}
+          icon={CalendarRange}
+        />
+        <StatCard
+          label="Revenue"
+          value={formatCompactCurrency(stats.revenue)}
+          note="+14.2% from last month"
+          icon={TrendingUp}
+          tone={colors.success}
+        />
+        <StatCard
+          label="Screens onsite"
+          value={stats.onsite.length}
+          note="Active right now"
+          icon={Package}
+          tone={colors.status.ACCEPTED}
+        />
+        <StatCard
+          label="Assemblies this week"
+          value={stats.upcoming.length}
+          note="Next 7 days"
+          icon={Clock}
+          tone={colors.payment.ADVANCE}
+        />
       </View>
 
       <View style={styles.quickGrid}>
@@ -84,12 +118,24 @@ export default function DashboardScreen() {
           <StatusBadge status={featured.status} />
         </View>
         <StatusStepper current={featured.status} />
-        <Button variant="outline" icon={ArrowRight} onPress={() => router.push(`/bookings/${featured.code}`)}>
+        <Button
+          variant="outline"
+          icon={ArrowRight}
+          onPress={() => router.push(to(`/bookings/${featured.code}`))}
+        >
           Open booking
         </Button>
       </Card>
 
-      <Section title="Equipment pool" icon={Package} action={<Button variant="ghost" onPress={() => router.push("/inventory")}>View</Button>}>
+      <Section
+        title="Equipment pool"
+        icon={Package}
+        action={
+          <Button variant="ghost" onPress={() => router.push(to("/inventory"))}>
+            View
+          </Button>
+        }
+      >
         <View style={styles.poolRow}>
           <View style={styles.poolGauge}>
             <AppText variant="stat">{pct(stats.availableInventory, stats.totalInventory)}%</AppText>
@@ -109,10 +155,22 @@ export default function DashboardScreen() {
         </View>
       </Section>
 
-      <Section title="Recent bookings" icon={CalendarRange} action={<Button variant="ghost" onPress={() => router.push("/bookings")}>All</Button>}>
+      <Section
+        title="Recent bookings"
+        icon={CalendarRange}
+        action={
+          <Button variant="ghost" onPress={() => router.push(to("/bookings"))}>
+            All
+          </Button>
+        }
+      >
         <View style={{ gap: 12 }}>
           {recent.map((booking) => (
-            <Pressable key={booking.code} onPress={() => router.push(`/bookings/${booking.code}`)} style={styles.compactRow}>
+            <Pressable
+              key={booking.code}
+              onPress={() => router.push(to(`/bookings/${booking.code}`))}
+              style={styles.compactRow}
+            >
               <View style={{ flex: 1 }}>
                 <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
                   {booking.code}
@@ -144,10 +202,20 @@ export default function DashboardScreen() {
   );
 }
 
-function QuickAction({ label, href, icon: Icon, accent }: { label: string; href: string; icon: any; accent?: boolean }) {
+function QuickAction({
+  label,
+  href,
+  icon: Icon,
+  accent,
+}: {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  accent?: boolean;
+}) {
   return (
     <Pressable
-      onPress={() => router.push(href as any)}
+      onPress={() => router.push(to(href))}
       style={[styles.quickAction, accent ? styles.quickActionAccent : null]}
     >
       <View style={[styles.quickIcon, accent ? styles.quickIconAccent : null]}>

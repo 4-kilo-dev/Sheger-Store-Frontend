@@ -26,7 +26,9 @@ export function StatusBadge({ status, large = false }: { status: BookingStatus; 
 export function PaymentBadge({ status }: { status: PaymentStatus }) {
   const tone = colors.payment[status];
   return (
-    <View style={[styles.badge, { borderColor: alpha(tone, 0.45), backgroundColor: alpha(tone, 0.16) }]}>
+    <View
+      style={[styles.badge, { borderColor: alpha(tone, 0.45), backgroundColor: alpha(tone, 0.16) }]}
+    >
       <AppText variant="eyebrow" color={tone} style={styles.badgeText}>
         {status}
       </AppText>
@@ -36,7 +38,9 @@ export function PaymentBadge({ status }: { status: PaymentStatus }) {
 
 export function ToneBadge({ label, tone = colors.accent }: { label: string; tone?: string }) {
   return (
-    <View style={[styles.badge, { borderColor: alpha(tone, 0.42), backgroundColor: alpha(tone, 0.12) }]}>
+    <View
+      style={[styles.badge, { borderColor: alpha(tone, 0.42), backgroundColor: alpha(tone, 0.12) }]}
+    >
       <AppText variant="eyebrow" color={tone} style={styles.badgeText}>
         {label}
       </AppText>
@@ -58,7 +62,10 @@ export function StatusStepper({ current }: { current: BookingStatus }) {
               <View
                 style={[
                   styles.line,
-                  { backgroundColor: itemIndex === 0 ? "transparent" : itemIndex <= index ? tone : colors.border },
+                  {
+                    backgroundColor:
+                      itemIndex === 0 ? "transparent" : itemIndex <= index ? tone : colors.border,
+                  },
                 ]}
               />
               <View
@@ -73,7 +80,11 @@ export function StatusStepper({ current }: { current: BookingStatus }) {
                 {done ? (
                   <Check size={13} color={colors.background} strokeWidth={3} />
                 ) : (
-                  <AppText variant="small" color={active ? tone : colors.text3} style={styles.stepNumber}>
+                  <AppText
+                    variant="small"
+                    color={active ? tone : colors.text3}
+                    style={styles.stepNumber}
+                  >
                     {itemIndex + 1}
                   </AppText>
                 )}
@@ -83,12 +94,21 @@ export function StatusStepper({ current }: { current: BookingStatus }) {
                   styles.line,
                   {
                     backgroundColor:
-                      itemIndex === STATUS_ORDER.length - 1 ? "transparent" : itemIndex < index ? tone : colors.border,
+                      itemIndex === STATUS_ORDER.length - 1
+                        ? "transparent"
+                        : itemIndex < index
+                          ? tone
+                          : colors.border,
                   },
                 ]}
               />
             </View>
-            <AppText variant="eyebrow" color={done || active ? tone : colors.text3} style={styles.stepLabel} numberOfLines={1}>
+            <AppText
+              variant="eyebrow"
+              color={done || active ? tone : colors.text3}
+              style={styles.stepLabel}
+              numberOfLines={1}
+            >
               {STATUS_LABELS[status]}
             </AppText>
           </View>

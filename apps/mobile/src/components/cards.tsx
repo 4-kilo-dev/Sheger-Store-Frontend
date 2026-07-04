@@ -6,11 +6,23 @@ import type { Booking, InventoryItem, StaffMember } from "@/types/domain";
 import { formatCurrency, pct } from "@/utils/format";
 import { AppText, Card, KV, ProgressBar } from "@/components/ui";
 import { PaymentBadge, StatusBadge, ToneBadge } from "@/components/status";
+import { push } from "@/utils/routes";
+import type { LucideIcon } from "lucide-react-native";
 
-export function BookingCard({ booking, selectable, selected, onToggle }: { booking: Booking; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
+export function BookingCard({
+  booking,
+  selectable,
+  selected,
+  onToggle,
+}: {
+  booking: Booking;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggle?: () => void;
+}) {
   return (
     <Pressable
-      onPress={() => router.push(`/bookings/${booking.code}`)}
+      onPress={() => push(`/bookings/${booking.code}`)}
       style={[styles.cardPress, selected ? styles.selectedCard : null]}
     >
       <View style={styles.cardHeader}>
@@ -37,8 +49,15 @@ export function BookingCard({ booking, selectable, selected, onToggle }: { booki
         </AppText>
       </View>
       {selectable ? (
-        <Pressable onPress={onToggle} style={[styles.selectButton, selected ? styles.selectButtonActive : null]}>
-          <AppText variant="small" color={selected ? colors.accentForeground : colors.text2} style={{ fontWeight: "800" }}>
+        <Pressable
+          onPress={onToggle}
+          style={[styles.selectButton, selected ? styles.selectButtonActive : null]}
+        >
+          <AppText
+            variant="small"
+            color={selected ? colors.accentForeground : colors.text2}
+            style={{ fontWeight: "800" }}
+          >
             {selected ? "Selected" : "Select"}
           </AppText>
         </Pressable>
@@ -49,9 +68,14 @@ export function BookingCard({ booking, selectable, selected, onToggle }: { booki
 
 export function InventoryCard({ item }: { item: InventoryItem }) {
   const utilized = pct(item.reserved + item.onsite, item.total);
-  const tone = item.condition === "DAMAGED" ? colors.destructive : item.condition === "SERVICE DUE" ? colors.payment.ADVANCE : colors.success;
+  const tone =
+    item.condition === "DAMAGED"
+      ? colors.destructive
+      : item.condition === "SERVICE DUE"
+        ? colors.payment.ADVANCE
+        : colors.success;
   return (
-    <Pressable onPress={() => router.push(`/inventory/${item.id}`)} style={styles.cardPress}>
+    <Pressable onPress={() => push(`/inventory/${item.id}`)} style={styles.cardPress}>
       <View style={styles.cardHeader}>
         <View style={{ flex: 1 }}>
           <AppText style={styles.cardTitle}>{item.name}</AppText>
@@ -119,7 +143,11 @@ export function StaffCard({ staff }: { staff: StaffMember }) {
           <AppText variant="small" color={colors.text3}>
             Workload
           </AppText>
-          <AppText variant="data" color={workload > 80 ? colors.destructive : colors.accent} style={{ fontWeight: "900" }}>
+          <AppText
+            variant="data"
+            color={workload > 80 ? colors.destructive : colors.accent}
+            style={{ fontWeight: "900" }}
+          >
             {staff.jobs}/{staff.capacity} jobs ({workload}%)
           </AppText>
         </View>
@@ -129,7 +157,7 @@ export function StaffCard({ staff }: { staff: StaffMember }) {
   );
 }
 
-function InfoLine({ icon: Icon, text, mono }: { icon: any; text: string; mono?: boolean }) {
+function InfoLine({ icon: Icon, text, mono }: { icon: LucideIcon; text: string; mono?: boolean }) {
   return (
     <View style={styles.infoLine}>
       <Icon size={13} color={colors.text3} />

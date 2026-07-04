@@ -35,5 +35,8 @@ export function useNotifications() {
 }
 
 export function useReportMonths() {
-  return useQuery({ queryKey: ["mobile", "reports", "months"], queryFn: operationsService.getReportMonths });
+  return useQuery({
+    queryKey: ["mobile", "reports", "months"],
+    queryFn: operationsService.getReportMonths,
+  });
 }

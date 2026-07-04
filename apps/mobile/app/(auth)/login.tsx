@@ -1,4 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { to } from "@/utils/routes";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ArrowRight, LockKeyhole } from "lucide-react-native";
@@ -21,7 +22,10 @@ export default function LoginScreen() {
   });
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.screen}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={styles.screen}
+    >
       <StatusBar style="light" />
       <View style={styles.hero}>
         <BrandMark />
@@ -33,7 +37,8 @@ export default function LoginScreen() {
             Every screen. Every crew. One clear operation.
           </AppText>
           <AppText variant="subtitle" style={{ marginTop: 12 }}>
-            Coordinate bookings, warehouse movement, installations, and client delivery from a single control room.
+            Coordinate bookings, warehouse movement, installations, and client delivery from a
+            single control room.
           </AppText>
         </View>
         <AppText variant="small" color={colors.text3}>
@@ -46,7 +51,9 @@ export default function LoginScreen() {
         <AppText variant="title" style={{ fontSize: 24 }}>
           Sign in to operations
         </AppText>
-        <AppText variant="subtitle">Use your staff phone number to receive a one-time code.</AppText>
+        <AppText variant="subtitle">
+          Use your staff phone number to receive a one-time code.
+        </AppText>
         <Controller
           control={control}
           name="phone"
@@ -61,7 +68,7 @@ export default function LoginScreen() {
             </Field>
           )}
         />
-        <Button icon={ArrowRight} onPress={handleSubmit(() => router.push("/otp"))}>
+        <Button icon={ArrowRight} onPress={handleSubmit(() => router.push(to("/otp")))}>
           Continue
         </Button>
         <AppText variant="small" color={colors.text3} style={{ textAlign: "center" }}>

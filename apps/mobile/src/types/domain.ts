@@ -10,13 +10,7 @@ export type BookingStatus =
 
 export type PaymentStatus = "PAID" | "ADVANCE" | "UNPAID";
 
-export type ScreenType =
-  | "P2.97"
-  | "P4"
-  | "P5"
-  | "P2.97-New"
-  | "P3.91 INDOOR"
-  | "P3.91 OUTDOOR";
+export type ScreenType = "P2.97" | "P4" | "P5" | "P2.97-New" | "P3.91 INDOOR" | "P3.91 OUTDOOR";
 
 export interface BomItem {
   id: string;
@@ -92,7 +86,8 @@ export interface StaffMember {
 }
 
 export type NotificationPriority = "URGENT" | "NORMAL" | "LOW";
-export type NotificationType = "Booking" | "Inventory" | "Payment" | "Damage" | "Schedule" | "System";
+export type NotificationType =
+  "Booking" | "Inventory" | "Payment" | "Damage" | "Schedule" | "System";
 
 export interface Notification {
   id: string;
