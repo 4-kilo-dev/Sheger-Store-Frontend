@@ -684,3 +684,77 @@ export const MONTHS = [
   { m: "May", revenue: 1285000, bookings: 17 },
   { m: "Jun", revenue: 1840000, bookings: 24 },
 ];
+
+export interface PerformanceMetric {
+  id: string;
+  key: string;
+  label: string;
+  description: string;
+  category: "internal" | "client_feedback";
+  valueType: "boolean" | "rating_10" | "rating_5" | "percentage";
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export const PERFORMANCE_METRICS: PerformanceMetric[] = [
+  {
+    id: "pm-1",
+    key: "setup_quality",
+    label: "Setup quality",
+    description: "Overall build quality of the LED wall and rigging.",
+    category: "internal",
+    valueType: "rating_10",
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: "pm-2",
+    key: "ppe_compliance",
+    label: "PPE compliance",
+    description: "Crew wore required protective equipment onsite.",
+    category: "internal",
+    valueType: "boolean",
+    sortOrder: 2,
+    isActive: true,
+  },
+  {
+    id: "pm-3",
+    key: "signal_stability",
+    label: "Signal stability",
+    description: "No dropouts or flicker during the event.",
+    category: "internal",
+    valueType: "boolean",
+    sortOrder: 3,
+    isActive: true,
+  },
+  {
+    id: "pm-4",
+    key: "punctuality",
+    label: "Crew punctuality",
+    description: "Team arrived and completed setup on schedule.",
+    category: "internal",
+    valueType: "rating_5",
+    sortOrder: 4,
+    isActive: false,
+  },
+  {
+    id: "pm-5",
+    key: "client_satisfaction",
+    label: "Client satisfaction",
+    description: "Client's overall satisfaction with delivery.",
+    category: "client_feedback",
+    valueType: "rating_10",
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: "pm-6",
+    key: "would_rebook",
+    label: "Would rebook",
+    description: "Client indicated they would book Vortex Visual again.",
+    category: "client_feedback",
+    valueType: "boolean",
+    sortOrder: 2,
+    isActive: true,
+  },
+];
