@@ -6,6 +6,7 @@ import { FilterDropdown, SortButton } from "@/components/filter-dropdown";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { useQuery } from "@tanstack/react-query";
 import { getBookingsApi, STATUS_ORDER, STATUS_LABELS, type Booking, type BookingStatus, type PaymentStatus, type ScreenType } from "@/features/bookings/services/bookings.api";
+import { useAuthUser } from "@/hooks/use-auth-user";
 
 const _Route = createFileRoute("/bookings/")({
   head: () => ({
@@ -21,10 +22,12 @@ const TABS = ["All", "This Week", "Upcoming", "Onsite", "Last Week", "Assigned t
 
 const ALL_STATUSES = STATUS_ORDER.map((s) => STATUS_LABELS[s]);
 const ALL_SCREEN_TYPES: ScreenType[] = ["P2.97", "P2.97-New", "P3.91 INDOOR", "P3.91 OUTDOOR", "P4", "P5"];
+const ALL_SCREEN_TYPES_SET = new Set(ALL_SCREEN_TYPES);
 const ALL_PAYMENTS: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
 
 export function BookingsIndex() {
   const navigate = useNavigate();
+  const authUser = useAuthUser();
   const searchParams = useRouterState({ select: (s) => s.location.search }) as any;
   const query = searchParams.q || "";
   const setQuery = (val: string) => {
@@ -87,7 +90,7 @@ export function BookingsIndex() {
         return d >= startOfLastWeek && d <= endOfLastWeek;
       });
     }
-    if (tab === "Assigned to Me") r = r.filter((b) => b.assignees.includes("Nathan") || b.assignees.includes("Yeabtsega"));
+    if (tab === "Assigned to Me") r = r.filter((b) => b.assignees.includes(authUser?.name || ""));
 
     // Search
     if (query) {

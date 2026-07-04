@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Search, UserCheck, Users, Radio, BriefcaseBusiness, Phone, Calendar, ChevronDown, Filter } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { STAFF, STAFF_ROLES } from "@/features/checkout/services/operations.api";
+import { STAFF_ROLES } from "@/features/checkout/services/operations.api";
 import { AddStaffModal } from "../components/AddStaffModal";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStaffApi, resetPasswordApi, toggleUserActiveApi } from "@/features/users/services/staff.api";
@@ -33,7 +33,7 @@ export function StaffPage() {
   const isAdmin = activeProfile.role === "Admin";
   const queryClient = useQueryClient();
 
-  const { data: staffList = STAFF } = useQuery({
+  const { data: staffList = [] } = useQuery({
     queryKey: ["staff"],
     queryFn: getStaffApi,
   });

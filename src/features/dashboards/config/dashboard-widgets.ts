@@ -11,6 +11,10 @@ export type WidgetId =
   | "screen-availability"
   | "onsite-deployments";
 
+
+
+
+
 export interface WidgetMeta {
   id: WidgetId;
   title: string;
@@ -30,30 +34,49 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetMeta> = {
 };
 
 // Maps backend role keys to ordered widget lists
-export const ROLE_LAYOUTS: Record<string, WidgetId[]> = {
-  admin: [
-    "stats-overview",
-    "quick-actions",
-    "featured-booking",
-    "equipment-pool",
-    "pending-tasks",
-    "recent-bookings",
-    "onsite-deployments",
-  ],
-  supervisor: [
-    "stats-overview",
-    "quick-actions",
-    "featured-booking",
-    "equipment-pool",
-    "pending-tasks",
-    "recent-bookings",
-    "onsite-deployments",
-  ],
-  ccr: ["stats-overview", "quick-actions", "booking-queues"],
-  chief_tech: ["stats-overview", "booking-queues", "screen-availability"],
-  technician: ["stats-overview", "booking-queues"],
-  oo: ["stats-overview", "booking-queues", "onsite-deployments"],
-  storekeeper: ["stats-overview", "quick-actions", "equipment-pool", "booking-queues"],
-  stagehand: ["stats-overview", "booking-queues"],
-  freelancer: ["stats-overview", "booking-queues"],
+export interface RoleLayoutConfig {
+  widgets: WidgetId[];
+  title?: string;
+  eyebrow?: string;
+  description?: string;
+}
+
+export const ROLE_LAYOUTS: Record<string, RoleLayoutConfig> = {
+  admin: {
+    widgets: ["stats-overview", "quick-actions", "featured-booking", "equipment-pool", "recent-bookings", "onsite-deployments"],
+    eyebrow: "Today's operations",
+    title: "Dashboard",
+    description: "Bookings, equipment, and crew at a glance."
+  },
+  ccr: {
+    widgets: ["stats-overview", "quick-actions", "booking-queues"],
+    eyebrow: "Client relations",
+    title: "Booking Intake & Payments",
+    description: "Confirm reservations and follow up on outstanding payments."
+  },
+  chief_tech: {
+    widgets: ["stats-overview", "booking-queues", "screen-availability"],
+    eyebrow: "Technical operations",
+    title: "Screen Config & Crew Assignment",
+    description: "Review confirmed bookings, verify screen specs, and assign lead technicians."
+  },
+  storekeeper: {
+    widgets: ["stats-overview", "quick-actions", "booking-queues"],
+    eyebrow: "Warehouse",
+    title: "Inventory & Check-ins",
+    description: "Verify equipment returns, process check-outs, and flag damage."
+  },
+  oo: {
+    widgets: ["stats-overview", "booking-queues", "onsite-deployments"],
+    eyebrow: "Logistics & dispatch",
+    title: "Transport, Crew & Site Ops",
+    description: "Dispatch teams and vehicles, manage onsite operations, and approve meal budgets."
+  },
+  technician: {
+    widgets: ["stats-overview", "booking-queues"],
+    eyebrow: "Field operations",
+    title: "Your Assignments & Prep",
+    description: "Accept assigned bookings, prepare the bill of materials, and run your field setups."
+  }
+  // Any role not in this list will automatically fallback to the generic layout!
 };
