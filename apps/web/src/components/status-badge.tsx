@@ -1,4 +1,4 @@
-import type { BookingStatus, PaymentStatus } from "@/lib/mock-bookings";
+import type { BookingStatus, PaymentStatus } from "@/features/bookings/services/bookings.api";
 
 const STATUS_VAR: Record<BookingStatus, string> = {
   RESERVED: "var(--color-status-reserved)",
@@ -9,6 +9,8 @@ const STATUS_VAR: Record<BookingStatus, string> = {
   ONSITE: "var(--color-status-onsite)",
   COMPLETED: "var(--color-status-completed)",
   DONE: "var(--color-status-done)",
+  CANCELED: "var(--color-status-canceled)",
+  PARTIALLY_RETURNED: "var(--color-status-partially-returned)",
 };
 
 const PAY_VAR: Record<PaymentStatus, string> = {

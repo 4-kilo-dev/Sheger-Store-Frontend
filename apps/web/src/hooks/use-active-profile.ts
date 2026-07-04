@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 
 export interface Profile {
   name: string;
-  role: "Admin" | "CCR" | "CTO" | "TO" | "OO" | "SK";
+  role: "Admin" | "CCR" | "CTO" | "TO" | "OO" | "SK" | "SH" | "FL";
   initials: string;
   color: string;
 }
@@ -17,21 +17,21 @@ export const PROFILES: Profile[] = [
 ];
 
 export function useActiveProfile() {
-  const [profile, setProfileState] = useState<Profile>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("vortex_active_profile");
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          const found = PROFILES.find((p) => p.role === parsed.role);
-          if (found) return found;
-        } catch (e) {
-          // ignore
-        }
+  // Initialize with default to ensure SSR and initial client render match perfectly
+  const [profile, setProfileState] = useState<Profile>(PROFILES[0]);
+
+  useEffect(() => {
+    // Read from localStorage only after the component mounts
+    const saved = localStorage.getItem("vortex_active_profile");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.role) setProfileState(parsed);
+      } catch (e) {
+        // ignore
       }
     }
-    return PROFILES[0]; // default Admin
-  });
+  }, []);
 
   const setProfile = (newProfile: Profile) => {
     setProfileState(newProfile);
@@ -45,8 +45,7 @@ export function useActiveProfile() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          const found = PROFILES.find((p) => p.role === parsed.role);
-          if (found) setProfileState(found);
+          if (parsed && parsed.role) setProfileState(parsed);
         } catch (e) {
           // ignore
         }

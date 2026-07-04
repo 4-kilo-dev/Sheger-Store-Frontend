@@ -6,11 +6,13 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  redirect,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
-import appCss from "../styles.css?url";
+import appCss from "../styles/styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { authStorage } from "../lib/api/client";
 
 function NotFoundComponent() {
   return (
@@ -92,6 +94,32 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" },
     ],
   }),
+  beforeLoad: ({ location }) => {
+    // Skip auth checks on the server-side (SSR). The browser's localStorage is only accessible on the client.
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const token = authStorage.getToken();
+    const isPublicRoute = ["/login", "/otp"].includes(location.pathname);
+    
+    // Treat stringified undefined/null as falsy
+    const hasValidToken = !!(token && token !== "undefined" && token !== "null");
+
+    if (!hasValidToken && !isPublicRoute) {
+      throw redirect({
+        to: "/login",
+        search: {
+          redirect: location.href,
+        },
+      });
+    }
+    if (hasValidToken && isPublicRoute) {
+      throw redirect({
+        to: "/",
+      });
+    }
+  },
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
@@ -100,9 +128,25 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                const theme = localStorage.getItem('vortex_theme') || 'dark';
+                if (theme === 'light') {
+                  document.documentElement.classList.add('light');
+                  document.documentElement.classList.remove('dark');
+                } else {
+                  document.documentElement.classList.add('dark');
+                  document.documentElement.classList.remove('light');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
       </head>
       <body>
         {children}
@@ -112,13 +156,19 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+import { Toaster } from "../components/ui/sonner";
+import { NotificationsProvider } from "@/features/notifications/context/NotificationsContext";
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <NotificationsProvider>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+        <Toaster theme="dark" closeButton />
+      </NotificationsProvider>
     </QueryClientProvider>
   );
 }
