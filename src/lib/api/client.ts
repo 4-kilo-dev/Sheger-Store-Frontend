@@ -84,6 +84,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      authStorage.clearToken();
+      authStorage.clearUser();
+      if (isBrowser && !window.location.pathname.startsWith("/login")) {
+        // Redirect to login page and preserve current path
+        window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+      }
+    }
     const errorMessage = (data && typeof data === "object" && (data.message || data.error)) || response.statusText || "Request failed";
     throw new ApiError(
       Array.isArray(errorMessage) ? errorMessage.join(", ") : String(errorMessage),

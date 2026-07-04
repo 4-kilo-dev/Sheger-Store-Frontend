@@ -3,8 +3,8 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Building2, MapPin, Calendar, User, Phone, Package,
-  Users, DollarSign, CheckCircle2, Save, Wrench, MessageSquare,
+  ArrowLeft, Building2, MapPin, Calendar, User, Phone,
+  CheckCircle2, Save, Wrench, MessageSquare,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { createBookingApi } from "@/features/bookings/services/bookings.api";
@@ -21,11 +21,8 @@ const _Route = createFileRoute("/bookings/new")({
 
 const STEPS = [
   { k: "client", label: "Client", icon: Building2 },
-  { k: "consult", label: "CTO Consult", icon: Wrench },
   { k: "venue", label: "Venue & Date", icon: MapPin },
-  { k: "screen", label: "Screen Spec", icon: Package },
-  { k: "team", label: "Team", icon: Users },
-  { k: "payment", label: "Payment", icon: DollarSign },
+  { k: "intake", label: "Intake Requirements", icon: Wrench },
   { k: "review", label: "Review", icon: CheckCircle2 },
 ] as const;
 
@@ -35,20 +32,22 @@ export function NewBooking() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     client: "", contactPerson: "", contactPhone: "",
-    ctoConsulted: false, ctoNotes: "", screensAvailable: 3, ctoArrangement: "",
-    venue: "", assemblyDate: "", eventDate: "",
-    screenType: "P4", size: 0, arrangement: "",
-    chief: "", technician: "", stageHand: "TEAM 1 · Abel",
-    amount: 0, paymentTerms: "ADVANCE",
+    venue: "", assemblyDate: "", eventDate: "", dismantleDate: "",
+    itemServiceSpec: "", notes: "",
+    amount: 0, paymentTerms: "UNPAID",
   });
   const set = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
   const { mutate: createBooking, isPending } = useMutation({
     mutationFn: createBookingApi,
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       toast.success("Booking created successfully!");
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
-      navigate({ to: "/bookings" });
+      if (data?.code) {
+        navigate({ to: "/bookings/$code", params: { code: data.code } });
+      } else {
+        navigate({ to: "/bookings" });
+      }
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to create booking");
@@ -140,192 +139,64 @@ export function NewBooking() {
             </Group>
           )}
 
-          {/* Step 1: CTO Consultation (SOP §1.2-1.3) */}
+          {/* Step 1: Venue & Date */}
           {step === 1 && (
-            <Group title="CTO Consultation" icon={Wrench}>
-              <div className="rounded-md border p-4 mb-4" style={{ borderColor: "var(--accent)", background: "color-mix(in oklab, var(--accent) 6%, transparent)" }}>
-                <div className="flex items-center gap-2 text-[12px] font-bold" style={{ color: "var(--accent)" }}>
-                  <Wrench className="h-4 w-4" />
-                  SOP §1.2 — Consult Chief Technical Officer
-                </div>
-                <p className="mt-1 text-[11px]" style={{ color: "var(--text-2)" }}>
-                  Contact the CTO to confirm screen availability for the requested dates and get arrangement guidance.
-                </p>
-              </div>
-
-              <Field label="Screen Availability (units available)">
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { type: "P2.97", avail: 128 },
-                    { type: "P4", avail: 20 },
-                    { type: "P3.91 INDOOR", avail: 72 },
-                    { type: "P3.91 OUTDOOR", avail: 72 },
-                    { type: "P2.97-New", avail: 128 },
-                    { type: "P5", avail: 48 },
-                  ].map(({ type, avail }) => (
-                    <div key={type} className="rounded-md border p-2.5" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
-                      <div className="font-mono text-[11px] font-bold">{type}</div>
-                      <div className="mt-1 text-[14px] font-bold" style={{ color: avail > 30 ? "var(--color-bom-returned)" : "var(--color-pay-advance)" }}>
-                        {avail} <span className="text-[9px] font-normal" style={{ color: "var(--text-3)" }}>panels</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Field>
-
-              <Field label="CTO Arrangement Suggestions" icon={MessageSquare}>
-                <textarea
-                  value={form.ctoArrangement}
-                  onChange={(e) => set("ctoArrangement", e.target.value)}
-                  placeholder="CTO arrangement notes, e.g. 'Recommend 2-stack horizontal, P2.97 for indoor venue...'"
-                  rows={3}
-                  className="h-auto w-full rounded-md border bg-[var(--surface-2)] p-3 text-[13px] outline-none placeholder:text-[var(--text-3)] focus:border-[var(--accent)]"
-                  style={{ borderColor: "var(--border)" }}
-                />
-              </Field>
-
-              <Field label="CTO Notes / Special Guidance">
-                <textarea
-                  value={form.ctoNotes}
-                  onChange={(e) => set("ctoNotes", e.target.value)}
-                  placeholder="e.g. 'HDMI to SDI converter needed. Backup PSU on standby.'"
-                  rows={2}
-                  className="h-auto w-full rounded-md border bg-[var(--surface-2)] p-3 text-[13px] outline-none placeholder:text-[var(--text-3)] focus:border-[var(--accent)]"
-                  style={{ borderColor: "var(--border)" }}
-                />
-              </Field>
-
-              <div className="flex items-center gap-3 mt-2">
-                <button
-                  onClick={() => set("ctoConsulted", !form.ctoConsulted)}
-                  className="flex items-center gap-2 rounded-md border px-4 py-2 text-[12px] font-semibold transition"
-                  style={{
-                    borderColor: form.ctoConsulted ? "var(--color-bom-returned)" : "var(--border)",
-                    background: form.ctoConsulted ? "color-mix(in oklab, var(--color-bom-returned) 12%, transparent)" : "transparent",
-                    color: form.ctoConsulted ? "var(--color-bom-returned)" : "var(--text-2)",
-                  }}
-                >
-                  {form.ctoConsulted ? <CheckCircle2 className="h-4 w-4" /> : <div className="h-4 w-4 rounded-full border-2" style={{ borderColor: "var(--border)" }} />}
-                  CTO Consultation Completed
-                </button>
-              </div>
-            </Group>
-          )}
-
-          {/* Step 2: Venue & Date */}
-          {step === 2 && (
             <Group title="Venue & Date" icon={MapPin}>
               <Field label="Venue / Location">
                 <input value={form.venue} onChange={(e) => set("venue", e.target.value)} placeholder="e.g. Millennium Hall" className={inputCls} />
               </Field>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <Field label="Assembly Date" icon={Calendar}>
                   <input type="date" value={form.assemblyDate} onChange={(e) => set("assemblyDate", e.target.value)} className={inputCls} />
                 </Field>
                 <Field label="Event Date" icon={Calendar}>
                   <input type="date" value={form.eventDate} onChange={(e) => set("eventDate", e.target.value)} className={inputCls} />
                 </Field>
+                <Field label="Dismantle Date" icon={Calendar}>
+                  <input type="date" value={form.dismantleDate} onChange={(e) => set("dismantleDate", e.target.value)} className={inputCls} />
+                </Field>
               </div>
             </Group>
           )}
 
-          {/* Step 3: Screen Spec */}
+          {/* Step 2: Intake Requirements */}
+          {step === 2 && (
+            <Group title="Intake Requirements" icon={Wrench}>
+              <Field label="Screen Specification (Text Description)">
+                <input
+                  value={form.itemServiceSpec}
+                  onChange={(e) => set("itemServiceSpec", e.target.value)}
+                  placeholder="e.g. 48sqm of P3.9 Outdoor LED panel"
+                  className={inputCls}
+                />
+              </Field>
+
+              <Field label="Intake Notes / Client Guidance" icon={MessageSquare}>
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => set("notes", e.target.value)}
+                  placeholder="e.g. Client wants wide stage setup, curve layout if possible."
+                  rows={4}
+                  className="h-auto w-full rounded-md border bg-[var(--surface-2)] p-3 text-[13px] outline-none placeholder:text-[var(--text-3)] focus:border-[var(--accent)]"
+                  style={{ borderColor: "var(--border)" }}
+                />
+              </Field>
+            </Group>
+          )}
+
+          {/* Step 3: Review */}
           {step === 3 && (
-            <Group title="Screen Specification" icon={Package}>
-              <Field label="Screen Type">
-                <div className="grid grid-cols-3 gap-2">
-                  {["P2.97", "P4", "P5", "P2.97-New", "P3.91 INDOOR", "P3.91 OUTDOOR"].map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => set("screenType", t)}
-                      className="rounded-md border px-3 py-2 text-[12px] font-mono font-semibold transition"
-                      style={{
-                        borderColor: form.screenType === t ? "var(--accent)" : "var(--border)",
-                        background: form.screenType === t ? "color-mix(in oklab, var(--accent) 12%, transparent)" : "var(--surface-2)",
-                        color: form.screenType === t ? "var(--accent)" : "var(--text-2)",
-                      }}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Size (sqm)">
-                  <input type="number" value={form.size} onChange={(e) => set("size", +e.target.value)} className={inputCls} />
-                </Field>
-                <Field label="Arrangement (W x H)">
-                  <input value={form.arrangement} onChange={(e) => set("arrangement", e.target.value)} className={inputCls} />
-                </Field>
-              </div>
-            </Group>
-          )}
-
-          {/* Step 4: Team */}
-          {step === 4 && (
-            <Group title="Team Assignment" icon={Users}>
-              <Field label="Chief Technician">
-                <select value={form.chief} onChange={(e) => set("chief", e.target.value)} className={inputCls}>
-                  <option value="">— Select —</option>
-                  {["Bereket Alemu", "Robel Hailu"].map((p) => <option key={p}>{p}</option>)}
-                </select>
-              </Field>
-              <Field label="Technician">
-                <select value={form.technician} onChange={(e) => set("technician", e.target.value)} className={inputCls}>
-                  <option value="">— Select —</option>
-                  {["Yeabtsega", "Dawit Mekonnen", "Yonas Kebede", "Mahlet Girma"].map((p) => <option key={p}>{p}</option>)}
-                </select>
-              </Field>
-              <Field label="Stage Hand Team">
-                <select value={form.stageHand} onChange={(e) => set("stageHand", e.target.value)} className={inputCls}>
-                  {["TEAM 1 · Abel", "TEAM 2 · Mesfin", "TEAM 3 · Henok", "TEAM 4 · Solomon", "TEAM 5 · Tewodros"].map((p) => <option key={p}>{p}</option>)}
-                </select>
-              </Field>
-            </Group>
-          )}
-
-          {/* Step 5: Payment */}
-          {step === 5 && (
-            <Group title="Payment Terms" icon={DollarSign}>
-              <Field label="Total Contract Value (ETB)">
-                <input type="number" value={form.amount} onChange={(e) => set("amount", +e.target.value)} className={`${inputCls} font-mono text-[15px] font-bold`} />
-              </Field>
-              <Field label="Initial Status">
-                <div className="grid grid-cols-3 gap-2">
-                  {(["UNPAID", "ADVANCE", "PAID"] as const).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => set("paymentTerms", p)}
-                      className="rounded-md border px-3 py-2 text-[12px] font-bold uppercase tracking-wider transition"
-                      style={{
-                        borderColor: form.paymentTerms === p ? "var(--accent)" : "var(--border)",
-                        background: form.paymentTerms === p ? "color-mix(in oklab, var(--accent) 12%, transparent)" : "var(--surface-2)",
-                        color: form.paymentTerms === p ? "var(--accent)" : "var(--text-2)",
-                      }}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-            </Group>
-          )}
-
-          {/* Step 6: Review */}
-          {step === 6 && (
             <Group title="Review & Confirm" icon={CheckCircle2}>
               <div className="space-y-1 rounded-md border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
                 {[
                   ["Client", form.client || "—"],
                   ["Contact", `${form.contactPerson || "—"} · ${form.contactPhone || "—"}`],
-                  ["CTO Consulted", form.ctoConsulted ? "Yes ✓" : "Pending"],
-                  ["CTO Notes", form.ctoNotes || form.ctoArrangement || "—"],
                   ["Venue", form.venue || "—"],
-                  ["Assembly", form.assemblyDate || "—"],
-                  ["Event", form.eventDate || "—"],
-                  ["Screen", `${form.screenType} · ${form.size} sqm · ${form.arrangement}`],
-                  ["Team", `${form.chief || "?"} / ${form.technician || "?"} · ${form.stageHand}`],
-                  ["Contract", `ETB ${form.amount.toLocaleString()} (${form.paymentTerms})`],
+                  ["Assembly Date", form.assemblyDate || "—"],
+                  ["Event Date", form.eventDate || "—"],
+                  ["Dismantle Date", form.dismantleDate || "—"],
+                  ["Required Spec", form.itemServiceSpec || "—"],
+                  ["Intake Notes", form.notes || "—"],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between border-b py-1.5 text-[12px] last:border-0" style={{ borderColor: "var(--border)" }}>
                     <span className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>{k}</span>
@@ -334,7 +205,7 @@ export function NewBooking() {
                 ))}
               </div>
               <p className="mt-3 text-[11px]" style={{ color: "var(--text-3)" }}>
-                On confirm, booking will be created with status <strong style={{ color: "var(--color-status-reserved)" }}>RESERVED</strong> and equipment will be auto-reserved from inventory.
+                On confirm, the booking will be created with status <strong style={{ color: "var(--color-status-reserved)" }}>RESERVED</strong> (Draft). The Chief Technical Officer will review requirements and allocate specific inventory pools.
               </p>
             </Group>
           )}
@@ -378,11 +249,6 @@ export function NewBooking() {
               <div className="font-mono text-[20px] font-bold" style={{ color: "var(--accent)" }}>SB-DRAFT</div>
               <div className="mt-1 text-[13px] font-semibold">{form.client || ""}</div>
               <div className="text-[11px]" style={{ color: "var(--text-2)" }}>{form.venue || ""}</div>
-              {form.ctoConsulted && (
-                <div className="mt-2 flex items-center gap-1 text-[10px] font-semibold" style={{ color: "var(--color-bom-returned)" }}>
-                  <CheckCircle2 className="h-3 w-3" /> CTO Consulted
-                </div>
-              )}
               <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3 text-[11px]" style={{ borderColor: "var(--border)" }}>
                 <div>
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Assembly</div>
@@ -392,22 +258,14 @@ export function NewBooking() {
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Event</div>
                   <div className="font-mono font-semibold">{form.eventDate || "—"}</div>
                 </div>
-                <div>
-                  <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Screen</div>
-                  <div className="font-mono font-semibold">{form.screenType || "—"}</div>
+                <div className="col-span-2">
+                  <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Required Spec</div>
+                  <div className="font-semibold">{form.itemServiceSpec || "—"}</div>
                 </div>
-                <div>
-                  <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Size</div>
-                  <div className="font-mono font-semibold">{form.size ? `${form.size} sqm` : "—"}</div>
-                </div>
-              </div>
-              <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-                <div className="label-eyebrow">Contract</div>
-                <div className="font-mono text-[18px] font-bold">{form.amount ? `ETB ${form.amount.toLocaleString()}` : "—"}</div>
               </div>
             </div>
             <p className="mt-3 text-[10px] leading-relaxed" style={{ color: "var(--text-3)" }}>
-              Equipment availability is checked against the inventory pool. Conflicting reservations will be flagged before confirmation.
+              Initial intake gathers date and location requirements. Specific screen configuration and pricing will be allocated during technical review.
             </p>
           </div>
         </aside>

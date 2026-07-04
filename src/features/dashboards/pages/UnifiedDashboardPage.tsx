@@ -8,59 +8,15 @@ export function UnifiedDashboardPage() {
   const queryRole = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("role") : null;
   const role = queryRole || authUser?.role?.toLowerCase() || "technician";
 
-  const layout = ROLE_LAYOUTS[role] || ROLE_LAYOUTS.technician;
+  const config = ROLE_LAYOUTS[role] || ROLE_LAYOUTS.technician;
+  const layout = config.widgets;
 
   // Dynamic header copy based on active role
-  const headerInfo = (() => {
-    switch (role) {
-      case "admin":
-      case "supervisor":
-        return {
-          eyebrow: "Today's operations",
-          title: "Dashboard",
-          description: "Bookings, equipment, and crew at a glance.",
-        };
-      case "ccr":
-        return {
-          eyebrow: "Client relations",
-          title: "Booking Intake & Payments",
-          description: "Confirm reservations and follow up on outstanding payments.",
-        };
-      case "chief_tech":
-        return {
-          eyebrow: "Technical operations",
-          title: "Screen Config & Crew Assignment",
-          description: "Review confirmed bookings, verify screen specs, and assign lead technicians.",
-        };
-      case "storekeeper":
-        return {
-          eyebrow: "Warehouse",
-          title: "Inventory & Check-ins",
-          description: "Verify equipment returns, process check-outs, and flag damage.",
-        };
-      case "oo":
-      case "ops_officer":
-        return {
-          eyebrow: "Logistics & dispatch",
-          title: "Transport, Crew & Site Ops",
-          description: "Dispatch teams and vehicles, manage onsite operations, and approve meal budgets.",
-        };
-      case "technician":
-      case "stagehand":
-      case "freelancer":
-        return {
-          eyebrow: "Field operations",
-          title: "Your Assignments & Prep",
-          description: "Accept assigned bookings, prepare the bill of materials, and run your field setups.",
-        };
-      default:
-        return {
-          eyebrow: "Operations",
-          title: "Control Panel",
-          description: "Your operations control center.",
-        };
-    }
-  })();
+  const headerInfo = {
+    eyebrow: config.eyebrow || "Operations Workspace",
+    title: config.title || `${authUser?.name || 'User'} control panel`,
+    description: config.description || "Your operations control center. "
+  }
 
   return (
     <AppShell>

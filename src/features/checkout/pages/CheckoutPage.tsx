@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
-import { getBookingsApi, MOCK_BOOKINGS, type Booking, type BomItem } from "@/features/bookings/services/bookings.api";
+import { getBookingsApi, type Booking, type BomItem } from "@/features/bookings/services/bookings.api";
 import { getBookingBomLinesApi, checkoutBookingApi, checkinBookingApi } from "@/features/checkout/services/operations.api";
 
 const _Route = createFileRoute("/checkout")({

@@ -80,8 +80,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     let IconComponent = Bell;
     let iconColor = "var(--accent)";
     
-    const details = n.detail.toLowerCase();
-    const title = n.title.toLowerCase();
+    const details = (n.detail || "").toLowerCase();
+    const title = (n.title || "").toLowerCase();
     
     if (details.includes("confirmed") || title.includes("confirmed") || details.includes("approved")) {
       IconComponent = CheckCircle2;

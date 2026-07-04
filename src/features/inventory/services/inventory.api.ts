@@ -150,3 +150,7 @@ export async function getInventoryItemDetailApi(id: string): Promise<InventoryIt
 
   throw new Error(`Inventory item not found for id ${id}`);
 }
+
+export async function getPoolAvailabilityApi(poolId: string, start: string, end: string): Promise<any> {
+  return client.get<any>(`/api/inventory/pools/${poolId}/availability?start=${start}&end=${end}`);
+}
