@@ -2,8 +2,10 @@ import {
   BellRing,
   Building2,
   Check,
+  ClipboardCheck,
   Languages,
   LockKeyhole,
+  Plus,
   Save,
   Shield,
   UsersRound,
@@ -12,9 +14,17 @@ import {
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { AppText, Button, Field, Input, Screen, Section, SegmentedTabs } from "@/components/ui";
+import { PERFORMANCE_METRICS } from "@/data/mock";
 import { colors, radius } from "@/theme/tokens";
 
-const PANELS = ["Company", "Roles & permissions", "Notifications", "Language", "Security"] as const;
+const PANELS = [
+  "Company",
+  "Roles & permissions",
+  "Notifications",
+  "Language",
+  "Security",
+  "Performance Metrics",
+] as const;
 
 export default function SettingsScreen() {
   const [active, setActive] = useState<(typeof PANELS)[number]>("Company");
@@ -170,7 +180,64 @@ export default function SettingsScreen() {
           </View>
         </Section>
       ) : null}
+
+      {active === "Performance Metrics" ? <PerformanceMetricsPanel /> : null}
     </Screen>
+  );
+}
+
+function PerformanceMetricsPanel() {
+  const [category, setCategory] = useState<"internal" | "client_feedback">("internal");
+  const [metrics, setMetrics] = useState(PERFORMANCE_METRICS);
+  const categories = ["internal", "client_feedback"] as const;
+  const filtered = metrics.filter((metric) => metric.category === category);
+
+  const toggleActive = (id: string) => {
+    setMetrics((current) =>
+      current.map((metric) =>
+        metric.id === id ? { ...metric, isActive: !metric.isActive } : metric,
+      ),
+    );
+  };
+
+  return (
+    <Section
+      title="Performance Metrics"
+      icon={ClipboardCheck}
+      aside="Evaluation criteria"
+      action={
+        <Button variant="ghost" icon={Plus}>
+          Add
+        </Button>
+      }
+    >
+      <SegmentedTabs
+        tabs={categories}
+        value={category}
+        onChange={setCategory}
+      />
+      <View style={{ gap: 10 }}>
+        {filtered.map((metric) => (
+          <View key={metric.id} style={styles.metricRow}>
+            <View style={{ flex: 1 }}>
+              <AppText style={{ fontWeight: "800" }}>{metric.label}</AppText>
+              <AppText variant="small" color={colors.text2}>
+                {metric.description}
+              </AppText>
+              <AppText variant="data" color={colors.text3} style={{ marginTop: 2 }}>
+                {metric.valueType.replace("_", " ")}
+              </AppText>
+            </View>
+            <Pressable
+              onPress={() => toggleActive(metric.id)}
+              style={[styles.toggle, metric.isActive ? styles.toggleOn : null]}
+            >
+              <View style={[styles.knob, metric.isActive ? styles.knobOn : null]} />
+            </Pressable>
+          </View>
+        ))}
+      </View>
+    </Section>
   );
 }
 
@@ -217,6 +284,16 @@ function Session({
 }
 
 const styles = StyleSheet.create({
+  metricRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    padding: 12,
+  },
   permissionRow: {
     flexDirection: "row",
     gap: 12,

@@ -127,6 +127,38 @@ export default function CheckoutScreen() {
           }}
         />
       </View>
+      {!selected ? (
+        <Section
+          title={mode === "checkout" ? "Check-Out Process" : "Check-In Process"}
+          icon={ClipboardCheck}
+        >
+          {(mode === "checkout"
+            ? [
+                "Select the booking to process",
+                "Count and verify each BOM item",
+                "Check off each verified item",
+                "Enter responsible party",
+                "Submit to register materials out",
+              ]
+            : [
+                "Select the booking to process",
+                "Count and verify each returned item",
+                "Check off each verified item",
+                "Note any missing or damaged items",
+                "Submit to register materials in",
+              ]
+          ).map((step, index) => (
+            <View key={step} style={styles.processStep}>
+              <View style={styles.processIndex}>
+                <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
+                  {index + 1}
+                </AppText>
+              </View>
+              <AppText style={{ flex: 1 }}>{step}</AppText>
+            </View>
+          ))}
+        </Section>
+      ) : null}
       <Section title="Select Booking" icon={ClipboardCheck}>
         {eligibleBookings.map((booking) => (
           <Pressable
@@ -326,5 +358,19 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: "center",
     gap: 16,
+  },
+  processStep: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  processIndex: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
