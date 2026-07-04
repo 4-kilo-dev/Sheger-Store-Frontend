@@ -16,17 +16,21 @@ import {
   BottomSheet,
   Button,
   EmptyState,
+  ErrorState,
   Field,
   Input,
+  LoadingState,
   NativeList,
   Screen,
   SegmentedTabs,
   StatCard,
 } from "@/components/ui";
-import { INVENTORY, INVENTORY_CATEGORIES } from "@/data/mock";
+import { INVENTORY_CATEGORIES } from "@/data/mock";
+import { useInventory } from "@/hooks/useOperations";
 import { colors } from "@/theme/tokens";
 
 export default function InventoryScreen() {
+  const { data: INVENTORY = [], isLoading, isError, refetch } = useInventory();
   const [category, setCategory] = useState<(typeof INVENTORY_CATEGORIES)[number]>("All");
   const [query, setQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -41,7 +45,7 @@ export default function InventoryScreen() {
         }),
         { units: 0, available: 0, onsite: 0, attention: 0 },
       ),
-    [],
+    [INVENTORY],
   );
   const rows = useMemo(
     () =>
@@ -50,8 +54,24 @@ export default function InventoryScreen() {
           (category === "All" || item.category === category) &&
           `${item.id} ${item.name} ${item.model}`.toLowerCase().includes(query.toLowerCase()),
       ),
-    [category, query],
+    [INVENTORY, category, query],
   );
+
+  if (isLoading) {
+    return (
+      <Screen>
+        <LoadingState label="Loading inventory..." />
+      </Screen>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Screen>
+        <ErrorState detail="Could not load inventory from the server." onRetry={() => refetch()} />
+      </Screen>
+    );
+  }
 
   return (
     <Screen scroll={false}>

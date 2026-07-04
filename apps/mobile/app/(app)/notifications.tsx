@@ -19,12 +19,15 @@ import {
   AppText,
   Button,
   EmptyState,
+  ErrorState,
+  LoadingState,
   Screen,
   Section,
   SegmentedTabs,
   StatCard,
 } from "@/components/ui";
-import { NOTIFICATIONS } from "@/data/mock";
+import { useMarkNotificationRead, useNotifications } from "@/hooks/useOperations";
+import { getNotificationDisplay, groupByRecency } from "@/services/notifications-api";
 import { colors } from "@/theme/tokens";
 import type { NotificationType } from "@/types/domain";
 
@@ -39,24 +42,41 @@ const ICONS: Record<NotificationType, LucideIcon> = {
 };
 
 export default function NotificationsScreen() {
+  const { data: NOTIFICATIONS = [], isLoading, isError, refetch } = useNotifications();
+  const markRead = useMarkNotificationRead();
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
-  const unreadCount = NOTIFICATIONS.filter((item) => item.unread && !readIds.has(item.id)).length;
-  const filtered = useMemo(() => {
-    let items = [...NOTIFICATIONS];
-    if (tab === "Unread") items = items.filter((item) => item.unread && !readIds.has(item.id));
-    else if (tab !== "All") items = items.filter((item) => item.type === tab);
-    return items;
-  }, [readIds, tab]);
 
-  const toggleRead = (id: string) => {
-    setReadIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const displayItems = useMemo(
+    () => NOTIFICATIONS.map((item) => ({ item, display: getNotificationDisplay(item) })),
+    [NOTIFICATIONS],
+  );
+  const unreadCount = displayItems.filter(({ display }) => display.unread).length;
+  const filtered = useMemo(() => {
+    let items = displayItems;
+    if (tab === "Unread") items = items.filter(({ display }) => display.unread);
+    else if (tab !== "All") items = items.filter(({ display }) => display.type === tab);
+    return items;
+  }, [displayItems, tab]);
+
+  const toggleRead = (id: string, unread: boolean) => {
+    if (unread) markRead.mutate(id);
   };
+
+  if (isLoading) {
+    return (
+      <Screen>
+        <LoadingState label="Loading notifications..." />
+      </Screen>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Screen>
+        <ErrorState detail="Could not load notifications from the server." onRetry={() => refetch()} />
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
@@ -72,7 +92,7 @@ export default function NotificationsScreen() {
       <Button
         variant="outline"
         icon={CheckCheck}
-        onPress={() => setReadIds(new Set(NOTIFICATIONS.map((item) => item.id)))}
+        onPress={() => displayItems.filter((entry) => entry.display.unread).forEach((entry) => markRead.mutate(entry.item.id))}
       >
         Mark all read
       </Button>
@@ -80,17 +100,17 @@ export default function NotificationsScreen() {
         <EmptyState title="No notifications" detail="You're all caught up." />
       ) : null}
       {(["Today", "Yesterday", "This Week"] as const).map((group) => {
-        const items = filtered.filter((item) => item.date === group);
+        const items = filtered.filter(({ item }) => groupByRecency(item.createdAt) === group);
         if (!items.length) return null;
         return (
           <Section key={group} title={group}>
-            {items.map((item) => {
-              const Icon = ICONS[item.type] ?? Bell;
-              const unread = item.unread && !readIds.has(item.id);
+            {items.map(({ item, display }) => {
+              const Icon = ICONS[display.type] ?? Bell;
+              const unread = display.unread;
               const tone =
-                item.priority === "URGENT"
+                display.priority === "URGENT"
                   ? colors.destructive
-                  : item.priority === "LOW"
+                  : display.priority === "LOW"
                     ? colors.text3
                     : colors.accent;
               return (
@@ -105,21 +125,21 @@ export default function NotificationsScreen() {
                   </View>
                   <View style={{ flex: 1, gap: 5 }}>
                     <View style={styles.lineTop}>
-                      <AppText style={{ fontWeight: "900", flex: 1 }}>{item.title}</AppText>
+                      <AppText style={{ fontWeight: "900", flex: 1 }}>{display.title}</AppText>
                       <AppText variant="data" color={colors.text3}>
-                        {item.time}
+                        {new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </AppText>
                     </View>
-                    <AppText variant="subtitle">{item.detail}</AppText>
+                    <AppText variant="subtitle">{item.message}</AppText>
                     <View style={styles.actions}>
-                      <ToneBadge label={item.type} tone={colors.accent} />
-                      {item.priority !== "NORMAL" ? (
-                        <ToneBadge label={item.priority} tone={tone} />
+                      <ToneBadge label={display.type} tone={colors.accent} />
+                      {display.priority !== "NORMAL" ? (
+                        <ToneBadge label={display.priority} tone={tone} />
                       ) : null}
-                      {item.linkTo ? (
+                      {display.linkTo ? (
                         <Pressable
                           onPress={() => {
-                            if (item.linkTo) router.push(to(item.linkTo));
+                            if (display.linkTo) router.push(to(display.linkTo));
                           }}
                           style={styles.detailLink}
                         >
@@ -133,9 +153,11 @@ export default function NotificationsScreen() {
                           <ArrowRight size={13} color={colors.accent} />
                         </Pressable>
                       ) : null}
-                      <Button variant="ghost" onPress={() => toggleRead(item.id)}>
-                        {unread ? "Mark read" : "Mark unread"}
-                      </Button>
+                      {unread ? (
+                        <Button variant="ghost" onPress={() => toggleRead(item.id, unread)}>
+                          Mark read
+                        </Button>
+                      ) : null}
                     </View>
                   </View>
                 </View>
@@ -158,7 +180,7 @@ export default function NotificationsScreen() {
         <StatCard label="Unread" value={unreadCount} />
         <StatCard
           label="Urgent"
-          value={NOTIFICATIONS.filter((item) => item.priority === "URGENT").length}
+          value={displayItems.filter((entry) => entry.display.priority === "URGENT").length}
           tone={colors.destructive}
         />
       </Section>

@@ -30,18 +30,20 @@ import {
   Button,
   Card,
   EmptyState,
+  ErrorState,
   Field,
   Input,
   KV,
+  LoadingState,
   Screen,
   Section,
   SegmentedTabs,
   TextArea,
 } from "@/components/ui";
-import { BOOKINGS } from "@/data/mock";
 import { colors } from "@/theme/tokens";
 import type { Booking, BookingStatus } from "@/types/domain";
 import { daysUntil, formatCurrency } from "@/utils/format";
+import { useBooking, useRecordBookingPayment, useTransitionBookingStatus } from "@/hooks/useOperations";
 
 const TABS = [
   "Overview",
@@ -84,22 +86,56 @@ const STATUS_ACTIONS: Partial<
 
 export default function BookingDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
-  const booking = BOOKINGS.find((item) => item.code === params.id);
+  const { data: booking, isLoading, isError, refetch } = useBooking(params.id);
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [actionOpen, setActionOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const transitionMutation = useTransitionBookingStatus();
+  const paymentMutation = useRecordBookingPayment();
 
-  if (!booking) {
+  if (isLoading) {
     return (
       <Screen>
-        <EmptyState
-          title="Booking not found"
-          detail="Return to bookings and choose another booking."
+        <LoadingState label="Loading booking..." />
+      </Screen>
+    );
+  }
+
+  if (isError || !booking) {
+    return (
+      <Screen>
+        <ErrorState
+          title={isError ? "Could not load booking" : "Booking not found"}
+          detail={isError ? "Check your connection and try again." : "Return to bookings and choose another booking."}
+          onRetry={isError ? () => refetch() : undefined}
         />
       </Screen>
     );
   }
 
   const action = STATUS_ACTIONS[booking.status];
+  const isSubmittingAction = transitionMutation.isPending || paymentMutation.isPending;
+
+  const handleConfirmAction = async () => {
+    if (!action) return;
+    setActionError(null);
+    try {
+      if (booking.status === "RESERVED") {
+        await paymentMutation.mutateAsync({
+          bookingId: booking.code,
+          toStatus: "advance",
+          amount: booking.amount,
+        });
+      }
+      await transitionMutation.mutateAsync({
+        bookingId: booking.code,
+        toStatus: action.nextStatus as BookingStatus,
+      });
+      setActionOpen(false);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Failed to update booking.");
+    }
+  };
 
   return (
     <Screen
@@ -208,7 +244,14 @@ export default function BookingDetailScreen() {
                 </Field>
               </>
             ) : null}
-            <Button onPress={() => setActionOpen(false)}>Confirm: {action.label}</Button>
+            {actionError ? (
+              <AppText variant="small" color={colors.destructive}>
+                {actionError}
+              </AppText>
+            ) : null}
+            <Button disabled={isSubmittingAction} onPress={handleConfirmAction}>
+              {isSubmittingAction ? "Submitting..." : `Confirm: ${action.label}`}
+            </Button>
             <Button variant="outline" onPress={() => setActionOpen(false)}>
               Cancel
             </Button>

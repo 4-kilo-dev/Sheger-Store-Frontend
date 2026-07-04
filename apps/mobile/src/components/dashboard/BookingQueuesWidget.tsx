@@ -11,10 +11,10 @@ import {
   Wrench,
 } from "lucide-react-native";
 import { Pressable, View } from "react-native";
-import { AppText, Section } from "@/components/ui";
+import { AppText, LoadingState, Section } from "@/components/ui";
 import { StatusBadge } from "@/components/status";
 import { useAppContext } from "@/context/AppContext";
-import { BOOKINGS } from "@/data/mock";
+import { useBookings } from "@/hooks/useOperations";
 import { colors } from "@/theme/tokens";
 import type { Booking } from "@/types/domain";
 
@@ -61,6 +61,9 @@ function QueueSection({
 export function BookingQueuesWidget() {
   const { activeProfile } = useAppContext();
   const role = activeProfile.role;
+  const { data: BOOKINGS = [], isLoading } = useBookings();
+
+  if (isLoading) return <LoadingState label="Loading queues..." />;
 
   if (role === "CCR") {
     const reserved = BOOKINGS.filter((booking) => booking.status === "RESERVED");

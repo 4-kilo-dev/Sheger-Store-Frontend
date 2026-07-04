@@ -10,7 +10,7 @@ import {
   ShieldAlert,
   Wrench,
 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { ToneBadge } from "@/components/status";
 import {
@@ -18,37 +18,39 @@ import {
   BackLink,
   Button,
   EmptyState,
+  ErrorState,
   KV,
+  LoadingState,
   Screen,
   Section,
   SegmentedTabs,
   StatCard,
 } from "@/components/ui";
-import { INVENTORY } from "@/data/mock";
+import { useInventoryItem } from "@/hooks/useOperations";
 import { colors } from "@/theme/tokens";
 
 const TABS = ["Units", "Movement", "Maintenance"] as const;
 
 export default function InventoryDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
-  const item = INVENTORY.find((candidate) => candidate.id === params.id);
+  const { data: item, isLoading, isError, refetch } = useInventoryItem(params.id);
   const [tab, setTab] = useState<(typeof TABS)[number]>("Units");
-  const units = useMemo(() => {
-    if (!item) return [];
-    return Array.from({ length: Math.min(item.total, 12) }, (_, index) => ({
-      serial: `${item.id}-${String(index + 1).padStart(3, "0")}`,
-      state:
-        index < item.damaged
-          ? "DAMAGED"
-          : index < item.damaged + item.onsite
-            ? "ONSITE"
-            : index < item.damaged + item.onsite + item.reserved
-              ? "RESERVED"
-              : "AVAILABLE",
-      location: index < item.onsite ? "SB047 · Sheraton" : item.location,
-      inspection: `2026-05-${String(28 - index).padStart(2, "0")}`,
-    }));
-  }, [item]);
+
+  if (isLoading) {
+    return (
+      <Screen>
+        <LoadingState label="Loading item..." />
+      </Screen>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Screen>
+        <ErrorState detail="Could not load this item from the server." onRetry={() => refetch()} />
+      </Screen>
+    );
+  }
 
   if (!item) {
     return (
@@ -58,6 +60,8 @@ export default function InventoryDetailScreen() {
     );
   }
 
+  const isSerialized = item.category === "Serialized Asset";
+
   return (
     <Screen>
       <View style={styles.actionRow}>
@@ -65,7 +69,7 @@ export default function InventoryDetailScreen() {
         <Button variant="outline" icon={RotateCcw}>
           Stock Movement
         </Button>
-        <Button icon={ShieldAlert} onPress={() => router.push(to("/damage-report"))}>
+        <Button icon={ShieldAlert} onPress={() => router.push(to(`/damage-report?itemId=${item.id}`))}>
           Report Damage
         </Button>
       </View>
@@ -88,32 +92,38 @@ export default function InventoryDetailScreen() {
 
       <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
       {tab === "Units" ? (
-        <Section title="Serialized Units" icon={ClipboardList}>
-          {units.map((unit) => (
-            <View key={unit.serial} style={styles.row}>
+        <Section title={isSerialized ? "Serialized Unit" : "Bulk Pool"} icon={ClipboardList}>
+          {isSerialized ? (
+            <View style={styles.row}>
               <View>
                 <AppText variant="data" style={{ fontWeight: "900" }}>
-                  {unit.serial}
+                  {item.id}
                 </AppText>
                 <AppText variant="small" color={colors.text2}>
-                  {unit.location}
-                </AppText>
-                <AppText variant="data" color={colors.text3}>
-                  {unit.inspection}
+                  {item.location}
                 </AppText>
               </View>
               <ToneBadge
-                label={unit.state}
+                label={item.condition}
                 tone={
-                  unit.state === "DAMAGED"
+                  item.condition === "DAMAGED"
                     ? colors.destructive
-                    : unit.state === "AVAILABLE"
+                    : item.condition === "GOOD"
                       ? colors.success
                       : colors.payment.ADVANCE
                 }
               />
             </View>
-          ))}
+          ) : (
+            <View style={{ gap: 6 }}>
+              <KV label="Total in pool" value={item.total} mono />
+              <KV label="Available" value={item.available} mono />
+              <KV label="Reserved" value={item.reserved} mono />
+              <AppText variant="small" color={colors.text3}>
+                Bulk pools are tracked by quantity, not individual serial numbers.
+              </AppText>
+            </View>
+          )}
         </Section>
       ) : null}
       {tab === "Movement" ? (

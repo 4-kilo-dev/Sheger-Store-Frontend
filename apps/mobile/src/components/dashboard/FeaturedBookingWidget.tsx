@@ -4,9 +4,10 @@ import { ArrowRight } from "lucide-react-native";
 import { View, StyleSheet } from "react-native";
 import { AppText, Button, Card } from "@/components/ui";
 import { StatusBadge, StatusStepper } from "@/components/status";
-import { BOOKINGS } from "@/data/mock";
+import { useBookings } from "@/hooks/useOperations";
 
 export function FeaturedBookingWidget() {
+  const { data: BOOKINGS = [] } = useBookings();
   const featured = BOOKINGS.find((booking) => booking.status === "PREPARATION") ?? BOOKINGS[4];
   if (!featured) return null;
 

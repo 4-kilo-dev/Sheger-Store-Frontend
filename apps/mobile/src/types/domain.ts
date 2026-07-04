@@ -6,7 +6,9 @@ export type BookingStatus =
   | "PREPARATION"
   | "ONSITE"
   | "COMPLETED"
-  | "DONE";
+  | "DONE"
+  | "CANCELED"
+  | "PARTIALLY_RETURNED";
 
 export type PaymentStatus = "PAID" | "ADVANCE" | "UNPAID";
 
@@ -17,6 +19,8 @@ export interface BomItem {
   name: string;
   qty: number;
   status: "Reserved" | "Checked Out" | "Returned";
+  poolId?: string;
+  itemId?: string;
 }
 
 export interface Booking {
@@ -74,6 +78,7 @@ export interface Profile {
 }
 
 export interface StaffMember {
+  id: string;
   name: string;
   role: string;
   team: string;
@@ -91,14 +96,13 @@ export type NotificationType =
 
 export interface Notification {
   id: string;
-  title: string;
-  detail: string;
-  time: string;
-  type: NotificationType;
-  priority: NotificationPriority;
-  unread: boolean;
-  linkTo?: string;
-  date: "Today" | "Yesterday" | "This Week";
+  eventType: string;
+  message: string;
+  isTask: boolean;
+  relatedEntity?: string;
+  relatedId?: string;
+  readAt: string | null;
+  createdAt: string;
 }
 
 export const STATUS_LABELS: Record<BookingStatus, string> = {
@@ -110,6 +114,8 @@ export const STATUS_LABELS: Record<BookingStatus, string> = {
   ONSITE: "Onsite",
   COMPLETED: "Completed",
   DONE: "Done",
+  CANCELED: "Canceled",
+  PARTIALLY_RETURNED: "Partially Returned",
 };
 
 export const STATUS_ORDER: BookingStatus[] = [

@@ -1,13 +1,14 @@
 import { Monitor } from "lucide-react-native";
 import { View } from "react-native";
 import { AppText, Card, Section } from "@/components/ui";
-import { BOOKINGS } from "@/data/mock";
+import { useBookings } from "@/hooks/useOperations";
 import { colors, radius } from "@/theme/tokens";
 
 const ACTIVE_STATUSES = ["RESERVED", "CONFIRMED", "ASSIGNED", "ACCEPTED", "PREPARATION", "ONSITE"];
 const SCREEN_TYPES = ["P2.97", "P4", "P3.91 INDOOR"] as const;
 
 export function ScreenAvailabilityWidget() {
+  const { data: BOOKINGS = [] } = useBookings();
   return (
     <Section title="Screen availability" icon={Monitor}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>

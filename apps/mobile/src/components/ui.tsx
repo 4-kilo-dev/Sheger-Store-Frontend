@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
 import type { ReactNode } from "react";
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
@@ -285,14 +286,15 @@ export function TextArea(props: TextInputProps) {
 
 function placeholderSafeInput(
   props: TextInputProps,
-  style: TextInputProps["style"] = styles.input,
+  baseStyle: TextInputProps["style"] = styles.input,
 ) {
+  const { style: overrideStyle, ...rest } = props;
   return (
     <TextInput
       placeholderTextColor={colors.text3}
       selectionColor={colors.accent}
-      style={style}
-      {...props}
+      {...rest}
+      style={[baseStyle, overrideStyle]}
     />
   );
 }
@@ -328,6 +330,43 @@ export function EmptyState({ title, detail }: { title: string; detail?: string }
         <AppText variant="small" color={colors.text3} style={{ marginTop: 4, textAlign: "center" }}>
           {detail}
         </AppText>
+      ) : null}
+    </View>
+  );
+}
+
+export function LoadingState({ label = "Loading..." }: { label?: string }) {
+  return (
+    <View style={styles.empty}>
+      <ActivityIndicator color={colors.accent} />
+      <AppText variant="small" color={colors.text3} style={{ marginTop: 8 }}>
+        {label}
+      </AppText>
+    </View>
+  );
+}
+
+export function ErrorState({
+  title = "Something went wrong",
+  detail,
+  onRetry,
+}: {
+  title?: string;
+  detail?: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <View style={styles.empty}>
+      <AppText style={{ fontWeight: "700", color: colors.destructive }}>{title}</AppText>
+      {detail ? (
+        <AppText variant="small" color={colors.text3} style={{ marginTop: 4, textAlign: "center" }}>
+          {detail}
+        </AppText>
+      ) : null}
+      {onRetry ? (
+        <Button variant="outline" onPress={onRetry} style={{ marginTop: 12 }}>
+          Retry
+        </Button>
       ) : null}
     </View>
   );
@@ -441,13 +480,13 @@ export const styles = StyleSheet.create({
   },
   brandName: {
     fontSize: 13,
-    fontWeight: "800",
+    fontFamily: typography.sansExtraBold,
     letterSpacing: 3,
     color: colors.foreground,
   },
   brandSub: {
     fontSize: 9,
-    fontWeight: "800",
+    fontFamily: typography.sansExtraBold,
     letterSpacing: 3,
   },
   button: {
@@ -462,7 +501,7 @@ export const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 13,
-    fontWeight: "800",
+    fontFamily: typography.sansBold,
   },
   iconButton: {
     width: 44,
@@ -508,7 +547,7 @@ export const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 13,
-    fontWeight: "800",
+    fontFamily: typography.sansBold,
   },
   sectionBody: {
     padding: 14,
@@ -668,31 +707,35 @@ const buttonStyles = StyleSheet.create({
 const textStyles = StyleSheet.create({
   title: {
     color: colors.foreground,
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: "800",
+    fontSize: 25,
+    lineHeight: 31,
+    fontFamily: typography.display,
+    letterSpacing: -0.2,
   },
   subtitle: {
     color: colors.text2,
     fontSize: 13,
     lineHeight: 20,
+    fontFamily: typography.sans,
   },
   body: {
     color: colors.foreground,
     fontSize: 13,
     lineHeight: 19,
+    fontFamily: typography.sansMedium,
   },
   small: {
     color: colors.text2,
     fontSize: 11,
     lineHeight: 16,
+    fontFamily: typography.sans,
   },
   eyebrow: {
     color: colors.text2,
     fontSize: 10,
     lineHeight: 14,
-    fontWeight: "800",
-    letterSpacing: 0.8,
+    fontFamily: typography.sansExtraBold,
+    letterSpacing: 1,
     textTransform: "uppercase",
   },
   data: {
@@ -703,9 +746,9 @@ const textStyles = StyleSheet.create({
   },
   stat: {
     color: colors.foreground,
-    fontSize: 26,
-    lineHeight: 30,
-    fontWeight: "900",
+    fontSize: 27,
+    lineHeight: 32,
     fontFamily: typography.data,
+    fontWeight: "700",
   },
 });
