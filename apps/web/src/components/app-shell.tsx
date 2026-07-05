@@ -500,7 +500,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                                   {n.title}
                                 </div>
                                 <div className="text-[10.5px] mt-0.5 leading-relaxed truncate" style={{ color: "var(--text-3)" }}>
-                                  {n.detail}
+                                  {n.detail || n.message}
                                 </div>
                                 <div className="text-[9px] font-mono mt-1" style={{ color: "var(--text-3)" }}>
                                   {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

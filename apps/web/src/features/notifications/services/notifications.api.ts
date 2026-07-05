@@ -7,6 +7,7 @@ export interface Notification {
   id: string;
   title: string;
   detail: string;
+  message? : string;
   type: NotificationType;
   priority: NotificationPriority;
   readAt: string | null;

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft, Edit3, Printer, Share2, MoreHorizontal, MapPin, Calendar,
   Phone, User, Building2, DollarSign, Paperclip, MessageSquare,
@@ -130,6 +131,7 @@ const BOOKING_ACTIONS: Record<BookingStatus, BookingAction[]> = {
 };
 
 export function BookingDetail() {
+  const  navigate = useNavigate();
   const { code } = _Route.useParams();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
@@ -151,10 +153,25 @@ export function BookingDetail() {
       .catch((e) => console.error("Failed to load staff in details page", e));
   }, []);
 
+  // const { data: booking, isLoading, error } = useQuery({
+  //   queryKey: ["booking", code],
+  //   queryFn: () => getBookingDetailApi(code),
+  // });
+
   const { data: booking, isLoading, error } = useQuery({
-    queryKey: ["booking", code],
-    queryFn: () => getBookingDetailApi(code),
-  });
+  queryKey: ["booking", code],
+  queryFn: () => getBookingDetailApi(code),
+});
+// Auto-redirect to friendly SB code if loaded with a UUID
+useEffect(() => {
+  if (booking && booking.code && code !== booking.code) {
+    navigate({
+      to: "/bookings/$code" as any,
+      params: { code: booking.code },
+      replace: true, // Replace the history entry so the back button still works normally
+    });
+  }
+}, [booking, code, navigate]);
 
   useEffect(() => {
     if (booking && amountReceived === 0) {
