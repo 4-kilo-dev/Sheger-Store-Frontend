@@ -172,7 +172,7 @@ export function NotificationsPage() {
                             {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </time>
                         </div>
-                        <p className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-2)" }}>{n.detail}</p>
+                        <p className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-2)" }}>{n.detail || n.message}</p>
                         <div className="mt-2 flex items-center gap-3">
                           <span
                             className="rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider"
