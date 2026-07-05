@@ -17,7 +17,15 @@ import {
 } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
 import { StatusBadge } from "@/components/status";
-import { AppText, Button, ErrorState, LoadingState, Screen, Section, StatCard } from "@/components/ui";
+import {
+  AppText,
+  Button,
+  ErrorState,
+  LoadingState,
+  Screen,
+  Section,
+  StatCard,
+} from "@/components/ui";
 import { colors } from "@/theme/tokens";
 import type { Booking } from "@/types/domain";
 import { formatCurrency } from "@/utils/format";

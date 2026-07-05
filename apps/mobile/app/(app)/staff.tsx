@@ -115,9 +115,17 @@ export default function StaffScreen() {
 
 function AddStaffSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const createStaff = useCreateStaff();
-  const [form, setForm] = useState({ name: "", phone: "", email: "", role: "", team: "", password: "" });
+  const [form, setForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    role: "",
+    team: "",
+    password: "",
+  });
   const [error, setError] = useState<string | null>(null);
-  const set = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  const set = (key: keyof typeof form, value: string) =>
+    setForm((current) => ({ ...current, [key]: value }));
 
   const handleSubmit = async () => {
     setError(null);
@@ -133,19 +141,42 @@ function AddStaffSheet({ visible, onClose }: { visible: boolean; onClose: () => 
   return (
     <BottomSheet visible={visible} title="Add Staff Member" onClose={onClose}>
       <Field label="Full name">
-        <Input value={form.name} onChangeText={(v) => set("name", v)} placeholder="e.g. Selam Worku" />
+        <Input
+          value={form.name}
+          onChangeText={(v) => set("name", v)}
+          placeholder="e.g. Selam Worku"
+        />
       </Field>
       <Field label="Phone">
-        <Input value={form.phone} onChangeText={(v) => set("phone", v)} placeholder="+251 9.. ... ...." keyboardType="phone-pad" />
+        <Input
+          value={form.phone}
+          onChangeText={(v) => set("phone", v)}
+          placeholder="+251 9.. ... ...."
+          keyboardType="phone-pad"
+        />
       </Field>
       <Field label="Email">
-        <Input value={form.email} onChangeText={(v) => set("email", v)} placeholder="name@vortexvisual.com" autoCapitalize="none" keyboardType="email-address" />
+        <Input
+          value={form.email}
+          onChangeText={(v) => set("email", v)}
+          placeholder="name@vortexvisual.com"
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
       </Field>
       <Field label="Role (must match a backend role name)">
-        <Input value={form.role} onChangeText={(v) => set("role", v)} placeholder="e.g. Storekeeper" />
+        <Input
+          value={form.role}
+          onChangeText={(v) => set("role", v)}
+          placeholder="e.g. Storekeeper"
+        />
       </Field>
       <Field label="Team">
-        <Input value={form.team} onChangeText={(v) => set("team", v)} placeholder="e.g. Warehouse" />
+        <Input
+          value={form.team}
+          onChangeText={(v) => set("team", v)}
+          placeholder="e.g. Warehouse"
+        />
       </Field>
       <Field label="Temporary password">
         <Input value={form.password} onChangeText={(v) => set("password", v)} secureTextEntry />

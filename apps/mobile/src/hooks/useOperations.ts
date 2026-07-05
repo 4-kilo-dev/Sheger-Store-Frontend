@@ -15,7 +15,10 @@ import {
   getPendingTasksApi,
   markNotificationReadApi,
 } from "@/services/notifications-api";
-import { getPerformanceMetricsApi, toggleMetricActiveApi } from "@/services/performance-metrics-api";
+import {
+  getPerformanceMetricsApi,
+  toggleMetricActiveApi,
+} from "@/services/performance-metrics-api";
 import { createStaffApi, getStaffApi } from "@/services/staff-api";
 import type { BomItem, BookingStatus } from "@/types/domain";
 
@@ -42,8 +45,15 @@ export function useCreateBooking() {
 export function useTransitionBookingStatus() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ bookingId, toStatus, reason }: { bookingId: string; toStatus: BookingStatus; reason?: string }) =>
-      transitionBookingStatusApi(bookingId, toStatus, reason),
+    mutationFn: ({
+      bookingId,
+      toStatus,
+      reason,
+    }: {
+      bookingId: string;
+      toStatus: BookingStatus;
+      reason?: string;
+    }) => transitionBookingStatusApi(bookingId, toStatus, reason),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bookings"] }),
   });
 }
@@ -147,7 +157,8 @@ export function usePerformanceMetrics() {
 export function useToggleMetricActive() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) => toggleMetricActiveApi(id, isActive),
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      toggleMetricActiveApi(id, isActive),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["performance-metrics"] }),
   });
 }

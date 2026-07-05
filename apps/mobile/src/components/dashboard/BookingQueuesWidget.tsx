@@ -72,7 +72,11 @@ export function BookingQueuesWidget() {
     );
     return (
       <View style={{ gap: 16 }}>
-        <QueueSection title="Reserved · needs confirmation" icon={ClipboardCheck} bookings={reserved} />
+        <QueueSection
+          title="Reserved · needs confirmation"
+          icon={ClipboardCheck}
+          bookings={reserved}
+        />
         <QueueSection title="Outstanding payments" icon={DollarSign} bookings={unpaid} />
       </View>
     );
@@ -84,7 +88,11 @@ export function BookingQueuesWidget() {
     return (
       <View style={{ gap: 16 }}>
         <QueueSection title="Confirmed · needs crew" icon={UserCheck} bookings={confirmed} />
-        <QueueSection title="Assigned · awaiting acceptance" icon={ClipboardCheck} bookings={assigned} />
+        <QueueSection
+          title="Assigned · awaiting acceptance"
+          icon={ClipboardCheck}
+          bookings={assigned}
+        />
       </View>
     );
   }
@@ -100,7 +108,11 @@ export function BookingQueuesWidget() {
     );
     return (
       <View style={{ gap: 16 }}>
-        <QueueSection title="Waiting for your acceptance" icon={ClipboardCheck} bookings={assignedToMe} />
+        <QueueSection
+          title="Waiting for your acceptance"
+          icon={ClipboardCheck}
+          bookings={assignedToMe}
+        />
         <QueueSection title="In preparation" icon={Wrench} bookings={inPrep} />
       </View>
     );

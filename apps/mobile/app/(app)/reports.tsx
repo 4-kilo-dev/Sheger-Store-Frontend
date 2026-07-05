@@ -13,15 +13,18 @@ import { StyleSheet, View } from "react-native";
 import {
   AppText,
   Button,
+  ErrorState,
+  LoadingState,
   ProgressBar,
   Screen,
   Section,
   SegmentedTabs,
   StatCard,
 } from "@/components/ui";
-import { BOOKINGS, INVENTORY, MONTHS, STAFF } from "@/data/mock";
+import { useBookings, useInventory, useStaff } from "@/hooks/useOperations";
 import { colors } from "@/theme/tokens";
 import { STATUS_LABELS, STATUS_ORDER } from "@/types/domain";
+import type { Booking, InventoryItem, StaffMember } from "@/types/domain";
 import { formatCompactCurrency, formatCurrency, pct } from "@/utils/format";
 
 const TABS = [
@@ -32,8 +35,62 @@ const TABS = [
   "Audit Logs",
 ] as const;
 
+function monthsFromBookings(bookings: Booking[]) {
+  const now = new Date();
+  const buckets: { m: string; revenue: number; bookings: number }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const label = date.toLocaleDateString(undefined, { month: "short" });
+    const inMonth = bookings.filter((booking) => {
+      const eventDate = new Date(booking.eventDate);
+      return (
+        eventDate.getMonth() === date.getMonth() && eventDate.getFullYear() === date.getFullYear()
+      );
+    });
+    buckets.push({
+      m: label,
+      revenue: inMonth.reduce((sum, booking) => sum + booking.amount, 0),
+      bookings: inMonth.length,
+    });
+  }
+  return buckets;
+}
+
 export default function ReportsScreen() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Revenue & Bookings");
+  const bookingsQuery = useBookings();
+  const inventoryQuery = useInventory();
+  const staffQuery = useStaff();
+
+  const isLoading = bookingsQuery.isLoading || inventoryQuery.isLoading || staffQuery.isLoading;
+  const isError = bookingsQuery.isError || inventoryQuery.isError || staffQuery.isError;
+
+  if (isLoading) {
+    return (
+      <Screen>
+        <LoadingState label="Loading reports..." />
+      </Screen>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Screen>
+        <ErrorState
+          detail="Could not load report data from the server."
+          onRetry={() => {
+            bookingsQuery.refetch();
+            inventoryQuery.refetch();
+            staffQuery.refetch();
+          }}
+        />
+      </Screen>
+    );
+  }
+
+  const BOOKINGS = bookingsQuery.data ?? [];
+  const INVENTORY = inventoryQuery.data ?? [];
+  const STAFF = staffQuery.data ?? [];
 
   return (
     <Screen>
@@ -46,16 +103,24 @@ export default function ReportsScreen() {
       </View>
       <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
 
-      {tab === "Revenue & Bookings" ? <RevenueBookingsTab /> : null}
-      {tab === "Inventory Health" ? <InventoryHealthTab /> : null}
-      {tab === "Client Directory" ? <ClientDirectoryTab /> : null}
-      {tab === "Quality & Crew" ? <QualityCrewTab /> : null}
-      {tab === "Audit Logs" ? <AuditLogsTab /> : null}
+      {tab === "Revenue & Bookings" ? (
+        <RevenueBookingsTab BOOKINGS={BOOKINGS} INVENTORY={INVENTORY} />
+      ) : null}
+      {tab === "Inventory Health" ? <InventoryHealthTab INVENTORY={INVENTORY} /> : null}
+      {tab === "Client Directory" ? <ClientDirectoryTab BOOKINGS={BOOKINGS} /> : null}
+      {tab === "Quality & Crew" ? <QualityCrewTab STAFF={STAFF} /> : null}
+      {tab === "Audit Logs" ? <AuditLogsTab BOOKINGS={BOOKINGS} /> : null}
     </Screen>
   );
 }
 
-function RevenueBookingsTab() {
+function RevenueBookingsTab({
+  BOOKINGS,
+  INVENTORY,
+}: {
+  BOOKINGS: Booking[];
+  INVENTORY: InventoryItem[];
+}) {
   const stats = useMemo(() => {
     const totalRevenue = BOOKINGS.reduce((sum, booking) => sum + booking.amount, 0);
     const completedJobs = BOOKINGS.filter(
@@ -67,10 +132,11 @@ function RevenueBookingsTab() {
       totalRevenue,
       completedJobs,
       utilization: pct(totalInventory - available, totalInventory),
-      avgJobValue: Math.round(totalRevenue / BOOKINGS.length / 1000),
+      avgJobValue: BOOKINGS.length ? Math.round(totalRevenue / BOOKINGS.length / 1000) : 0,
     };
-  }, []);
-  const maxRevenue = Math.max(...MONTHS.map((month) => month.revenue));
+  }, [BOOKINGS, INVENTORY]);
+  const MONTHS = useMemo(() => monthsFromBookings(BOOKINGS), [BOOKINGS]);
+  const maxRevenue = Math.max(1, ...MONTHS.map((month) => month.revenue));
 
   return (
     <>
@@ -160,9 +226,9 @@ function RevenueBookingsTab() {
   );
 }
 
-function InventoryHealthTab() {
+function InventoryHealthTab({ INVENTORY }: { INVENTORY: InventoryItem[] }) {
   const categories = useMemo(() => {
-    const byCategory = new Map<string, typeof INVENTORY>();
+    const byCategory = new Map<string, InventoryItem[]>();
     for (const item of INVENTORY) {
       const list = byCategory.get(item.category) ?? [];
       list.push(item);
@@ -175,7 +241,7 @@ function InventoryHealthTab() {
       const damaged = items.reduce((sum, item) => sum + item.damaged, 0);
       return { category, total, available, onsite, damaged };
     });
-  }, []);
+  }, [INVENTORY]);
 
   return (
     <View style={{ gap: 12 }}>
@@ -186,9 +252,24 @@ function InventoryHealthTab() {
         return (
           <Section key={c.category} title={c.category} icon={Gauge} aside={`${c.total} total`}>
             <View style={styles.healthBar}>
-              <View style={[styles.healthSegment, { flex: Math.max(availPct, 0.001), backgroundColor: colors.success }]} />
-              <View style={[styles.healthSegment, { flex: Math.max(onsitePct, 0.001), backgroundColor: colors.status.ACCEPTED }]} />
-              <View style={[styles.healthSegment, { flex: Math.max(damagedPct, 0.001), backgroundColor: colors.destructive }]} />
+              <View
+                style={[
+                  styles.healthSegment,
+                  { flex: Math.max(availPct, 0.001), backgroundColor: colors.success },
+                ]}
+              />
+              <View
+                style={[
+                  styles.healthSegment,
+                  { flex: Math.max(onsitePct, 0.001), backgroundColor: colors.status.ACCEPTED },
+                ]}
+              />
+              <View
+                style={[
+                  styles.healthSegment,
+                  { flex: Math.max(damagedPct, 0.001), backgroundColor: colors.destructive },
+                ]}
+              />
             </View>
             <View style={styles.healthLegendRow}>
               <LegendDot label={`Available ${c.available}`} tone={colors.success} />
@@ -213,7 +294,7 @@ function LegendDot({ label, tone }: { label: string; tone: string }) {
   );
 }
 
-function ClientDirectoryTab() {
+function ClientDirectoryTab({ BOOKINGS }: { BOOKINGS: Booking[] }) {
   const clients = useMemo(() => {
     const byClient = new Map<string, { bookings: number; completed: number; revenue: number }>();
     for (const booking of BOOKINGS) {
@@ -226,7 +307,7 @@ function ClientDirectoryTab() {
     return Array.from(byClient.entries())
       .map(([name, data]) => ({ name, ...data }))
       .sort((a, b) => b.revenue - a.revenue);
-  }, []);
+  }, [BOOKINGS]);
 
   return (
     <Section title="Repeat clients & lifetime valuations" icon={Users}>
@@ -258,11 +339,11 @@ function ClientDirectoryTab() {
   );
 }
 
-function QualityCrewTab() {
+function QualityCrewTab({ STAFF }: { STAFF: StaffMember[] }) {
   return (
     <Section title="Crew Performance" icon={Users} aside="This quarter">
       {STAFF.map((staff) => (
-        <View key={staff.name} style={{ gap: 6 }}>
+        <View key={staff.id} style={{ gap: 6 }}>
           <View style={styles.lineTop}>
             <View>
               <AppText style={{ fontWeight: "800" }}>{staff.name}</AppText>
@@ -281,7 +362,7 @@ function QualityCrewTab() {
   );
 }
 
-function AuditLogsTab() {
+function AuditLogsTab({ BOOKINGS }: { BOOKINGS: Booking[] }) {
   const upcoming = useMemo(() => {
     const now = new Date();
     return BOOKINGS.filter((booking) => {
@@ -289,12 +370,33 @@ function AuditLogsTab() {
       const diff = (date.getTime() - now.getTime()) / 86400000;
       return diff >= 0 && diff <= 7;
     }).sort((a, b) => a.assemblyDate.localeCompare(b.assemblyDate));
-  }, []);
+  }, [BOOKINGS]);
+
+  const canceled = BOOKINGS.filter((booking) => booking.status === "CANCELED");
 
   return (
     <>
-      <Section title="Canceled Bookings Audit Log" icon={AlertTriangle} aside="0 canceled">
-        <AppText variant="subtitle">No cancellations recorded in the current period.</AppText>
+      <Section
+        title="Canceled Bookings Audit Log"
+        icon={AlertTriangle}
+        aside={`${canceled.length} canceled`}
+      >
+        {canceled.length === 0 ? (
+          <AppText variant="subtitle">No cancellations recorded in the current period.</AppText>
+        ) : (
+          <View style={{ gap: 10 }}>
+            {canceled.map((booking) => (
+              <View key={booking.code} style={styles.lineTop}>
+                <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
+                  {booking.code}
+                </AppText>
+                <AppText variant="small" color={colors.text2}>
+                  {booking.client}
+                </AppText>
+              </View>
+            ))}
+          </View>
+        )}
       </Section>
       <Section title="Upcoming Operations" icon={CalendarCheck} aside="Next 7 days">
         {upcoming.length === 0 ? (

@@ -21,7 +21,8 @@ function buildRoles(BOOKINGS: Booking[]) {
       name: "Client Relations (CCR)",
       icon: Headphones,
       subtitle: "Intake & payments",
-      description: "Register screen reservations, track payments, and confirm bookings with clients.",
+      description:
+        "Register screen reservations, track payments, and confirm bookings with clients.",
       count: BOOKINGS.filter((b) => b.status === "RESERVED").length,
       label: "awaiting confirmation",
       tone: colors.accent,

@@ -97,8 +97,7 @@ function canOpen(role: string, href: string) {
 
 export function AppShell() {
   const pathname = usePathname();
-  const { activeProfile, profiles, setActiveProfile, theme, toggleTheme, logout } =
-    useAppContext();
+  const { activeProfile, profiles, setActiveProfile, theme, toggleTheme, logout } = useAppContext();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);

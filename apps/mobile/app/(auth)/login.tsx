@@ -81,10 +81,7 @@ export default function LoginScreen() {
         </Animated.View>
       </View>
 
-      <Animated.View
-        entering={FadeInDown.duration(500).delay(180)}
-        style={styles.formPanel}
-      >
+      <Animated.View entering={FadeInDown.duration(500).delay(180)} style={styles.formPanel}>
         <LockKeyhole size={26} color={colors.accent} strokeWidth={1.75} />
         <AppText variant="title" style={{ fontSize: 22 }}>
           Sign in to operations

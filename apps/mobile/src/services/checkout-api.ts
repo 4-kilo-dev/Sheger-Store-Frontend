@@ -1,7 +1,10 @@
 import { client } from "@/lib/api/client";
 import type { BomItem } from "@/types/domain";
 
-export async function checkoutBookingApi(bookingId: string, items: BomItem[]): Promise<{ status: string }> {
+export async function checkoutBookingApi(
+  bookingId: string,
+  items: BomItem[],
+): Promise<{ status: string }> {
   const assets = items.map((item) => ({
     poolId: item.poolId,
     itemId: item.itemId,

@@ -43,7 +43,11 @@ import {
 import { colors } from "@/theme/tokens";
 import type { Booking, BookingStatus } from "@/types/domain";
 import { daysUntil, formatCurrency } from "@/utils/format";
-import { useBooking, useRecordBookingPayment, useTransitionBookingStatus } from "@/hooks/useOperations";
+import {
+  useBooking,
+  useRecordBookingPayment,
+  useTransitionBookingStatus,
+} from "@/hooks/useOperations";
 
 const TABS = [
   "Overview",
@@ -106,7 +110,11 @@ export default function BookingDetailScreen() {
       <Screen>
         <ErrorState
           title={isError ? "Could not load booking" : "Booking not found"}
-          detail={isError ? "Check your connection and try again." : "Return to bookings and choose another booking."}
+          detail={
+            isError
+              ? "Check your connection and try again."
+              : "Return to bookings and choose another booking."
+          }
           onRetry={isError ? () => refetch() : undefined}
         />
       </Screen>

@@ -11,7 +11,19 @@ export async function getRolesApi(): Promise<Role[]> {
   return client.get<Role[]>("/roles");
 }
 
-function toStaffMember(u: any, roleName?: string): StaffMember {
+interface RawUser {
+  id: string;
+  name: string;
+  phone?: string;
+  active?: boolean;
+  team?: string;
+  jobs?: number;
+  capacity?: number;
+  createdAt?: string;
+  roles?: { displayName: string }[];
+}
+
+function toStaffMember(u: RawUser, roleName?: string): StaffMember {
   const initials =
     u.name
       .split(" ")
@@ -35,7 +47,7 @@ function toStaffMember(u: any, roleName?: string): StaffMember {
 }
 
 export async function getStaffApi(): Promise<StaffMember[]> {
-  const users = await client.get<any[]>("/users");
+  const users = await client.get<RawUser[]>("/users");
   return users.map((u) => toStaffMember(u));
 }
 
@@ -57,7 +69,7 @@ export async function createStaffApi(payload: {
     throw new Error(`Role "${payload.role}" not found in backend roles.`);
   }
 
-  const newUser = await client.post<any>("/users", {
+  const newUser = await client.post<RawUser>("/users", {
     name: payload.name,
     phone: payload.phone,
     email: payload.email || `${payload.name.toLowerCase().replace(/\s+/g, ".")}@vortexvisual.com`,
