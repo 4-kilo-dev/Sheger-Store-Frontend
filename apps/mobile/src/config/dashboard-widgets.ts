@@ -47,7 +47,8 @@ export const ROLE_LAYOUTS: Record<UserRole, RoleLayoutConfig> = {
     widgets: ["stats-overview", "booking-queues"],
     eyebrow: "Field operations",
     title: "Your Assignments & Prep",
-    description: "Accept assigned bookings, prepare the bill of materials, and run your field setups.",
+    description:
+      "Accept assigned bookings, prepare the bill of materials, and run your field setups.",
   },
   OO: {
     widgets: ["stats-overview", "booking-queues", "onsite-deployments"],

@@ -53,6 +53,8 @@ export type InventoryAvailability = "AVAILABLE" | "RESERVED" | "ONSITE";
 
 export interface InventoryItem {
   id: string;
+  poolId?: string;
+  itemId?: string;
   name: string;
   category: string;
   model: string;
@@ -128,3 +130,14 @@ export const STATUS_ORDER: BookingStatus[] = [
   "COMPLETED",
   "DONE",
 ];
+
+export interface PerformanceMetric {
+  id: string;
+  key: string;
+  label: string;
+  description: string;
+  category: "internal" | "client_feedback";
+  valueType: "boolean" | "rating_10" | "rating_5" | "percentage";
+  sortOrder: number;
+  isActive: boolean;
+}

@@ -53,8 +53,8 @@ export default function ChangePasswordScreen() {
           Change Password
         </AppText>
         <AppText variant="subtitle">
-          Please change the temporary password provided by your administrator to something only
-          you know.
+          Please change the temporary password provided by your administrator to something only you
+          know.
         </AppText>
         <Controller
           control={control}

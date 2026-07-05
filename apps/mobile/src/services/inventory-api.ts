@@ -1,16 +1,41 @@
 import { client } from "@/lib/api/client";
 import type { InventoryItem } from "@/types/domain";
 
-async function getCategoriesApi(): Promise<any[]> {
-  return client.get<any[]>("/inventory/categories");
+interface RawCategory {
+  id: string;
+  name: string;
 }
 
-async function getPoolsApi(): Promise<any[]> {
-  return client.get<any[]>("/inventory/pools");
+interface RawPool {
+  id: string;
+  sku?: string;
+  name: string;
+  categoryId?: string;
+  totalQuantity?: string;
+  notes?: string;
 }
 
-async function getItemsApi(): Promise<any[]> {
-  return client.get<any[]>("/inventory/items");
+interface RawSerializedItem {
+  id: string;
+  assetTag?: string;
+  serialNumber?: string;
+  name: string;
+  categoryId?: string;
+  notes?: string;
+  condition?: string;
+  purchasedAt?: string;
+}
+
+async function getCategoriesApi(): Promise<RawCategory[]> {
+  return client.get<RawCategory[]>("/inventory/categories");
+}
+
+async function getPoolsApi(): Promise<RawPool[]> {
+  return client.get<RawPool[]>("/inventory/pools");
+}
+
+async function getItemsApi(): Promise<RawSerializedItem[]> {
+  return client.get<RawSerializedItem[]>("/inventory/items");
 }
 
 export async function getInventoryApi(): Promise<InventoryItem[]> {
@@ -20,13 +45,14 @@ export async function getInventoryApi(): Promise<InventoryItem[]> {
     getItemsApi(),
   ]);
 
-  const categoryMap = new Map(categories.map((c) => [c.id, c]));
+  const categoryMap = new Map<string | undefined, RawCategory>(categories.map((c) => [c.id, c]));
 
   const mappedPools: InventoryItem[] = pools.map((p) => {
     const cat = categoryMap.get(p.categoryId);
     const totalQty = parseInt(p.totalQuantity || "0", 10);
     return {
       id: p.sku || p.id,
+      poolId: p.id,
       name: p.name,
       category: cat?.name || "Bulk Pool",
       model: "VV Standard",
@@ -48,6 +74,7 @@ export async function getInventoryApi(): Promise<InventoryItem[]> {
     const isDamaged = i.condition === "DAMAGED";
     return {
       id: i.assetTag || i.id,
+      itemId: i.id,
       name: i.name,
       category: cat?.name || "Serialized Asset",
       model: i.notes || "VV Serialized",
@@ -59,7 +86,9 @@ export async function getInventoryApi(): Promise<InventoryItem[]> {
       condition: isDamaged ? "DAMAGED" : "GOOD",
       availability: isDamaged ? "RESERVED" : "AVAILABLE",
       location: "Main Warehouse",
-      lastService: i.purchasedAt ? i.purchasedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      lastService: i.purchasedAt
+        ? i.purchasedAt.slice(0, 10)
+        : new Date().toISOString().slice(0, 10),
       nextService: new Date().toISOString().slice(0, 10),
     };
   });
@@ -75,6 +104,7 @@ export async function getInventoryItemApi(id: string): Promise<InventoryItem | u
     const isDamaged = itemMatch.condition === "DAMAGED";
     return {
       id: itemMatch.assetTag || itemMatch.id,
+      itemId: itemMatch.id,
       name: itemMatch.name,
       category: "Serialized Asset",
       model: itemMatch.notes || "VV Serialized",
@@ -98,6 +128,7 @@ export async function getInventoryItemApi(id: string): Promise<InventoryItem | u
     const totalQty = parseInt(poolMatch.totalQuantity || "0", 10);
     return {
       id: poolMatch.sku || poolMatch.id,
+      poolId: poolMatch.id,
       name: poolMatch.name,
       category: "Bulk Pool",
       model: "VV Standard",
@@ -115,15 +146,4 @@ export async function getInventoryItemApi(id: string): Promise<InventoryItem | u
   }
 
   return undefined;
-}
-
-export async function getSerializedItemDetailApi(id: string): Promise<{
-  assetTag: string;
-  serialNumber: string;
-  condition: string;
-} | undefined> {
-  const items = await getItemsApi();
-  const match = items.find((i) => i.assetTag === id || i.id === id);
-  if (!match) return undefined;
-  return { assetTag: match.assetTag, serialNumber: match.serialNumber, condition: match.condition };
 }

@@ -69,7 +69,10 @@ export default function InventoryDetailScreen() {
         <Button variant="outline" icon={RotateCcw}>
           Stock Movement
         </Button>
-        <Button icon={ShieldAlert} onPress={() => router.push(to(`/damage-report?itemId=${item.id}`))}>
+        <Button
+          icon={ShieldAlert}
+          onPress={() => router.push(to(`/damage-report?itemId=${item.id}`))}
+        >
           Report Damage
         </Button>
       </View>

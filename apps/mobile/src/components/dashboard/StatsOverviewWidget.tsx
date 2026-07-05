@@ -59,42 +59,103 @@ export function StatsOverviewWidget() {
   const cards = useMemo(() => {
     if (role === "CCR") {
       return [
-        { label: "Reserved", value: stats.reserved, note: "Awaiting confirmation", icon: CalendarRange },
-        { label: "Unpaid / Advance", value: stats.unpaid, note: "Needs follow-up", icon: DollarSign, tone: colors.destructive },
+        {
+          label: "Reserved",
+          value: stats.reserved,
+          note: "Awaiting confirmation",
+          icon: CalendarRange,
+        },
+        {
+          label: "Unpaid / Advance",
+          value: stats.unpaid,
+          note: "Needs follow-up",
+          icon: DollarSign,
+          tone: colors.destructive,
+        },
         { label: "Confirmed", value: stats.confirmed, note: "Ready for tech review", icon: Clock },
       ];
     }
     if (role === "CTO") {
       return [
-        { label: "Confirmed", value: stats.confirmed, note: "Awaiting crew assignment", icon: CalendarRange },
+        {
+          label: "Confirmed",
+          value: stats.confirmed,
+          note: "Awaiting crew assignment",
+          icon: CalendarRange,
+        },
         { label: "Assigned", value: stats.assigned, note: "Awaiting acceptance", icon: Users },
         { label: "In preparation", value: stats.inPrep, note: "BOM in progress", icon: Package },
       ];
     }
     if (role === "TO") {
       return [
-        { label: "Assigned to you", value: stats.assignedToMe, note: "Waiting for acceptance", icon: CalendarRange },
+        {
+          label: "Assigned to you",
+          value: stats.assignedToMe,
+          note: "Waiting for acceptance",
+          icon: CalendarRange,
+        },
         { label: "In preparation", value: stats.inPrep, note: "BOM and drawings", icon: Package },
       ];
     }
     if (role === "OO") {
       return [
         { label: "In preparation", value: stats.inPrep, note: "Ready for dispatch", icon: Package },
-        { label: "Screens onsite", value: stats.onsite, note: "Active right now", icon: Package, tone: colors.status.ACCEPTED },
-        { label: "Available staff", value: stats.availableStaff, note: "Ready for assignment", icon: Users },
+        {
+          label: "Screens onsite",
+          value: stats.onsite,
+          note: "Active right now",
+          icon: Package,
+          tone: colors.status.ACCEPTED,
+        },
+        {
+          label: "Available staff",
+          value: stats.availableStaff,
+          note: "Ready for assignment",
+          icon: Users,
+        },
       ];
     }
     if (role === "SK") {
       return [
         { label: "Ready for checkout", value: stats.inPrep, note: "BOM verified", icon: Package },
-        { label: "Screens onsite", value: stats.onsite, note: "Active right now", icon: Package, tone: colors.status.ACCEPTED },
+        {
+          label: "Screens onsite",
+          value: stats.onsite,
+          note: "Active right now",
+          icon: Package,
+          tone: colors.status.ACCEPTED,
+        },
       ];
     }
     return [
-      { label: "Bookings this month", value: stats.thisMonth, note: `${stats.paid} paid`, icon: CalendarRange },
-      { label: "Revenue", value: formatCompactCurrency(stats.revenue), note: "+14.2% from last month", icon: TrendingUp, tone: colors.success },
-      { label: "Screens onsite", value: stats.onsite, note: "Active right now", icon: Package, tone: colors.status.ACCEPTED },
-      { label: "Assemblies this week", value: stats.upcoming, note: "Next 7 days", icon: Clock, tone: colors.payment.ADVANCE },
+      {
+        label: "Bookings this month",
+        value: stats.thisMonth,
+        note: `${stats.paid} paid`,
+        icon: CalendarRange,
+      },
+      {
+        label: "Revenue",
+        value: formatCompactCurrency(stats.revenue),
+        note: "+14.2% from last month",
+        icon: TrendingUp,
+        tone: colors.success,
+      },
+      {
+        label: "Screens onsite",
+        value: stats.onsite,
+        note: "Active right now",
+        icon: Package,
+        tone: colors.status.ACCEPTED,
+      },
+      {
+        label: "Assemblies this week",
+        value: stats.upcoming,
+        note: "Next 7 days",
+        icon: Clock,
+        tone: colors.payment.ADVANCE,
+      },
     ];
   }, [role, stats]);
 

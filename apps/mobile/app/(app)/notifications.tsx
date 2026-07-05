@@ -73,7 +73,10 @@ export default function NotificationsScreen() {
   if (isError) {
     return (
       <Screen>
-        <ErrorState detail="Could not load notifications from the server." onRetry={() => refetch()} />
+        <ErrorState
+          detail="Could not load notifications from the server."
+          onRetry={() => refetch()}
+        />
       </Screen>
     );
   }
@@ -92,7 +95,11 @@ export default function NotificationsScreen() {
       <Button
         variant="outline"
         icon={CheckCheck}
-        onPress={() => displayItems.filter((entry) => entry.display.unread).forEach((entry) => markRead.mutate(entry.item.id))}
+        onPress={() =>
+          displayItems
+            .filter((entry) => entry.display.unread)
+            .forEach((entry) => markRead.mutate(entry.item.id))
+        }
       >
         Mark all read
       </Button>
@@ -127,7 +134,10 @@ export default function NotificationsScreen() {
                     <View style={styles.lineTop}>
                       <AppText style={{ fontWeight: "900", flex: 1 }}>{display.title}</AppText>
                       <AppText variant="data" color={colors.text3}>
-                        {new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {new Date(item.createdAt).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </AppText>
                     </View>
                     <AppText variant="subtitle">{item.message}</AppText>

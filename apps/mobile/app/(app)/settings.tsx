@@ -13,8 +13,18 @@ import {
 } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { AppText, Button, Field, Input, Screen, Section, SegmentedTabs } from "@/components/ui";
-import { PERFORMANCE_METRICS } from "@/data/mock";
+import {
+  AppText,
+  Button,
+  ErrorState,
+  Field,
+  Input,
+  LoadingState,
+  Screen,
+  Section,
+  SegmentedTabs,
+} from "@/components/ui";
+import { usePerformanceMetrics, useToggleMetricActive } from "@/hooks/useOperations";
 import { colors, radius } from "@/theme/tokens";
 
 const PANELS = [
@@ -188,17 +198,18 @@ export default function SettingsScreen() {
 
 function PerformanceMetricsPanel() {
   const [category, setCategory] = useState<"internal" | "client_feedback">("internal");
-  const [metrics, setMetrics] = useState(PERFORMANCE_METRICS);
+  const { data: metrics = [], isLoading, isError, refetch } = usePerformanceMetrics();
+  const toggleMetric = useToggleMetricActive();
   const categories = ["internal", "client_feedback"] as const;
   const filtered = metrics.filter((metric) => metric.category === category);
 
-  const toggleActive = (id: string) => {
-    setMetrics((current) =>
-      current.map((metric) =>
-        metric.id === id ? { ...metric, isActive: !metric.isActive } : metric,
-      ),
-    );
+  const toggleActive = (id: string, isActive: boolean) => {
+    toggleMetric.mutate({ id, isActive: !isActive });
   };
+
+  if (isLoading) return <LoadingState label="Loading performance metrics..." />;
+  if (isError)
+    return <ErrorState detail="Could not load performance metrics." onRetry={() => refetch()} />;
 
   return (
     <Section
@@ -211,11 +222,7 @@ function PerformanceMetricsPanel() {
         </Button>
       }
     >
-      <SegmentedTabs
-        tabs={categories}
-        value={category}
-        onChange={setCategory}
-      />
+      <SegmentedTabs tabs={categories} value={category} onChange={setCategory} />
       <View style={{ gap: 10 }}>
         {filtered.map((metric) => (
           <View key={metric.id} style={styles.metricRow}>
@@ -229,7 +236,7 @@ function PerformanceMetricsPanel() {
               </AppText>
             </View>
             <Pressable
-              onPress={() => toggleActive(metric.id)}
+              onPress={() => toggleActive(metric.id, metric.isActive)}
               style={[styles.toggle, metric.isActive ? styles.toggleOn : null]}
             >
               <View style={[styles.knob, metric.isActive ? styles.knobOn : null]} />

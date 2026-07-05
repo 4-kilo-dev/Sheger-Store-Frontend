@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { to } from "@/utils/routes";
 import { AlertTriangle, Camera, CheckCircle2, ShieldAlert } from "lucide-react-native";
 import { useState } from "react";
@@ -8,18 +8,76 @@ import {
   BackLink,
   Button,
   Card,
+  ErrorState,
   Field,
   Input,
+  LoadingState,
   Screen,
   Section,
   TextArea,
 } from "@/components/ui";
-import { INVENTORY } from "@/data/mock";
+import { useBookings, useCreateDamageReport, useInventory } from "@/hooks/useOperations";
 import { colors } from "@/theme/tokens";
 
 export default function DamageReportScreen() {
+  const params = useLocalSearchParams<{ itemId?: string }>();
+  const {
+    data: INVENTORY = [],
+    isLoading: loadingInventory,
+    isError: inventoryError,
+  } = useInventory();
+  const { data: BOOKINGS = [], isLoading: loadingBookings, isError: bookingsError } = useBookings();
+  const createDamageReport = useCreateDamageReport();
+
   const [submitted, setSubmitted] = useState(false);
-  const [itemId, setItemId] = useState(INVENTORY[0]?.id ?? "");
+  const [itemId, setItemId] = useState(params.itemId ?? INVENTORY[0]?.id ?? "");
+  const [bookingCode, setBookingCode] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [description, setDescription] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  if (loadingInventory || loadingBookings) {
+    return (
+      <Screen>
+        <LoadingState label="Loading inventory..." />
+      </Screen>
+    );
+  }
+
+  if (inventoryError || bookingsError) {
+    return (
+      <Screen>
+        <ErrorState detail="Could not load data needed for a damage report." />
+      </Screen>
+    );
+  }
+
+  const handleSubmit = async () => {
+    setSubmitError(null);
+    const booking = BOOKINGS.find((b) => b.code === bookingCode);
+    const item = INVENTORY.find((i) => i.id === itemId);
+    if (!booking) {
+      setSubmitError("Enter a valid booking code this damage relates to.");
+      return;
+    }
+    if (!item) {
+      setSubmitError("Select a valid inventory item.");
+      return;
+    }
+    try {
+      await createDamageReport.mutateAsync({
+        bookingId: booking.code,
+        poolId: item.poolId,
+        itemId: item.itemId,
+        reportType: "DAMAGE",
+        quantity: item.poolId ? quantity : undefined,
+        description,
+      });
+      setSubmitted(true);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Failed to submit damage report.");
+    }
+  };
 
   if (submitted) {
     return (
@@ -39,12 +97,21 @@ export default function DamageReportScreen() {
     );
   }
 
+  const selectedItem = INVENTORY.find((i) => i.id === itemId);
+
   return (
     <Screen
       footer={
-        <Button icon={ShieldAlert} onPress={() => setSubmitted(true)}>
-          Submit Damage Report
-        </Button>
+        <View style={{ gap: 8 }}>
+          {submitError ? (
+            <AppText variant="small" color={colors.destructive}>
+              {submitError}
+            </AppText>
+          ) : null}
+          <Button icon={ShieldAlert} disabled={createDamageReport.isPending} onPress={handleSubmit}>
+            {createDamageReport.isPending ? "Submitting..." : "Submit Damage Report"}
+          </Button>
+        </View>
       }
     >
       <BackLink label="Back to Inventory" href="/inventory" />
@@ -53,15 +120,22 @@ export default function DamageReportScreen() {
         <AppText variant="title">Report Equipment Damage</AppText>
       </View>
       <Section title="Equipment identification" icon={ShieldAlert}>
+        <Field label="Booking code this relates to">
+          <Input
+            value={bookingCode}
+            onChangeText={setBookingCode}
+            placeholder="e.g. SB047"
+            autoCapitalize="characters"
+          />
+        </Field>
         <Field label="Inventory item">
-          <Input value={itemId} onChangeText={setItemId} />
+          <Input value={itemId} onChangeText={setItemId} placeholder="Item ID / SKU" />
         </Field>
-        <Field label="Affected quantity">
-          <Input defaultValue="1" keyboardType="numeric" />
-        </Field>
-        <Field label="Serial numbers / unit references">
-          <Input placeholder="e.g. PNL-P297-01-004, -008" />
-        </Field>
+        {selectedItem?.poolId ? (
+          <Field label="Affected quantity">
+            <Input value={quantity} onChangeText={setQuantity} keyboardType="numeric" />
+          </Field>
+        ) : null}
       </Section>
       <Section title="Incident details" icon={AlertTriangle}>
         <Field label="Damage severity">
@@ -71,7 +145,11 @@ export default function DamageReportScreen() {
           <Input defaultValue="Warehouse inspection" />
         </Field>
         <Field label="Description">
-          <TextArea placeholder="Describe visible damage, symptoms, and circumstances..." />
+          <TextArea
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Describe visible damage, symptoms, and circumstances..."
+          />
         </Field>
       </Section>
       <Card style={styles.upload}>

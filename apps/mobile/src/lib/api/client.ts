@@ -6,9 +6,9 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
 
 class ApiError extends Error {
   status: number;
-  data: any;
+  data: unknown;
 
-  constructor(message: string, status: number, data: any) {
+  constructor(message: string, status: number, data: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -56,7 +56,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const response = await fetch(url, { ...options, headers });
 
-  let data: any;
+  let data: unknown;
   const contentType = response.headers.get("content-type");
   if (contentType && contentType.includes("application/json")) {
     data = await response.json();
@@ -74,10 +74,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         router.replace(to("/login"));
       }
     }
-    const errorMessage =
-      (data && typeof data === "object" && (data.message || data.error)) ||
-      response.statusText ||
-      "Request failed";
+    const body =
+      data && typeof data === "object" ? (data as { message?: unknown; error?: unknown }) : null;
+    const errorMessage = body?.message || body?.error || response.statusText || "Request failed";
     throw new ApiError(
       Array.isArray(errorMessage) ? errorMessage.join(", ") : String(errorMessage),
       response.status,
@@ -91,21 +90,21 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const client = {
   get: <T>(path: string, options?: RequestInit) => request<T>(path, { ...options, method: "GET" }),
 
-  post: <T>(path: string, body?: any, options?: RequestInit) =>
+  post: <T>(path: string, body?: unknown, options?: RequestInit) =>
     request<T>(path, {
       ...options,
       method: "POST",
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
 
-  put: <T>(path: string, body?: any, options?: RequestInit) =>
+  put: <T>(path: string, body?: unknown, options?: RequestInit) =>
     request<T>(path, {
       ...options,
       method: "PUT",
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
 
-  patch: <T>(path: string, body?: any, options?: RequestInit) =>
+  patch: <T>(path: string, body?: unknown, options?: RequestInit) =>
     request<T>(path, {
       ...options,
       method: "PATCH",

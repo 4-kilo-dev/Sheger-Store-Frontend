@@ -16,24 +16,30 @@ import {
   AppText,
   Button,
   Card,
+  ErrorState,
   Field,
   Input,
   KV,
+  LoadingState,
   ProgressBar,
   Screen,
   Section,
   TextArea,
 } from "@/components/ui";
-import { BOOKINGS } from "@/data/mock";
+import { useBookings, useCheckinBooking, useCheckoutBooking } from "@/hooks/useOperations";
 import { colors, radius } from "@/theme/tokens";
 
 type Mode = "checkout" | "checkin";
 
 export default function CheckoutScreen() {
+  const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings();
   const [mode, setMode] = useState<Mode>("checkout");
   const [selectedCode, setSelectedCode] = useState("");
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const checkoutMutation = useCheckoutBooking();
+  const checkinMutation = useCheckinBooking();
   const eligibleBookings = useMemo(
     () =>
       mode === "checkout"
@@ -43,7 +49,7 @@ export default function CheckoutScreen() {
         : BOOKINGS.filter(
             (booking) => booking.status === "COMPLETED" || booking.status === "ONSITE",
           ),
-    [mode],
+    [BOOKINGS, mode],
   );
   const selected = eligibleBookings.find((booking) => booking.code === selectedCode);
 
@@ -60,7 +66,40 @@ export default function CheckoutScreen() {
     setSelectedCode("");
     setCheckedItems(new Set());
     setSubmitted(false);
+    setSubmitError(null);
   };
+
+  const handleSubmit = async () => {
+    if (!selected) return;
+    setSubmitError(null);
+    const items = selected.bomItems.filter((item) => checkedItems.has(item.id));
+    try {
+      if (mode === "checkout") {
+        await checkoutMutation.mutateAsync({ bookingId: selected.code, items });
+      } else {
+        await checkinMutation.mutateAsync({ bookingId: selected.code, items });
+      }
+      setSubmitted(true);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Failed to process the request.");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Screen>
+        <LoadingState label="Loading bookings..." />
+      </Screen>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Screen>
+        <ErrorState detail="Could not load bookings from the server." onRetry={() => refetch()} />
+      </Screen>
+    );
+  }
 
   if (submitted && selected) {
     return (
@@ -90,12 +129,23 @@ export default function CheckoutScreen() {
           <View style={{ gap: 8 }}>
             <Button
               icon={mode === "checkout" ? Truck : PackageCheck}
-              disabled={checkedItems.size === 0}
+              disabled={
+                checkedItems.size === 0 || checkoutMutation.isPending || checkinMutation.isPending
+              }
               variant={mode === "checkout" ? "primary" : "success"}
-              onPress={() => setSubmitted(true)}
+              onPress={handleSubmit}
             >
-              {mode === "checkout" ? "Confirm Check-Out" : "Confirm Check-In"}
+              {checkoutMutation.isPending || checkinMutation.isPending
+                ? "Submitting..."
+                : mode === "checkout"
+                  ? "Confirm Check-Out"
+                  : "Confirm Check-In"}
             </Button>
+            {submitError ? (
+              <AppText variant="small" color={colors.destructive}>
+                {submitError}
+              </AppText>
+            ) : null}
             <Button variant="outline" icon={Printer}>
               Print Packing Slip
             </Button>

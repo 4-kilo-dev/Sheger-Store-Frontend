@@ -1,11 +1,54 @@
 import { client } from "@/lib/api/client";
 import type { Booking, BomItem, BookingStatus, PaymentStatus, ScreenType } from "@/types/domain";
 
-function mapBackendBookingToFrontend(b: any): Booking {
+interface RawPerson {
+  name?: string;
+  phone?: string;
+}
+
+interface RawBomLine {
+  id: string;
+  quantity: string;
+  poolId?: string;
+  itemId?: string;
+  acceptedShortfall?: boolean;
+  item?: RawPerson & { name?: string };
+  pool?: { name?: string };
+}
+
+interface RawAssignment {
+  isTeamLead?: boolean;
+  roleContext?: string;
+  user?: RawPerson;
+}
+
+interface RawBooking {
+  id: string;
+  bookingCode?: string;
+  status?: string;
+  eventDate?: string;
+  eventLocation?: string;
+  assemblyStart?: string;
+  disassemblyEnd?: string;
+  itemServiceSpec?: string;
+  rentedDays?: number;
+  paymentStatus?: string;
+  paymentAmount?: string;
+  amount?: string;
+  mealProvision?: string;
+  notes?: string;
+  createdAt?: string;
+  customer?: RawPerson;
+  driver?: RawPerson;
+  bomLines?: RawBomLine[];
+  assignments?: RawAssignment[];
+}
+
+function mapBackendBookingToFrontend(b: RawBooking): Booking {
   const customerName = b.customer?.name || "Client";
   const customerPhone = b.customer?.phone || "";
 
-  const bomItems: BomItem[] = (b.bomLines || []).map((line: any) => ({
+  const bomItems: BomItem[] = (b.bomLines || []).map((line) => ({
     id: line.id,
     name: line.item?.name || line.pool?.name || "Equipment Line",
     qty: parseFloat(line.quantity),
@@ -14,22 +57,22 @@ function mapBackendBookingToFrontend(b: any): Booking {
     itemId: line.itemId || undefined,
   }));
 
-  const assignees = (b.assignments || []).map((a: any) => a.user?.name).filter(Boolean);
+  const assignees = (b.assignments || []).map((a) => a.user?.name).filter(Boolean) as string[];
 
-  const leadAssignee = (b.assignments || []).find((a: any) => a.isTeamLead);
+  const leadAssignee = (b.assignments || []).find((a) => a.isTeamLead);
   const teamLeader = leadAssignee?.user?.name || "";
 
   const crewNames = (b.assignments || [])
-    .filter((a: any) => a.roleContext === "CREW")
-    .map((a: any) => a.user?.name)
+    .filter((a) => a.roleContext === "CREW")
+    .map((a) => a.user?.name)
     .filter(Boolean);
   const stageHand = crewNames.length > 0 ? `TEAM · ${crewNames.join(", ")}` : "None Assigned";
 
   const driver =
     b.driver?.name ||
-    (b.assignments || []).find((a: any) => a.roleContext === "OO")?.user?.name ||
+    (b.assignments || []).find((a) => a.roleContext === "OO")?.user?.name ||
     "None Assigned";
-  const mealBudget = parseFloat(b.mealProvision) || 0;
+  const mealBudget = parseFloat(b.mealProvision || "0") || 0;
 
   let payment: PaymentStatus = "UNPAID";
   const rawPayment = b.paymentStatus?.toLowerCase();
@@ -71,12 +114,12 @@ function mapBackendBookingToFrontend(b: any): Booking {
 }
 
 export async function getBookingsApi(): Promise<Booking[]> {
-  const data = await client.get<any[]>("/bookings");
+  const data = await client.get<RawBooking[]>("/bookings");
   return (data || []).map(mapBackendBookingToFrontend);
 }
 
 export async function getBookingDetailApi(id: string): Promise<Booking> {
-  const b = await client.get<any>(`/bookings/${id}`);
+  const b = await client.get<RawBooking>(`/bookings/${id}`);
   return mapBackendBookingToFrontend(b);
 }
 
@@ -95,7 +138,7 @@ export async function createBookingApi(form: {
   paymentTerms?: "UNPAID" | "ADVANCE" | "PAID";
   ctoNotes?: string;
 }): Promise<Booking> {
-  const customer = await client.post<any>("/customers", {
+  const customer = await client.post<{ id: string }>("/customers", {
     name: form.client,
     phone: form.contactPhone || "+251 900 000 000",
     notes: form.contactPerson || "Client contact",
@@ -125,7 +168,7 @@ export async function createBookingApi(form: {
     notes: form.ctoNotes || "",
   };
 
-  const booking = await client.post<any>("/bookings", bookingPayload);
+  const booking = await client.post<RawBooking>("/bookings", bookingPayload);
 
   if (form.amount && form.amount > 0) {
     try {

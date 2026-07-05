@@ -1,18 +1,41 @@
 import { client } from "@/lib/api/client";
 import type { Notification, NotificationPriority, NotificationType } from "@/types/domain";
 
-const EVENT_DISPLAY: Record<string, { title: string; type: NotificationType; priority: NotificationPriority }> = {
+const EVENT_DISPLAY: Record<
+  string,
+  { title: string; type: NotificationType; priority: NotificationPriority }
+> = {
   "booking.created": { title: "New booking created", type: "Booking", priority: "NORMAL" },
   "booking.confirmed": { title: "Booking confirmed", type: "Booking", priority: "NORMAL" },
   "booking.canceled": { title: "Booking canceled", type: "Booking", priority: "NORMAL" },
-  "booking.status_changed": { title: "Booking status changed", type: "Booking", priority: "NORMAL" },
+  "booking.status_changed": {
+    title: "Booking status changed",
+    type: "Booking",
+    priority: "NORMAL",
+  },
   "assignment.created": { title: "New assignment", type: "Booking", priority: "NORMAL" },
   "assignment.declined": { title: "Assignment declined", type: "Booking", priority: "URGENT" },
-  "technician.issue_reported": { title: "Technician issue reported", type: "Damage", priority: "URGENT" },
-  "inventory.damage_missing_reported": { title: "Damage or missing report", type: "Damage", priority: "URGENT" },
-  "evaluation.post_event_submitted": { title: "Evaluation submitted", type: "System", priority: "NORMAL" },
+  "technician.issue_reported": {
+    title: "Technician issue reported",
+    type: "Damage",
+    priority: "URGENT",
+  },
+  "inventory.damage_missing_reported": {
+    title: "Damage or missing report",
+    type: "Damage",
+    priority: "URGENT",
+  },
+  "evaluation.post_event_submitted": {
+    title: "Evaluation submitted",
+    type: "System",
+    priority: "NORMAL",
+  },
   "inquiry.received": { title: "New inquiry received", type: "System", priority: "NORMAL" },
-  "inventory.out_of_stock": { title: "Inventory out of stock", type: "Inventory", priority: "URGENT" },
+  "inventory.out_of_stock": {
+    title: "Inventory out of stock",
+    type: "Inventory",
+    priority: "URGENT",
+  },
 };
 
 export function getNotificationDisplay(notification: Notification) {
