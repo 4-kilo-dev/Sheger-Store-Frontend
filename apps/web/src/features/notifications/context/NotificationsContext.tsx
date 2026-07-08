@@ -168,6 +168,23 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
         // 3. Trigger styled float toast
         triggerToastNotification(newNotif);
+
+        const eventType = (newNotif.eventType || "").toLowerCase();
+        const relatedEntity = (newNotif.relatedEntity || "").toLowerCase();
+        const isBookingRelatedEvent =
+          relatedEntity === "booking" ||
+          relatedEntity === "assignment" ||
+          eventType.startsWith("booking.") ||
+          eventType.startsWith("assignment.");
+
+        if (isBookingRelatedEvent) {
+          void queryClient.invalidateQueries({
+            predicate: (query) =>
+              Array.isArray(query.queryKey) &&
+              typeof query.queryKey[0] === "string" &&
+              query.queryKey[0].startsWith("booking"),
+          });
+        }
       },
       onError: (err) => {
         console.warn("SSE stream error", err);
