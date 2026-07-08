@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft, Edit3, Printer, Share2, MoreHorizontal, MapPin, Calendar,
@@ -25,7 +26,15 @@ import {
   STATUS_ORDER,
   STATUS_LABELS,
   type Booking,
-  type BookingStatus 
+  type BookingStatus,
+  acceptAssignmentApi,
+  declineAssignmentApi,
+  createBomLineApi,
+  updateBomLineApi,
+  deleteBomLineApi,
+  createHandoffSnapshotApi,
+  createDamageReportApi,
+  submitEvaluationApi
 } from "@/features/bookings/services/bookings.api";
 import { getInventoryCategoriesApi, getInventoryPoolsApi, getPoolAvailabilityApi } from "@/features/inventory/services/inventory.api";
 import { getStaffApi } from "@/features/users/services/staff.api";
@@ -145,6 +154,135 @@ export function BookingDetail() {
 
   const authUser = useAuthUser();
 
+  const { data: booking, isLoading, error } = useQuery({
+    queryKey: ["booking", code],
+    queryFn: () => getBookingDetailApi(code),
+  });
+
+  // Auto-redirect to friendly SB code if loaded with a UUID
+  useEffect(() => {
+    if (booking && booking.code && code !== booking.code) {
+      navigate({
+        to: "/bookings/$code" as any,
+        params: { code: booking.code },
+        replace: true,
+      });
+    }
+  }, [booking, code, navigate]);
+
+  // Technician role detection
+  const isTechnician = authUser?.role?.toLowerCase() === "technician";
+
+  // Crew Review Modal states
+  const [showInternalModal, setShowInternalModal] = useState(false);
+  const [venueName, setVenueName] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [teamSize, setTeamSize] = useState(0);
+  const [notes, setNotes] = useState("");
+  const [internalScores, setInternalScores] = useState<Record<string, number>>({});
+
+  const { data: metrics } = useQuery({
+    queryKey: ["active-metrics"],
+    queryFn: () => listPerformanceMetricsApi({ isActive: true }),
+  });
+  const internalMetrics = metrics?.filter((m) => m.category === "internal") || [];
+
+  const { mutate: submitInternal, isPending: submittingInternal } = useMutation({
+    mutationFn: (payload: SubmitInternalEvaluationPayload) => submitInternalEvaluationApi(code, payload),
+    onSuccess: () => {
+      toast.success("Internal crew evaluation submitted!");
+      queryClient.invalidateQueries({ queryKey: ["booking-internal-eval", code] });
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+      setShowInternalModal(false);
+      setInternalScores({});
+      setNotes("");
+      // Transition status to COMPLETED automatically
+      transitionStatus({ toStatus: "COMPLETED" });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to submit crew evaluation");
+    }
+  });
+
+  const openInternalForm = () => {
+    if (!booking) return;
+    const initialScores: Record<string, number> = {};
+    internalMetrics.forEach((m) => {
+      initialScores[m.id] = m.valueType === "boolean" ? 1 
+                          : m.valueType === "rating_5" ? 5 
+                          : m.valueType === "percentage" ? 100 
+                          : 10;
+    });
+    setInternalScores(initialScores);
+    setVenueName(booking.venue);
+    setEventDate(booking.eventDate);
+    setTeamSize((booking.assignees?.length || 0) + 2);
+    setNotes("");
+    setShowInternalModal(true);
+  };
+
+  // Decline Assignment Modal States & Mutations
+  const [showDeclineModal, setShowDeclineModal] = useState(false);
+  const [declineReason, setDeclineReason] = useState("");
+
+  // Find technician's pending assignment
+  const myTechnicianAssignment = useMemo(() => {
+    if (!booking || !booking.assignments) return null;
+    return booking.assignments.find(
+      (a: any) => a.userId === authUser?.id && a.roleContext === "TECHNICIAN"
+    );
+  }, [booking, authUser]);
+
+  const pendingAssignment = useMemo(() => {
+    return myTechnicianAssignment && myTechnicianAssignment.respondedAt === null;
+  }, [myTechnicianAssignment]);
+
+  const { mutate: acceptAssignment, isPending: accepting } = useMutation({
+    mutationFn: () => acceptAssignmentApi(myTechnicianAssignment.id),
+    onSuccess: () => {
+      toast.success("Assignment accepted successfully!");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to accept assignment");
+    }
+  });
+
+  const { mutate: declineAssignment, isPending: declining } = useMutation({
+    mutationFn: (reason: string) => declineAssignmentApi(myTechnicianAssignment.id, reason),
+    onSuccess: () => {
+      toast.success("Assignment declined.");
+      setShowDeclineModal(false);
+      setDeclineReason("");
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      // Redirect back to bookings list page since job was declined
+      navigate({ to: "/bookings" });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to decline assignment");
+    }
+  });
+
+  // Report Damaged Gear Modal States & Mutations
+  const [showDamageModal, setShowDamageModal] = useState(false);
+  const [damageDescription, setDamageDescription] = useState("");
+  const [damageSeverity, setDamageSeverity] = useState("LOW");
+
+  const { mutate: submitDamageReport, isPending: submittingDamage } = useMutation({
+    mutationFn: (payload: { bookingId: string; description: string; severity: string }) => 
+      createDamageReportApi(payload),
+    onSuccess: () => {
+      toast.success("Damage report submitted successfully!");
+      setShowDamageModal(false);
+      setDamageDescription("");
+      setDamageSeverity("LOW");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to submit damage report");
+    }
+  });
+
   const [staff, setStaff] = useState<any[]>([]);
 
   useEffect(() => {
@@ -158,20 +296,7 @@ export function BookingDetail() {
   //   queryFn: () => getBookingDetailApi(code),
   // });
 
-  const { data: booking, isLoading, error } = useQuery({
-  queryKey: ["booking", code],
-  queryFn: () => getBookingDetailApi(code),
-});
-// Auto-redirect to friendly SB code if loaded with a UUID
-useEffect(() => {
-  if (booking && booking.code && code !== booking.code) {
-    navigate({
-      to: "/bookings/$code" as any,
-      params: { code: booking.code },
-      replace: true, // Replace the history entry so the back button still works normally
-    });
-  }
-}, [booking, code, navigate]);
+
 
   useEffect(() => {
     if (booking && amountReceived === 0) {
@@ -288,13 +413,13 @@ useEffect(() => {
             { icon: Printer, label: "Print" },
             { icon: Share2, label: "Share" },
             { icon: Edit3, label: "Edit" },
-          ].map(({ icon: I, label }) => (
+          ].filter(item => !(isTechnician && item.label === "Edit")).map(({ icon: I, label }) => (
             <button key={label} className="flex h-8 items-center gap-1.5 rounded-md border bg-[var(--surface)] px-2.5 text-[12px] transition hover:border-[var(--accent)]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
               <I className="h-3.5 w-3.5" />
               {label}
             </button>
           ))}
-          {computedActions.map((act) => (
+          {!isTechnician && computedActions.map((act) => (
             <button
               key={act.id}
               onClick={() => {
@@ -383,6 +508,12 @@ useEffect(() => {
                     )}
                   </div>
                 )}
+                {booking.status === "RESERVED" && selectedAction.id === "booking.confirm" && booking.payment === "UNPAID" && amountReceived < 1000 && (
+                  <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    <span>Minimum payment amount is ETB 1,000.</span>
+                  </div>
+                )}
 
                 {booking.status === "CONFIRMED" && selectedAction.id === "assignment.assign_technician" && (
                   <div className="mt-3 grid grid-cols-2 gap-3">
@@ -448,12 +579,22 @@ useEffect(() => {
             <button
               onClick={() => {
                 if (selectedAction.id === "booking.confirm" && booking.payment === "UNPAID") {
+                  if (amountReceived < 1000) {
+                    toast.error("Minimum payment amount is ETB 1,000");
+                    return;
+                  }
                   confirmBookingWithPayment({ toPaymentStatus: paymentType, amount: amountReceived });
                 } else {
                   transitionStatus({ toStatus: selectedAction.targetStatus, reason: cancellationReason || undefined });
                 }
               }}
-              disabled={isTransitioning || isRecordingPayment || isConfirmingWithPayment || (selectedAction.requiresReason && cancellationReason.trim().length < 10)}
+              disabled={
+                isTransitioning || 
+                isRecordingPayment || 
+                isConfirmingWithPayment || 
+                (selectedAction.requiresReason && cancellationReason.trim().length < 10) ||
+                (selectedAction.id === "booking.confirm" && booking.payment === "UNPAID" && amountReceived < 1000)
+              }
               className="rounded-md px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
               style={{ background: selectedAction.variant === "destructive" ? "var(--destructive)" : "var(--accent)", color: selectedAction.variant === "destructive" ? "#fff" : "var(--accent-foreground)" }}
             >
@@ -497,9 +638,101 @@ useEffect(() => {
         </div>
       </div>
 
+      {/* Technician Workflow Banner */}
+      {isTechnician && booking && (
+        <div className="mb-4 rounded-lg border p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4 duration-300" style={{ borderColor: "var(--accent)", background: "color-mix(in oklab, var(--accent) 5%, var(--surface))" }}>
+          <div>
+            <div className="text-[14px] font-bold">Technician Operations Panel</div>
+            <div className="text-[11px] mt-1" style={{ color: "var(--text-2)" }}>
+              {booking.status === "ASSIGNED" && pendingAssignment && (
+                <span>You have a pending crew assignment for this booking. Please accept or decline below.</span>
+              )}
+              {booking.status === "ASSIGNED" && !pendingAssignment && (
+                <span>Waiting for other crew members to respond to their assignments.</span>
+              )}
+              {booking.status === "ACCEPTED" && (
+                <span>BOM Preparation: Specify screen, cabling, and rigging requirements in the <strong>Equipment</strong> tab, upload schematic drawing in the <strong>Files</strong> tab, then submit to Operations.</span>
+              )}
+              {booking.status === "PREPARATION" && (
+                <span>Setup checklist submitted. Warehouse storekeepers are preparing checkout.</span>
+              )}
+              {booking.status === "ONSITE" && (
+                <span>Event active. Report any equipment failures or submit the post-event crew evaluation once completed.</span>
+              )}
+              {booking.status === "COMPLETED" && (
+                <span>Event completed. Crew evaluation submitted successfully.</span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {booking.status === "ASSIGNED" && pendingAssignment && (
+              <>
+                <button
+                  onClick={() => acceptAssignment()}
+                  disabled={accepting}
+                  className="rounded px-3 py-1.5 text-[11px] font-bold transition hover:brightness-110 disabled:opacity-50"
+                  style={{ background: "var(--color-status-done)", color: "#fff" }}
+                >
+                  {accepting ? "Accepting..." : "Accept Assignment"}
+                </button>
+                <button
+                  onClick={() => setShowDeclineModal(true)}
+                  className="rounded px-3 py-1.5 text-[11px] font-bold transition hover:brightness-110"
+                  style={{ background: "var(--destructive)", color: "#fff" }}
+                >
+                  Decline Assignment
+                </button>
+              </>
+            )}
+
+            {booking.status === "ACCEPTED" && (
+              <button
+                onClick={async () => {
+                  try {
+                    await createHandoffSnapshotApi(booking.id);
+                    transitionStatus({ toStatus: "PREPARATION" });
+                  } catch (e: any) {
+                    toast.error(e.message || "Failed to submit BOM");
+                  }
+                }}
+                disabled={isTransitioning}
+                className="rounded px-3 py-1.5 text-[11px] font-bold transition hover:brightness-110 disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                {isTransitioning ? "Submitting..." : "Submit BOM to Operations"}
+              </button>
+            )}
+
+            {(booking.status === "ONSITE" || booking.status === "COMPLETED") && (
+              <button
+                onClick={() => setShowDamageModal(true)}
+                className="rounded px-3 py-1.5 text-[11px] font-bold transition hover:brightness-110"
+                style={{ background: "var(--destructive)", color: "#fff" }}
+              >
+                Report Damaged Gear
+              </button>
+            )}
+
+            {booking.status === "ONSITE" && (
+              <button
+                onClick={openInternalForm}
+                className="rounded px-3 py-1.5 text-[11px] font-bold transition hover:brightness-110"
+                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                Submit Crew Evaluation
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="mb-4 flex items-center gap-1 border-b" style={{ borderColor: "var(--border)" }}>
-        {TABS.map((t) => {
+        {(isTechnician
+          ? TABS.filter((t) => t !== "Payments" && t !== "Schedule" && t !== "Team")
+          : TABS
+        ).map((t) => {
           const active = tab === t;
           return (
             <button
@@ -523,7 +756,292 @@ useEffect(() => {
       {tab === "Payments" && <PaymentsTab b={booking} />}
       {tab === "Files" && <FilesTab b={booking} />}
       {tab === "Activity" && <ActivityTab b={booking} />}
-      {tab === "Evaluations" && <EvaluationsTab b={booking} />}
+      {tab === "Evaluations" && <EvaluationsTab b={booking} openInternalForm={openInternalForm} />}
+
+      {/* Decline Assignment Modal */}
+      {showDeclineModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-lg border p-5 shadow-xl" style={{ background: "var(--surface)", borderColor: "var(--border)" }}>
+            <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: "var(--border)" }}>
+              <h3 className="text-[15px] font-bold text-destructive">Decline Assignment</h3>
+              <button onClick={() => setShowDeclineModal(false)} className="text-[12px] font-semibold hover:opacity-80" style={{ color: "var(--text-3)" }}>✕</button>
+            </div>
+            <div className="space-y-4">
+              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                Reason for declining (minimum 10 characters)
+                <textarea
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  placeholder="Please state why you are declining this job (e.g. scheduling conflict, double-booked)..."
+                  className="mt-1 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px] h-24 block resize-none"
+                  style={{ borderColor: "var(--border)" }}
+                />
+              </label>
+            </div>
+            <div className="mt-5 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+              <button
+                onClick={() => declineAssignment(declineReason)}
+                disabled={declining || declineReason.trim().length < 10}
+                className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
+                style={{ background: "var(--destructive)", color: "#fff" }}
+              >
+                {declining ? "Processing..." : "Confirm Decline"}
+              </button>
+              <button onClick={() => setShowDeclineModal(false)} className="rounded border px-4 py-2 text-[12px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Damaged Gear Modal */}
+      {showDamageModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-lg border p-5 shadow-xl animate-in fade-in zoom-in duration-200" style={{ background: "var(--surface)", borderColor: "var(--border)" }}>
+            <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: "var(--border)" }}>
+              <h3 className="text-[15px] font-bold text-destructive">Report Damaged / Missing Gear</h3>
+              <button onClick={() => setShowDamageModal(false)} className="text-[12px] font-semibold hover:opacity-80" style={{ color: "var(--text-3)" }}>✕</button>
+            </div>
+            <div className="space-y-4">
+              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                Damage Severity
+                <select
+                  value={damageSeverity}
+                  onChange={(e) => setDamageSeverity(e.target.value)}
+                  className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <option value="LOW">Low (Minor cosmetic / easily fixed)</option>
+                  <option value="MEDIUM">Medium (Requires replacement/repair before next setup)</option>
+                  <option value="HIGH">High (Major failure / completely unusable)</option>
+                </select>
+              </label>
+              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                Description of Damage / Missing items
+                <textarea
+                  value={damageDescription}
+                  onChange={(e) => setDamageDescription(e.target.value)}
+                  placeholder="Describe visible damage, symptoms, or what items went missing..."
+                  className="mt-1 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px] h-24 block resize-none"
+                  style={{ borderColor: "var(--border)" }}
+                />
+              </label>
+            </div>
+            <div className="mt-5 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+              <button
+                onClick={() => submitDamageReport({ bookingId: booking.id, description: damageDescription, severity: damageSeverity })}
+                disabled={submittingDamage || !damageDescription.trim()}
+                className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
+                style={{ background: "var(--destructive)", color: "#fff" }}
+              >
+                {submittingDamage ? "Submitting..." : "Submit Report"}
+              </button>
+              <button onClick={() => setShowDamageModal(false)} className="rounded border px-4 py-2 text-[12px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Submit Internal Evaluation Modal */}
+      {showInternalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div 
+            className="w-full max-w-lg rounded-lg border p-5 shadow-xl animate-in fade-in zoom-in duration-200"
+            style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+          >
+            <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: "var(--border)" }}>
+              <h3 className="text-[15px] font-bold flex items-center gap-2">
+                <ClipboardCheck className="h-4 w-4" style={{ color: "var(--accent)" }} /> Submit Crew Evaluation ({booking.code})
+              </h3>
+              <button onClick={() => setShowInternalModal(false)} className="text-[12px] font-semibold hover:opacity-80" style={{ color: "var(--text-3)" }}>✕</button>
+            </div>
+
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                  Client / Venue Location
+                  <input 
+                    type="text" 
+                    value={venueName} 
+                    onChange={(e) => setVenueName(e.target.value)} 
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
+                    style={{ borderColor: "var(--border)" }} 
+                  />
+                </label>
+                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                  Event Date
+                  <input 
+                    type="date" 
+                    value={eventDate} 
+                    onChange={(e) => setEventDate(e.target.value)} 
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
+                    style={{ borderColor: "var(--border)" }} 
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                  Team Size (On-site Crew)
+                  <input 
+                    type="number" 
+                    value={teamSize} 
+                    onChange={(e) => setTeamSize(parseInt(e.target.value) || 0)} 
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
+                    style={{ borderColor: "var(--border)" }} 
+                  />
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                <span className="label-eyebrow text-[9px]">Crew Compliance & Standards Checklist</span>
+                <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                  {internalMetrics.length === 0 ? (
+                    <div className="text-[11px] text-center py-2" style={{ color: "var(--text-3)" }}>No metrics configured in settings.</div>
+                  ) : (
+                    internalMetrics.map((m) => {
+                      const score = internalScores[m.id] ?? (m.valueType === "boolean" ? 1 : m.valueType === "rating_5" ? 5 : m.valueType === "percentage" ? 100 : 10);
+                      return (
+                        <div key={m.id} className="rounded border p-2.5 bg-[var(--surface)] flex flex-col gap-2" style={{ borderColor: "var(--border)" }}>
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="text-[12px] font-semibold">{m.label}</div>
+                              {m.description && <div className="text-[10px]" style={{ color: "var(--text-3)" }}>{m.description}</div>}
+                            </div>
+                            
+                            {m.valueType === "boolean" && (
+                              <button
+                                type="button"
+                                onClick={() => setInternalScores(prev => ({ ...prev, [m.id]: score === 1 ? 0 : 1 }))}
+                                className={`rounded px-2.5 py-0.5 text-[10px] font-bold uppercase transition`}
+                                style={{ 
+                                  background: score === 1 ? "var(--color-status-done)" : "var(--surface-2)",
+                                  color: score === 1 ? "#fff" : "var(--text-2)"
+                                }}
+                              >
+                                {score === 1 ? "Met" : "Not Met"}
+                              </button>
+                            )}
+
+                            {m.valueType === "rating_5" && (
+                              <span className="font-data text-[11px] font-bold" style={{ color: "var(--accent)" }}>{score} / 5</span>
+                            )}
+
+                            {m.valueType === "rating_10" && (
+                              <span className="font-data text-[11px] font-bold" style={{ color: "var(--accent)" }}>{score} / 10</span>
+                            )}
+
+                            {m.valueType === "percentage" && (
+                              <span className="font-data text-[11px] font-bold" style={{ color: "var(--accent)" }}>{score}%</span>
+                            )}
+                          </div>
+
+                          {m.valueType === "rating_5" && (
+                            <div className="flex items-center gap-1 mt-1 animate-in fade-in duration-200">
+                              {Array.from({ length: 5 }).map((_, idx) => {
+                                const starVal = idx + 1;
+                                return (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => setInternalScores(prev => ({ ...prev, [m.id]: starVal }))}
+                                    className="transition hover:scale-110"
+                                  >
+                                    <Star 
+                                      className="h-4.5 w-4.5" 
+                                      style={{ 
+                                        fill: starVal <= score ? "var(--color-status-reserved)" : "none", 
+                                        color: starVal <= score ? "var(--color-status-reserved)" : "var(--border)" 
+                                      }} 
+                                    />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {m.valueType === "rating_10" && (
+                            <div className="flex items-center gap-2 mt-1 animate-in fade-in duration-200">
+                              <input 
+                                type="range" 
+                                min="0" 
+                                max="10" 
+                                step="0.5"
+                                value={score} 
+                                onChange={(e) => setInternalScores(prev => ({ ...prev, [m.id]: parseFloat(e.target.value) || 0 }))}
+                                className="w-full h-1 bg-[var(--border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" 
+                              />
+                            </div>
+                          )}
+
+                          {m.valueType === "percentage" && (
+                            <div className="flex items-center gap-2 mt-1 animate-in fade-in duration-200">
+                              <input 
+                                type="range" 
+                                min="0" 
+                                max="100" 
+                                step="1"
+                                value={score} 
+                                onChange={(e) => setInternalScores(prev => ({ ...prev, [m.id]: parseInt(e.target.value) || 0 }))}
+                                className="w-full h-1 bg-[var(--border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" 
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                Evaluator Notes
+                <textarea 
+                  value={notes} 
+                  onChange={(e) => setNotes(e.target.value)} 
+                  placeholder="Summarize setup/teardown details, structural rigidity, or any component malfunctions..."
+                  className="mt-1 h-20 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px]" 
+                  style={{ borderColor: "var(--border)" }} 
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+              <button
+                onClick={() => {
+                  const scoresList = Object.entries(internalScores).map(([metricId, score]) => ({
+                    metricId,
+                    score,
+                  }));
+                  submitInternal({
+                    assignmentId: `assign-${booking.code}`,
+                    clientNameVenue: venueName,
+                    eventDate: eventDate ? new Date(eventDate).toISOString() : undefined,
+                    teamSize,
+                    notes,
+                    scores: scoresList,
+                  });
+                }}
+                disabled={submittingInternal}
+                className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                {submittingInternal ? "Submitting..." : "Submit Evaluation"}
+              </button>
+              <button 
+                onClick={() => setShowInternalModal(false)} 
+                className="rounded border px-4 py-2 text-[12px]" 
+                style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
@@ -605,6 +1123,7 @@ function OverviewTab({ b }: { b: B }) {
   const authUser = useAuthUser();
   const userRole = authUser?.role?.toLowerCase() || "";
   const isCtoOrAdmin = userRole === "admin" || userRole === "chief_tech";
+  const isTechnician = userRole === "technician";
 
   const [screenPools, setScreenPools] = useState<any[]>([]);
   const [screenAvailabilities, setScreenAvailabilities] = useState<Record<string, number>>({});
@@ -619,7 +1138,14 @@ function OverviewTab({ b }: { b: B }) {
     setCtoNotes(b.ctoNotes || "");
   }, [b.ctoNotes]);
 
-  const hasTechnicalHolds = !!b.ctoNotes;
+  // Fetch existing reservations
+  const { data: reservationsRes } = useQuery({
+    queryKey: ["booking-reservations", b.id],
+    queryFn: () => getBookingReservationsApi(b.id),
+    enabled: !!b.id,
+  });
+
+  const hasTechnicalHolds = !!b.ctoNotes || (reservationsRes?.reservations && reservationsRes.reservations.length > 0);
   const [isEditingHolds, setIsEditingHolds] = useState(!hasTechnicalHolds);
 
   // Crew Assignment state
@@ -656,12 +1182,7 @@ function OverviewTab({ b }: { b: B }) {
     loadPools();
   }, []);
 
-  // Fetch existing reservations
-  const { data: reservationsRes } = useQuery({
-    queryKey: ["booking-reservations", b.id],
-    queryFn: () => getBookingReservationsApi(b.id),
-    enabled: !!b.id,
-  });
+
 
   useEffect(() => {
     if (reservationsRes) {
@@ -672,6 +1193,8 @@ function OverviewTab({ b }: { b: B }) {
       setAllocations(mapped.length > 0 ? mapped : [{ poolId: "", quantity: 0 }]);
       if (mapped.length > 0 || !!b.ctoNotes) {
         setIsEditingHolds(false);
+      } else {
+        setIsEditingHolds(true);
       }
     }
   }, [reservationsRes, b.ctoNotes]);
@@ -1080,14 +1603,16 @@ function OverviewTab({ b }: { b: B }) {
           </div>
         </Section>
 
-        <Section title="Logistics & Team" icon={Truck}>
-          <div className="grid grid-cols-2 gap-x-6">
-            <KV k="Team Leader" v={b.teamLeader} />
-            <KV k="Stage Hand" v={b.stageHand} />
-            <KV k="Driver" v={b.driver} />
-            <KV k="Meal Budget" v={`ETB ${b.mealBudget.toLocaleString()}`} mono />
-          </div>
-        </Section>
+        {!isTechnician && (
+          <Section title="Logistics & Team" icon={Truck}>
+            <div className="grid grid-cols-2 gap-x-6">
+              <KV k="Team Leader" v={b.teamLeader} />
+              <KV k="Stage Hand" v={b.stageHand} />
+              <KV k="Driver" v={b.driver} />
+              <KV k="Meal Budget" v={`ETB ${b.mealBudget.toLocaleString()}`} mono />
+            </div>
+          </Section>
+        )}
 
         <Section title="Notes & Special Requirements" icon={MessageSquare}>
           <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-2)" }}>
@@ -1103,14 +1628,16 @@ function OverviewTab({ b }: { b: B }) {
           <KV k="Dismantle" v={b.dismantleDate} mono />
         </Section>
 
-        <Section title="Financial" icon={DollarSign}>
-          <KV k="Contract" v={`ETB ${b.amount.toLocaleString()}`} mono />
-          <KV k="Paid" v={b.payment === "PAID" ? `ETB ${b.amount.toLocaleString()}` : b.payment === "ADVANCE" ? `ETB ${(b.amount / 2).toLocaleString()}` : "ETB 0"} mono />
-          <KV k="Balance" v={b.payment === "PAID" ? "ETB 0" : `ETB ${(b.amount / 2).toLocaleString()}`} mono />
-          <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border)" }}>
-            <KV k="Status" v={<PaymentBadge status={b.payment} />} />
-          </div>
-        </Section>
+        {!isTechnician && (
+          <Section title="Financial" icon={DollarSign}>
+            <KV k="Contract" v={`ETB ${b.amount.toLocaleString()}`} mono />
+            <KV k="Paid" v={b.payment === "PAID" ? `ETB ${b.amount.toLocaleString()}` : b.payment === "ADVANCE" ? `ETB ${(b.amount / 2).toLocaleString()}` : "ETB 0"} mono />
+            <KV k="Balance" v={b.payment === "PAID" ? "ETB 0" : `ETB ${(b.amount / 2).toLocaleString()}`} mono />
+            <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border)" }}>
+              <KV k="Status" v={<PaymentBadge status={b.payment} />} />
+            </div>
+          </Section>
+        )}
 
         <Section title="Quick Stats" icon={CheckCircle2}>
           <KV k="Days to Event" v={Math.max(0, Math.ceil((new Date(b.eventDate).getTime() - Date.now()) / 86400000))} mono />
@@ -1205,42 +1732,213 @@ function TeamTab({ b }: { b: B }) {
 }
 
 function EquipmentTab({ b }: { b: B }) {
+  const queryClient = useQueryClient();
+  const authUser = useAuthUser();
+  const userRole = authUser?.role?.toLowerCase() || "";
+  const isCtoOrAdmin = userRole === "admin" || userRole === "chief_tech";
+  const isTechnician = userRole === "technician";
+
+  const isEditable = isCtoOrAdmin || (isTechnician && b.status === "ACCEPTED");
+
+  // Local state for adding items
+  const [selectedPoolId, setSelectedPoolId] = useState("");
+  const [addQty, setAddQty] = useState(1);
+
+  // Queries
+  const { data: pools = [] } = useQuery({
+    queryKey: ["inventory-pools"],
+    queryFn: getInventoryPoolsApi,
+    enabled: isEditable,
+  });
+
+  // Mutations
+  const { mutate: addBomLine, isPending: addingLine } = useMutation({
+    mutationFn: ({ poolId, quantity }: { poolId: string; quantity: number }) => 
+      createBomLineApi(b.id, poolId, quantity),
+    onSuccess: () => {
+      toast.success("Item added to BOM");
+      queryClient.invalidateQueries({ queryKey: ["booking", b.code] });
+      setSelectedPoolId("");
+      setAddQty(1);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to add item to BOM");
+    }
+  });
+
+  const { mutate: updateBomLine, isPending: updatingLine } = useMutation({
+    mutationFn: ({ lineId, quantity }: { lineId: string; quantity: number }) => 
+      updateBomLineApi(b.id, lineId, quantity),
+    onSuccess: () => {
+      toast.success("BOM quantity updated");
+      queryClient.invalidateQueries({ queryKey: ["booking", b.code] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to update quantity");
+    }
+  });
+
+  const { mutate: deleteBomLine, isPending: deletingLine } = useMutation({
+    mutationFn: (lineId: string) => 
+      deleteBomLineApi(b.id, lineId),
+    onSuccess: () => {
+      toast.success("Item removed from BOM");
+      queryClient.invalidateQueries({ queryKey: ["booking", b.code] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to remove item");
+    }
+  });
+
+  const handleAddItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPoolId) {
+      toast.error("Please select an item pool");
+      return;
+    }
+    if (addQty <= 0) {
+      toast.error("Quantity must be at least 1");
+      return;
+    }
+    addBomLine({ poolId: selectedPoolId, quantity: addQty });
+  };
+
   return (
-    <Section title="Bill of Materials" icon={Package} action={<button className="text-[11px] font-semibold" style={{ color: "var(--accent)" }}>+ Add Item</button>}>
-      <table className="w-full text-[12px]">
-        <thead>
-          <tr className="border-b" style={{ borderColor: "var(--border)" }}>
-            <th className="label-eyebrow pb-2 text-left">Code</th>
-            <th className="label-eyebrow pb-2 text-left">Item</th>
-            <th className="label-eyebrow pb-2 text-right">Qty</th>
-            <th className="label-eyebrow pb-2 text-right">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {b.bomItems.map((it) => (
-            <tr key={it.id} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
-              <td className="py-3 font-mono font-bold" style={{ color: "var(--accent)" }}>{it.id}</td>
-              <td className="py-3">{it.name}</td>
-              <td className="py-3 text-right font-mono font-semibold">{it.qty}</td>
-              <td className="py-3 text-right">
-                <span className="rounded-md border px-2 py-0.5 text-[10px] font-bold" style={{
-                  borderColor: "var(--border)",
-                  color: it.status === "Returned" ? "var(--color-bom-returned)" : it.status === "Checked Out" ? "var(--color-bom-checkedout)" : "var(--text-2)",
-                }}>
-                  {it.status}
-                </span>
-              </td>
+    <div className="space-y-4">
+      {isEditable && (
+        <Section title="BOM Creator - Add Item" icon={Package}>
+          <form onSubmit={handleAddItem} className="flex flex-col md:flex-row items-end gap-3">
+            <div className="flex-1 w-full">
+              <label className="text-[11px] font-semibold block mb-1" style={{ color: "var(--text-2)" }}>
+                Select Equipment / Pool
+              </label>
+              <select
+                value={selectedPoolId}
+                onChange={(e) => setSelectedPoolId(e.target.value)}
+                className="h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <option value="">-- Choose Equipment --</option>
+                {pools.map((p: any) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.category || "General"})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="w-full md:w-32">
+              <label className="text-[11px] font-semibold block mb-1" style={{ color: "var(--text-2)" }}>
+                Quantity
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={addQty}
+                onChange={(e) => setAddQty(Math.max(1, parseInt(e.target.value) || 1))}
+                className="h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] text-right font-mono"
+                style={{ borderColor: "var(--border)" }}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={addingLine}
+              className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 h-9 flex items-center gap-1.5 shrink-0"
+              style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+            >
+              Add to BOM
+            </button>
+          </form>
+        </Section>
+      )}
+
+      <Section title="Bill of Materials" icon={Package}>
+        <table className="w-full text-[12px]">
+          <thead>
+            <tr className="border-b" style={{ borderColor: "var(--border)" }}>
+              <th className="label-eyebrow pb-2 text-left">Line ID</th>
+              <th className="label-eyebrow pb-2 text-left">Item Name</th>
+              <th className="label-eyebrow pb-2 text-right">Quantity</th>
+              {isEditable && <th className="label-eyebrow pb-2 text-center w-24">Actions</th>}
+              <th className="label-eyebrow pb-2 text-right">Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="mt-4 flex items-center justify-between border-t pt-3 text-[11px]" style={{ borderColor: "var(--border)" }}>
-        <span style={{ color: "var(--text-3)" }}>{b.bomItems.length} items · {b.bomItems.reduce((s, i) => s + i.qty, 0)} total units</span>
-        <button className="rounded-md border px-3 py-1 text-[10px] font-semibold" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>
-          Print Packing Slip
-        </button>
-      </div>
-    </Section>
+          </thead>
+          <tbody>
+            {b.bomItems.length === 0 ? (
+              <tr>
+                <td colSpan={isEditable ? 5 : 4} className="py-6 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
+                  No items in Bill of Materials. Add items using the BOM Creator above.
+                </td>
+              </tr>
+            ) : (
+              b.bomItems.map((it) => (
+                <tr key={it.id} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+                  <td className="py-3 font-mono font-bold" style={{ color: "var(--accent)" }}>{it.id}</td>
+                  <td className="py-3">{it.name}</td>
+                  <td className="py-3 text-right">
+                    {isEditable ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => updateBomLine({ lineId: it.id, quantity: Math.max(1, it.qty - 1) })}
+                          disabled={updatingLine || it.qty <= 1}
+                          className="h-6 w-6 rounded border bg-[var(--surface-2)] flex items-center justify-center text-[12px] transition hover:border-[var(--accent)] disabled:opacity-30"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          -
+                        </button>
+                        <span className="font-mono font-semibold w-10 text-center">{it.qty}</span>
+                        <button
+                          type="button"
+                          onClick={() => updateBomLine({ lineId: it.id, quantity: it.qty + 1 })}
+                          disabled={updatingLine}
+                          className="h-6 w-6 rounded border bg-[var(--surface-2)] flex items-center justify-center text-[12px] transition hover:border-[var(--accent)]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="font-mono font-semibold">{it.qty}</span>
+                    )}
+                  </td>
+                  {isEditable && (
+                    <td className="py-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm(`Remove ${it.name} from the BOM?`)) {
+                            deleteBomLine(it.id);
+                          }
+                        }}
+                        disabled={deletingLine}
+                        className="text-destructive hover:scale-110 transition p-1"
+                        title="Remove item"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  )}
+                  <td className="py-3 text-right">
+                    <span className="rounded-md border px-2 py-0.5 text-[10px] font-bold" style={{
+                      borderColor: "var(--border)",
+                      color: it.status === "Returned" ? "var(--color-bom-returned)" : it.status === "Checked Out" ? "var(--color-bom-checkedout)" : "var(--text-2)",
+                    }}>
+                      {it.status}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        <div className="mt-4 flex items-center justify-between border-t pt-3 text-[11px]" style={{ borderColor: "var(--border)" }}>
+          <span style={{ color: "var(--text-3)" }}>{b.bomItems.length} items · {b.bomItems.reduce((s, i) => s + i.qty, 0)} total units</span>
+          <button className="rounded-md border px-3 py-1 text-[10px] font-semibold" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>
+            Print Packing Slip
+          </button>
+        </div>
+      </Section>
+    </div>
   );
 }
 
@@ -1672,22 +2370,14 @@ function ActivityTab({ b }: { b: B }) {
   );
 }
 
-function EvaluationsTab({ b }: { b: B }) {
+function EvaluationsTab({ b, openInternalForm }: { b: B; openInternalForm: () => void }) {
   const queryClient = useQueryClient();
   const [activeProfile] = useActiveProfile();
   
   const canSubmitInternal = ["Admin", "CTO", "TO"].includes(activeProfile.role);
 
   // States
-  const [showInternalModal, setShowInternalModal] = useState(false);
   const [showWebhookModal, setShowWebhookModal] = useState(false);
-
-  // Internal Evaluation Form States
-  const [venueName, setVenueName] = useState(b.venue);
-  const [eventDate, setEventDate] = useState(b.eventDate);
-  const [teamSize, setTeamSize] = useState(b.assignees.length + 2);
-  const [notes, setNotes] = useState("");
-  const [internalScores, setInternalScores] = useState<Record<string, number>>({});
 
   // Client Evaluation Form States
   const [respondentName, setRespondentName] = useState("");
@@ -1712,26 +2402,9 @@ function EvaluationsTab({ b }: { b: B }) {
   });
 
   // Filter metrics
-  const internalMetrics = metrics?.filter((m) => m.category === "internal") || [];
   const clientMetrics = metrics?.filter((m) => m.category === "client_feedback") || [];
 
   // Mutations
-  const { mutate: submitInternal, isPending: submittingInternal } = useMutation({
-    // Explicit return types matching Backend API
-    mutationFn: (payload: SubmitInternalEvaluationPayload) => submitInternalEvaluationApi(b.code, payload),
-    onSuccess: () => {
-      toast.success("Internal crew evaluation submitted!");
-      queryClient.invalidateQueries({ queryKey: ["booking-internal-eval", b.code] });
-      setShowInternalModal(false);
-      // Reset scores
-      setInternalScores({});
-      setNotes("");
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to submit internal evaluation");
-    }
-  });
-
   const { mutate: simulateWebhook, isPending: submittingWebhook } = useMutation({
     mutationFn: (payload: SubmitClientEvaluationPayload) => submitClientEvaluationApi(b.code, payload),
     onSuccess: () => {
@@ -1745,23 +2418,6 @@ function EvaluationsTab({ b }: { b: B }) {
       toast.error(err.message || "Failed to simulate client feedback");
     }
   });
-
-  // Initializing scores when metrics load or modal opens
-  const openInternalForm = () => {
-    const initialScores: Record<string, number> = {};
-    internalMetrics.forEach((m) => {
-      initialScores[m.id] = m.valueType === "boolean" ? 1 
-                          : m.valueType === "rating_5" ? 5 
-                          : m.valueType === "percentage" ? 100 
-                          : 10; // rating_10 default
-    });
-    setInternalScores(initialScores);
-    setVenueName(b.venue);
-    setEventDate(b.eventDate);
-    setTeamSize(b.assignees.length + 2);
-    setNotes("");
-    setShowInternalModal(true);
-  };
 
   const openClientForm = () => {
     const initialScores: Record<string, number> = {};
@@ -2010,203 +2666,7 @@ function EvaluationsTab({ b }: { b: B }) {
         </Section>
       </div>
 
-      {/* Submit Internal Evaluation Modal */}
-      {showInternalModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div 
-            className="w-full max-w-lg rounded-lg border p-5 shadow-xl animate-in fade-in zoom-in duration-200"
-            style={{ background: "var(--surface)", borderColor: "var(--border)" }}
-          >
-            <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: "var(--border)" }}>
-              <h3 className="text-[15px] font-bold flex items-center gap-2">
-                <ClipboardCheck className="h-4 w-4" style={{ color: "var(--accent)" }} /> Submit Crew Evaluation ({b.code})
-              </h3>
-              <button onClick={() => setShowInternalModal(false)} className="text-[12px] font-semibold hover:opacity-80" style={{ color: "var(--text-3)" }}>✕</button>
-            </div>
 
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin">
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                  Client / Venue Location
-                  <input 
-                    type="text" 
-                    value={venueName} 
-                    onChange={(e) => setVenueName(e.target.value)} 
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
-                    style={{ borderColor: "var(--border)" }} 
-                  />
-                </label>
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                  Event Date
-                  <input 
-                    type="date" 
-                    value={eventDate} 
-                    onChange={(e) => setEventDate(e.target.value)} 
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
-                    style={{ borderColor: "var(--border)" }} 
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                  Team Size (On-site Crew)
-                  <input 
-                    type="number" 
-                    value={teamSize} 
-                    onChange={(e) => setTeamSize(parseInt(e.target.value) || 0)} 
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
-                    style={{ borderColor: "var(--border)" }} 
-                  />
-                </label>
-              </div>
-
-              <div className="space-y-2">
-                <span className="label-eyebrow text-[9px]">Crew Compliance & Standards Checklist</span>
-                <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
-                  {internalMetrics.length === 0 ? (
-                    <div className="text-[11px] text-center py-2" style={{ color: "var(--text-3)" }}>No metrics configured in settings.</div>
-                  ) : (
-                    internalMetrics.map((m) => {
-                      const score = internalScores[m.id] ?? (m.valueType === "boolean" ? 1 : m.valueType === "rating_5" ? 5 : m.valueType === "percentage" ? 100 : 10);
-                      return (
-                        <div key={m.id} className="rounded border p-2.5 bg-[var(--surface)] flex flex-col gap-2" style={{ borderColor: "var(--border)" }}>
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <div className="text-[12px] font-semibold">{m.label}</div>
-                              {m.description && <div className="text-[10px]" style={{ color: "var(--text-3)" }}>{m.description}</div>}
-                            </div>
-                            
-                            {m.valueType === "boolean" && (
-                              <button
-                                type="button"
-                                onClick={() => setInternalScores(prev => ({ ...prev, [m.id]: score === 1 ? 0 : 1 }))}
-                                className={`rounded px-2.5 py-0.5 text-[10px] font-bold uppercase transition`}
-                                style={{ 
-                                  background: score === 1 ? "var(--color-status-done)" : "var(--surface-2)",
-                                  color: score === 1 ? "#fff" : "var(--text-2)"
-                                }}
-                              >
-                                {score === 1 ? "Met" : "Not Met"}
-                              </button>
-                            )}
-
-                            {m.valueType === "rating_5" && (
-                              <span className="font-data text-[11px] font-bold" style={{ color: "var(--accent)" }}>{score} / 5</span>
-                            )}
-
-                            {m.valueType === "rating_10" && (
-                              <span className="font-data text-[11px] font-bold" style={{ color: "var(--accent)" }}>{score} / 10</span>
-                            )}
-
-                            {m.valueType === "percentage" && (
-                              <span className="font-data text-[11px] font-bold" style={{ color: "var(--accent)" }}>{score}%</span>
-                            )}
-                          </div>
-
-                          {m.valueType === "rating_5" && (
-                            <div className="flex items-center gap-1 mt-1 animate-in fade-in duration-200">
-                              {Array.from({ length: 5 }).map((_, idx) => {
-                                const starVal = idx + 1;
-                                return (
-                                  <button
-                                    key={idx}
-                                    type="button"
-                                    onClick={() => setInternalScores(prev => ({ ...prev, [m.id]: starVal }))}
-                                    className="transition hover:scale-110"
-                                  >
-                                    <Star 
-                                      className="h-4.5 w-4.5" 
-                                      style={{ 
-                                        fill: starVal <= score ? "var(--color-status-reserved)" : "none", 
-                                        color: starVal <= score ? "var(--color-status-reserved)" : "var(--border)" 
-                                      }} 
-                                    />
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {m.valueType === "rating_10" && (
-                            <div className="flex items-center gap-2 mt-1 animate-in fade-in duration-200">
-                              <input 
-                                type="range" 
-                                min="0" 
-                                max="10" 
-                                step="0.5"
-                                value={score} 
-                                onChange={(e) => setInternalScores(prev => ({ ...prev, [m.id]: parseFloat(e.target.value) || 0 }))}
-                                className="w-full h-1 bg-[var(--border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" 
-                              />
-                            </div>
-                          )}
-
-                          {m.valueType === "percentage" && (
-                            <div className="flex items-center gap-2 mt-1 animate-in fade-in duration-200">
-                              <input 
-                                type="range" 
-                                min="0" 
-                                max="100" 
-                                step="1"
-                                value={score} 
-                                onChange={(e) => setInternalScores(prev => ({ ...prev, [m.id]: parseInt(e.target.value) || 0 }))}
-                                className="w-full h-1 bg-[var(--border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" 
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                Evaluator Notes
-                <textarea 
-                  value={notes} 
-                  onChange={(e) => setNotes(e.target.value)} 
-                  placeholder="Summarize setup/teardown details, structural rigidity, or any component malfunctions..."
-                  className="mt-1 h-20 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px]" 
-                  style={{ borderColor: "var(--border)" }} 
-                />
-              </label>
-            </div>
-
-            <div className="mt-5 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-              <button
-                onClick={() => {
-                  const scoresList = Object.entries(internalScores).map(([metricId, score]) => ({
-                    metricId,
-                    score,
-                  }));
-                  submitInternal({
-                    assignmentId: `assign-${b.code}`,
-                    clientNameVenue: venueName,
-                    eventDate: eventDate ? new Date(eventDate).toISOString() : undefined,
-                    teamSize,
-                    notes,
-                    scores: scoresList,
-                  });
-                }}
-                disabled={submittingInternal}
-                className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
-                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
-              >
-                {submittingInternal ? "Submitting..." : "Submit Evaluation"}
-              </button>
-              <button 
-                onClick={() => setShowInternalModal(false)} 
-                className="rounded border px-4 py-2 text-[12px]" 
-                style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Simulate Client Webhook Modal */}
       {showWebhookModal && (

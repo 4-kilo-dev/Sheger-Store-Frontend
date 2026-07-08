@@ -148,7 +148,7 @@ export async function createBookingApi(form: {
   const assemblyStartStr = `${form.assemblyDate || new Date().toISOString().slice(0, 10)}T12:00:00.000Z`;
   const assemblyEndStr = `${form.assemblyDate || new Date().toISOString().slice(0, 10)}T15:00:00.000Z`;
   const dismantleDateStr = form.dismantleDate
-    ? `${form.dismantleDate}T00:00:00.000Z`
+    ? `${form.dismantleDate}T23:59:59.000Z`
     : `${form.eventDate || new Date().toISOString().slice(0, 10)}T23:59:00.000Z`;
 
   const bookingPayload = {

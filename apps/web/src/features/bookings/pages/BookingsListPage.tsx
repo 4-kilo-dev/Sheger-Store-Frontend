@@ -28,6 +28,7 @@ const ALL_PAYMENTS: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
 export function BookingsIndex() {
   const navigate = useNavigate();
   const authUser = useAuthUser();
+  const role = authUser?.role?.toLowerCase() || "";
   const searchParams = useRouterState({ select: (s) => s.location.search }) as any;
   const query = searchParams.q || "";
   const setQuery = (val: string) => {
@@ -140,6 +141,94 @@ export function BookingsIndex() {
 
   // Reset page when filters change
   const activeFilterCount = statusFilter.size + screenFilter.size + assigneeFilter.size + paymentFilter.size;
+
+  if (role === "technician") {
+    return (
+      <AppShell>
+        {/* Header */}
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-baseline gap-3">
+            <h1 className="text-[22px] font-bold tracking-tight">My Assignments</h1>
+            <span className="rounded-md border px-2 py-0.5 text-[11px] font-semibold" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
+              {filtered.length} assigned
+            </span>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-hidden rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full border-collapse text-[12px]">
+              <thead>
+                <tr style={{ background: "var(--surface-2)" }}>
+                  <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Booking Code</th>
+                  <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Assembly Date</th>
+                  <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Event Date</th>
+                  <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Venue / Location</th>
+                  <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-12 text-center text-[13px]" style={{ color: "var(--text-3)" }}>
+                      All caught up — no assignments assigned to you.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((b, i) => (
+                    <tr
+                      key={b.code}
+                      className="group cursor-pointer transition hover:brightness-110"
+                      style={{ background: i % 2 === 0 ? "var(--surface)" : "var(--surface-2)" }}
+                      onClick={() => navigate({ to: "/bookings/$code", params: { code: b.code } })}
+                    >
+                      <td className="border-b px-4 py-3 font-bold" style={{ borderColor: "var(--border)" }}>
+                        <Link to="/bookings/$code" params={{ code: b.code }} className="hover:underline" style={{ color: "var(--accent)" }}>
+                          {b.code}
+                        </Link>
+                      </td>
+                      <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.assemblyDate}</td>
+                      <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.eventDate}</td>
+                      <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>{b.venue}</td>
+                      <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                        <StatusBadge status={b.status} />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Simple Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-4 py-3 text-[12px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
+              <div>Showing <span className="font-semibold text-foreground">{(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)}</span> of {filtered.length}</div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  className="h-7 rounded border px-2.5 disabled:opacity-40"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  Prev
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  className="h-7 rounded border px-2.5 disabled:opacity-40"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
