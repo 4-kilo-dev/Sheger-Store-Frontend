@@ -233,9 +233,16 @@ useEffect(() => {
   const computedActions = (() => {
     if (!booking || !userRole) return [];
     const list = BOOKING_ACTIONS[booking.status] || [];
+    const hasTechnicalHolds = !!booking.ctoNotes || !!booking.itemServiceSpec;
+
     return list.filter((act) => {
       const isRoleAllowed = act.allowedRoles.includes(userRole);
       if (!isRoleAllowed) return false;
+
+      // Special case: Confirm Booking is gated by technical holds being saved
+      if (booking.status === "RESERVED" && act.id === "booking.confirm") {
+        return hasTechnicalHolds;
+      }
 
       // Special case: Accept/Decline is driver-restricted
       if (booking.status === "ASSIGNED" && (act.id === "assignment.accept" || act.id === "assignment.decline")) {
@@ -593,6 +600,7 @@ function KV({ k, v, mono }: { k: string; v: React.ReactNode; mono?: boolean }) {
 }
 
 function OverviewTab({ b }: { b: B }) {
+  const { code } = _Route.useParams();
   const queryClient = useQueryClient();
   const authUser = useAuthUser();
   const userRole = authUser?.role?.toLowerCase() || "";
@@ -607,10 +615,16 @@ function OverviewTab({ b }: { b: B }) {
   const [ctoNotes, setCtoNotes] = useState(b.ctoNotes || "");
   const [isSavingTechnical, setIsSavingTechnical] = useState(false);
 
+  useEffect(() => {
+    setCtoNotes(b.ctoNotes || "");
+  }, [b.ctoNotes]);
+
+  const hasTechnicalHolds = !!b.ctoNotes;
+  const [isEditingHolds, setIsEditingHolds] = useState(!hasTechnicalHolds);
+
   // Crew Assignment state
   const [staffList, setStaffList] = useState<any[]>([]);
-  const [assignedChief, setAssignedChief] = useState("");
-  const [assignedTech, setAssignedTech] = useState("");
+  const [assignedTechs, setAssignedTechs] = useState<string[]>([""]);
   const [isAssigningStaff, setIsAssigningStaff] = useState(false);
 
   // Restricted Access States (Catching 403 Forbidden Errors)
@@ -643,26 +657,24 @@ function OverviewTab({ b }: { b: B }) {
   }, []);
 
   // Fetch existing reservations
+  const { data: reservationsRes } = useQuery({
+    queryKey: ["booking-reservations", b.id],
+    queryFn: () => getBookingReservationsApi(b.id),
+    enabled: !!b.id,
+  });
+
   useEffect(() => {
-    if (b.code) {
-      getBookingReservationsApi(b.code)
-        .then((res: any) => {
-          if (res?.reservations && res.reservations.length > 0) {
-            const mapped = res.reservations.map((r: any) => ({
-              poolId: r.poolId || "",
-              quantity: parseFloat(r.quantity) || 0
-            }));
-            setAllocations(mapped);
-          }
-        })
-        .catch((err: any) => {
-          console.error("Failed to load booking reservations", err);
-          if (err.status === 403) {
-            setIsReservationsRestricted(true);
-          }
-        });
+    if (reservationsRes) {
+      const mapped = (reservationsRes.reservations || []).map((r: any) => ({
+        poolId: r.poolId || "",
+        quantity: parseFloat(r.quantity) || 0
+      }));
+      setAllocations(mapped.length > 0 ? mapped : [{ poolId: "", quantity: 0 }]);
+      if (mapped.length > 0 || !!b.ctoNotes) {
+        setIsEditingHolds(false);
+      }
     }
-  }, [b.code]);
+  }, [reservationsRes, b.ctoNotes]);
 
   // Fetch live availabilities
   useEffect(() => {
@@ -715,39 +727,41 @@ function OverviewTab({ b }: { b: B }) {
 
   const handleSaveTechnical = async () => {
     const validAllocations = allocations.filter(a => a.poolId && a.quantity > 0);
-    if (validAllocations.length === 0) {
-      toast.error("Please add at least one screen type and quantity.");
+    const hasNotes = ctoNotes.trim() !== "";
+    if (validAllocations.length === 0 && !hasNotes) {
+      toast.error("Please add at least one screen type and quantity or provide CTO notes.");
       return;
     }
     setIsSavingTechnical(true);
     try {
       // 1. Delete existing reservations
-      const res = await getBookingReservationsApi(b.code);
+      const res = await getBookingReservationsApi(b.id);
       if (res?.reservations) {
         await Promise.all(res.reservations.map((r: any) => 
-          deleteReservationApi(b.code, r.id)
+          deleteReservationApi(b.id, r.id)
         ));
       }
 
       // 2. Create new holds
       await Promise.all(validAllocations.map(a => 
-        createReservationApi(b.code, { poolId: a.poolId, quantity: String(a.quantity) })
+        createReservationApi(b.id, { poolId: a.poolId, quantity: String(a.quantity) })
       ));
 
-      // 3. Construct description spec string
-      const specString = validAllocations.map(a => {
-        const p = screenPools.find(sp => sp.id === a.poolId);
-        return `${a.quantity}sqm of ${p ? p.name : "LED Screen"}`;
-      }).join(", ");
-
-      // 4. Update cto notes & spec on booking
-      await updateBookingApi(b.code, {
+      // 3. Update CTO notes and include spec only when screens are selected
+      const bookingPayload: Record<string, string> = {
         ctoConsultationNotes: ctoNotes,
-        itemServiceSpec: specString
-      });
+      };
+      if (validAllocations.length > 0) {
+        bookingPayload.itemServiceSpec = validAllocations.map(a => {
+          const p = screenPools.find(sp => sp.id === a.poolId);
+          return `${a.quantity}sqm of ${p ? p.name : "LED Screen"}`;
+        }).join(", ");
+      }
+      await updateBookingApi(b.code, bookingPayload);
 
       toast.success("Technical allocation holds saved!");
-      queryClient.invalidateQueries({ queryKey: ["booking", b.code] });
+      setIsEditingHolds(false);
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
     } catch (e: any) {
       toast.error(e.message || "Failed to save technical allocation");
     } finally {
@@ -756,33 +770,31 @@ function OverviewTab({ b }: { b: B }) {
   };
 
   const handleAssignStaff = async () => {
-    if (!assignedChief && !assignedTech) {
-      toast.error("Please select a Chief Tech or Technician to assign.");
+    const validTechs = assignedTechs.filter(id => id);
+    if (validTechs.length === 0) {
+      toast.error("Please select at least one technician to assign.");
       return;
     }
     setIsAssigningStaff(true);
     try {
-      if (assignedChief) {
-        await createAssignmentApi(b.code, {
-          userId: assignedChief,
+      if (authUser?.id) {
+        await createAssignmentApi(b.id, {
+          userId: authUser.id,
           roleContext: 'TECHNICIAN',
           isTeamLead: true
         });
       }
-      if (assignedTech) {
-        await createAssignmentApi(b.code, {
-          userId: assignedTech,
+
+      await Promise.all(validTechs.map(techId => 
+        createAssignmentApi(b.id, {
+          userId: techId,
           roleContext: 'TECHNICIAN',
           isTeamLead: false
-        });
-      }
-
-      if (b.status === "CONFIRMED") {
-        await transitionBookingStatusApi(b.code, "ASSIGNED", "Technicians assigned by Chief Technical Officer");
-      }
+        })
+      ));
 
       toast.success("Technician assignment completed!");
-      queryClient.invalidateQueries({ queryKey: ["booking", b.code] });
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
     } catch (e: any) {
       toast.error(e.message || "Failed to assign crew");
     } finally {
@@ -794,107 +806,189 @@ function OverviewTab({ b }: { b: B }) {
     <div className="grid grid-cols-12 gap-4">
       <div className="col-span-8 space-y-4">
         {/* Stage 1: CTO Technical Allocation (Visible to chief_tech / admin when status is RESERVED) */}
-        {isCtoOrAdmin && b.status === "RESERVED" && (
-          <Section title="Technical Hold Allocation (Chief Tech Review)" icon={Wrench}>
-            {(isPoolsRestricted || isReservationsRestricted) && <AccessLockOverlay sectionName="Technical Holds Allocation" permissionKey="bom.create" />}
-            <div className="space-y-4">
-              <p className="text-[12px]" style={{ color: "var(--text-2)" }}>
-                Specify screen type holds and check live warehouse availability for this event. 
-                Dates: <strong className="font-mono text-xs">{b.assemblyDate} to {b.dismantleDate}</strong>.
-              </p>
+        {/* Stage 1: CTO Technical Allocation (Visible when status is RESERVED) */}
+        {b.status === "RESERVED" && (
+          <>
+            {isCtoOrAdmin ? (
+              isEditingHolds ? (
+                <Section title="Technical Hold Allocation (Chief Tech Review)" icon={Wrench}>
+                  {(isPoolsRestricted || isReservationsRestricted) && <AccessLockOverlay sectionName="Technical Holds Allocation" permissionKey="bom.create" />}
+                  <div className="space-y-4">
+                    <p className="text-[12px]" style={{ color: "var(--text-2)" }}>
+                      Specify screen type holds and check live warehouse availability for this event. 
+                      Dates: <strong className="font-mono text-xs">{b.assemblyDate} to {b.dismantleDate}</strong>.
+                    </p>
 
-              {/* Multi-screen hold rows */}
-              <div className="space-y-3">
-                {allocations.map((alloc, idx) => {
-                  const selectedPool = screenPools.find(p => p.id === alloc.poolId);
-                  const avail = selectedPool ? (screenAvailabilities[selectedPool.sku || selectedPool.name] ?? 0) : null;
-                  return (
-                    <div key={idx} className="flex items-end gap-3 rounded border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
-                      <label className="flex-1 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
-                        Screen Type
-                        <select
-                          value={alloc.poolId}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setAllocations(prev => prev.map((a, i) => i === idx ? { ...a, poolId: val } : a));
-                          }}
-                          className="mt-1 h-9 w-full rounded border bg-[var(--surface)] px-2 text-[12px]"
-                          style={{ borderColor: "var(--border)" }}
-                        >
-                          <option value="">— Select Screen —</option>
-                          {screenPools.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                      </label>
+                    {/* Multi-screen hold rows */}
+                    <div className="space-y-3">
+                      {allocations.map((alloc, idx) => {
+                        const selectedPool = screenPools.find(p => p.id === alloc.poolId);
+                        const avail = selectedPool ? (screenAvailabilities[selectedPool.sku || selectedPool.name] ?? 0) : null;
+                        return (
+                          <div key={idx} className="flex items-end gap-3 rounded border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                            <label className="flex-1 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+                              Screen Type
+                              <select
+                                value={alloc.poolId}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setAllocations(prev => prev.map((a, i) => i === idx ? { ...a, poolId: val } : a));
+                                }}
+                                className="mt-1 h-9 w-full rounded border bg-[var(--surface)] px-2 text-[12px]"
+                                style={{ borderColor: "var(--border)" }}
+                              >
+                                <option value="">— Select Screen —</option>
+                                {screenPools.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                              </select>
+                            </label>
 
-                      <label className="w-28 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
-                        Quantity (sqm)
-                        <input
-                          type="number"
-                          value={alloc.quantity || ""}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
-                            setAllocations(prev => prev.map((a, i) => i === idx ? { ...a, quantity: val } : a));
-                          }}
-                          placeholder="qty"
-                          className="mt-1 h-9 w-full rounded border bg-[var(--surface)] px-2 text-[12px]"
-                          style={{ borderColor: "var(--border)" }}
-                        />
-                      </label>
+                            <label className="w-28 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+                              Quantity (sqm)
+                              <input
+                                type="number"
+                                value={alloc.quantity || ""}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  setAllocations(prev => prev.map((a, i) => i === idx ? { ...a, quantity: val } : a));
+                                }}
+                                placeholder="qty"
+                                className="mt-1 h-9 w-full rounded border bg-[var(--surface)] px-2 text-[12px]"
+                                style={{ borderColor: "var(--border)" }}
+                              />
+                            </label>
 
-                      {alloc.poolId && (
-                        <div className="mb-2 text-[11px] text-right shrink-0">
-                          <span style={{ color: "var(--text-3)" }}>Avail: </span>
-                          <strong style={{ color: (avail && avail > 10) ? "var(--color-bom-returned)" : "var(--color-pay-advance)" }}>
-                            {avail !== null ? `${avail} sqm` : "Checking..."}
-                          </strong>
-                        </div>
-                      )}
+                            {alloc.poolId && (
+                              <div className="mb-2 text-[11px] text-right shrink-0">
+                                <span style={{ color: "var(--text-3)" }}>Avail: </span>
+                                <strong style={{ color: (avail && avail > 10) ? "var(--color-bom-returned)" : "var(--color-pay-advance)" }}>
+                                  {avail !== null ? `${avail} sqm` : "Checking..."}
+                                </strong>
+                              </div>
+                            )}
 
-                      {allocations.length > 1 && (
-                        <button
-                          onClick={() => setAllocations(prev => prev.filter((_, i) => i !== idx))}
-                          className="mb-1 rounded border p-2 text-destructive transition hover:bg-destructive hover:text-white"
-                          style={{ borderColor: "var(--border)" }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
+                            {allocations.length > 1 && (
+                              <button
+                                onClick={() => setAllocations(prev => prev.filter((_, i) => i !== idx))}
+                                className="mb-1 rounded border p-2 text-destructive transition hover:bg-destructive hover:text-white"
+                                style={{ borderColor: "var(--border)" }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
 
-              <button
-                onClick={() => setAllocations(prev => [...prev, { poolId: "", quantity: 0 }])}
-                className="text-[12px] font-semibold hover:underline"
-                style={{ color: "var(--accent)" }}
-              >
-                + Add another screen
-              </button>
+                    <button
+                      onClick={() => setAllocations(prev => [...prev, { poolId: "", quantity: 0 }])}
+                      className="text-[12px] font-semibold hover:underline"
+                      style={{ color: "var(--accent)" }}
+                    >
+                      + Add another screen
+                    </button>
 
-              {/* Consultation Notes */}
-              <label className="block text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
-                CTO Technical Arrangement Notes
-                <textarea
-                  value={ctoNotes}
-                  onChange={(e) => setCtoNotes(e.target.value)}
-                  placeholder="e.g. curve truss mounting, requires NovaStar processor, main power from generator..."
-                  rows={3}
-                  className="mt-1 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px]"
-                  style={{ borderColor: "var(--border)" }}
-                />
-              </label>
+                    {/* Consultation Notes */}
+                    <label className="block text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+                      CTO Technical Arrangement Notes
+                      <textarea
+                        value={ctoNotes}
+                        onChange={(e) => setCtoNotes(e.target.value)}
+                        placeholder="e.g. curve truss mounting, requires NovaStar processor, main power from generator..."
+                        rows={3}
+                        className="mt-1 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px]"
+                        style={{ borderColor: "var(--border)" }}
+                      />
+                    </label>
 
-              <button
-                onClick={handleSaveTechnical}
-                disabled={isSavingTechnical}
-                className="rounded px-4 py-2 text-[12px] font-bold text-white transition hover:brightness-110"
-                style={{ background: "var(--accent)" }}
-              >
-                {isSavingTechnical ? "Saving..." : "Save Screens & Holds"}
-              </button>
-            </div>
-          </Section>
+                    <button
+                      onClick={handleSaveTechnical}
+                      disabled={isSavingTechnical}
+                      className="rounded px-4 py-2 text-[12px] font-bold text-white transition hover:brightness-110"
+                      style={{ background: "var(--accent)" }}
+                    >
+                      {isSavingTechnical ? "Saving..." : "Save Screens & Holds"}
+                    </button>
+                  </div>
+                </Section>
+              ) : (
+                <Section
+                  title="Technical Hold Specifications (Chief Tech Review)"
+                  icon={Wrench}
+                  action={
+                    <button
+                      onClick={() => setIsEditingHolds(true)}
+                      className="text-[11px] font-semibold hover:underline"
+                      style={{ color: "var(--accent)" }}
+                    >
+                      Edit holds
+                    </button>
+                  }
+                >
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold text-[var(--text-3)] uppercase tracking-wider">Allocated Equipment</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {allocations.filter(a => a.poolId).map((alloc, idx) => {
+                          const p = screenPools.find(sp => sp.id === alloc.poolId);
+                          return (
+                            <div key={idx} className="flex justify-between border-b py-1 text-[13px]" style={{ borderColor: "var(--border)" }}>
+                              <span>{p ? p.name : "LED Screen"}</span>
+                              <span className="font-mono font-semibold">{alloc.quantity} sqm</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {b.ctoNotes && (
+                      <div className="mt-3">
+                        <div className="text-[11px] font-semibold text-[var(--text-3)] uppercase tracking-wider">CTO Consultation Notes</div>
+                        <p className="mt-1 rounded bg-[var(--surface-2)] p-3 text-[13px] leading-relaxed border" style={{ borderColor: "var(--border)" }}>
+                          {b.ctoNotes}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </Section>
+              )
+            ) : hasTechnicalHolds ? (
+              <Section title="Technical Hold Specifications (Chief Tech Review)" icon={Wrench}>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-semibold text-[var(--text-3)] uppercase tracking-wider">Allocated Equipment</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {allocations.filter(a => a.poolId).map((alloc, idx) => {
+                        const p = screenPools.find(sp => sp.id === alloc.poolId);
+                        return (
+                          <div key={idx} className="flex justify-between border-b py-1 text-[13px]" style={{ borderColor: "var(--border)" }}>
+                            <span>{p ? p.name : "LED Screen"}</span>
+                            <span className="font-mono font-semibold">{alloc.quantity} sqm</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {b.ctoNotes && (
+                    <div className="mt-3">
+                      <div className="text-[11px] font-semibold text-[var(--text-3)] uppercase tracking-wider">CTO Consultation Notes</div>
+                      <p className="mt-1 rounded bg-[var(--surface-2)] p-3 text-[13px] leading-relaxed border" style={{ borderColor: "var(--border)" }}>
+                        {b.ctoNotes}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </Section>
+            ) : (
+              <Section title="Technical Hold Allocation" icon={Wrench}>
+                <div className="flex items-center gap-2.5 rounded border border-amber-500/20 bg-amber-500/10 p-3 text-[12px]" style={{ color: "var(--color-pay-advance)" }}>
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>Awaiting technical hold allocation and notes by Chief Technical Officer.</span>
+                </div>
+              </Section>
+            )}
+          </>
         )}
 
         {/* Stage 2: CTO Crew Assignment (Visible to chief_tech / admin when status is CONFIRMED) */}
@@ -903,51 +997,67 @@ function OverviewTab({ b }: { b: B }) {
             {isStaffRestricted && <AccessLockOverlay sectionName="Crew Assignment" permissionKey="user.manage" />}
             <div className="space-y-4">
               <p className="text-[12px]" style={{ color: "var(--text-2)" }}>
-                Assign the Chief Technician and Lead Technician to manage this event deployment.
+                Assign the technicians to manage this event deployment. You will be automatically assigned as the Chief Technician.
               </p>
 
-              <div className="grid grid-cols-2 gap-4">
-                <label className="text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
-                  Chief Technician
-                  <select
-                    value={assignedChief}
-                    onChange={(e) => setAssignedChief(e.target.value)}
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <option value="">— Select —</option>
-                    {staffList
-                      .filter((s) => s.role.toLowerCase().includes("chief") || s.role.toLowerCase() === "cto")
-                      .map((s) => <option key={s.id} value={s.id}>{s.name}</option>)
-                    }
-                  </select>
-                </label>
+              <div className="space-y-3">
+                {assignedTechs.map((techId, idx) => (
+                  <div key={idx} className="flex items-end gap-3 rounded border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                    <label className="flex-1 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+                      Technician #{idx + 1}
+                      <select
+                        value={techId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAssignedTechs(prev => prev.map((t, i) => i === idx ? val : t));
+                        }}
+                        className="mt-1 h-9 w-full rounded border bg-[var(--surface)] px-2 text-[12px]"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <option value="">— Select Technician —</option>
+                        {staffList
+                          .filter((s) => s.role.toLowerCase() === "technician" || s.role.toLowerCase() === "to")
+                          .map((s) => (
+                            <option key={s.id} value={s.id} disabled={assignedTechs.includes(s.id) && s.id !== techId}>
+                              {s.name}
+                            </option>
+                          ))
+                        }
+                      </select>
+                    </label>
 
-                <label className="text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
-                  Technician
-                  <select
-                    value={assignedTech}
-                    onChange={(e) => setAssignedTech(e.target.value)}
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <option value="">— Select —</option>
-                    {staffList
-                      .filter((s) => s.role.toLowerCase() === "technician" || s.role.toLowerCase() === "to")
-                      .map((s) => <option key={s.id} value={s.id}>{s.name}</option>)
-                    }
-                  </select>
-                </label>
+                    {assignedTechs.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setAssignedTechs(prev => prev.filter((_, i) => i !== idx))}
+                        className="mb-1 rounded bg-red-600/20 px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-600/30"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
 
-              <button
-                onClick={handleAssignStaff}
-                disabled={isAssigningStaff}
-                className="rounded px-4 py-2 text-[12px] font-bold text-white transition hover:brightness-110"
-                style={{ background: "var(--accent)" }}
-              >
-                {isAssigningStaff ? "Assigning..." : "Assign Crew & Dispatch"}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAssignedTechs(prev => [...prev, ""])}
+                  className="rounded px-3 py-1.5 text-xs font-semibold hover:brightness-110"
+                  style={{ background: "var(--surface-3)", color: "var(--text-1)" }}
+                >
+                  + Add another technician
+                </button>
+
+                <button
+                  onClick={handleAssignStaff}
+                  disabled={isAssigningStaff}
+                  className="rounded px-4 py-2 text-[12px] font-bold text-white transition hover:brightness-110"
+                  style={{ background: "var(--accent)" }}
+                >
+                  {isAssigningStaff ? "Assigning..." : "Assign Crew & Dispatch"}
+                </button>
+              </div>
             </div>
           </Section>
         )}
@@ -1196,8 +1306,8 @@ function FilesTab({ b }: { b: any }) {
 
   // Queries & Mutations
   const { data: attachments, isLoading } = useQuery({
-    queryKey: ["booking-attachments", b.code],
-    queryFn: () => getBookingAttachmentsApi(b.code),
+    queryKey: ["booking-attachments", b.id],
+    queryFn: () => getBookingAttachmentsApi(b.id),
   });
 
   const { mutate: uploadFile } = useMutation({
@@ -1211,7 +1321,7 @@ function FilesTab({ b }: { b: any }) {
 
       try {
         // Step 1: Request presigned S3/MinIO upload URL
-        const res = await getUploadUrlApi(b.code, {
+        const res = await getUploadUrlApi(b.id, {
           fileName: file.name,
           fileType: file.type || "application/octet-stream"
         });
@@ -1241,7 +1351,7 @@ function FilesTab({ b }: { b: any }) {
       }
 
       // Step 3: Confirm upload metadata with NestJS backend
-      return await confirmUploadApi(b.code, {
+      return await confirmUploadApi(b.id, {
         objectKey,
         originalName: file.name,
         fileType: file.type || "application/octet-stream",
@@ -1250,7 +1360,7 @@ function FilesTab({ b }: { b: any }) {
     },
     onSuccess: () => {
       toast.success("File attached successfully!");
-      queryClient.invalidateQueries({ queryKey: ["booking-attachments", b.code] });
+      queryClient.invalidateQueries({ queryKey: ["booking-attachments", b.id] });
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to upload file attachment");
@@ -1266,7 +1376,7 @@ function FilesTab({ b }: { b: any }) {
     mutationFn: deleteAttachmentApi,
     onSuccess: () => {
       toast.success("Attachment deleted successfully!");
-      queryClient.invalidateQueries({ queryKey: ["booking-attachments", b.code] });
+      queryClient.invalidateQueries({ queryKey: ["booking-attachments", b.id] });
       setDeletingId(null);
     },
     onError: (err: any) => {
