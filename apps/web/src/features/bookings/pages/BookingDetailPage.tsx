@@ -285,11 +285,17 @@ export function BookingDetail() {
 
   const [staff, setStaff] = useState<any[]>([]);
 
+  // TODO(v2): Lazy fix — we skip the staff fetch entirely for technicians because
+  // they lack `user.manage` permission and get a 403. The real question is whether
+  // technicians should see a limited staff list (e.g. their crew) or none at all.
+  // This should be resolved with a proper backend permission scope (e.g. `user.view_team`)
+  // instead of hardcoding role checks on the frontend.
   useEffect(() => {
+    if (authUser?.role?.toLowerCase() === "technician") return;
     getStaffApi()
       .then(setStaff)
       .catch((e) => console.error("Failed to load staff in details page", e));
-  }, []);
+  }, [authUser]);
 
   // const { data: booking, isLoading, error } = useQuery({
   //   queryKey: ["booking", code],
@@ -1236,8 +1242,11 @@ function OverviewTab({ b }: { b: B }) {
     return () => { active = false; };
   }, [b.assemblyDate, b.eventDate, screenPools]);
 
-  // Fetch staff
+  // TODO(v2): Lazy fix — same as above in BookingDetail. Skipping the staff fetch
+  // for technicians because they get a 403. The proper fix is a backend permission
+  // scope that returns only the crew relevant to the technician, not a blanket skip.
   useEffect(() => {
+    if (isTechnician) return;
     getStaffApi()
       .then(setStaffList)
       .catch((err: any) => {
@@ -1246,7 +1255,7 @@ function OverviewTab({ b }: { b: B }) {
           setIsStaffRestricted(true);
         }
       });
-  }, []);
+  }, [isTechnician]);
 
   const handleSaveTechnical = async () => {
     const validAllocations = allocations.filter(a => a.poolId && a.quantity > 0);
@@ -1325,9 +1334,554 @@ function OverviewTab({ b }: { b: B }) {
     }
   };
 
+  // Technician inline BOM state (for ACCEPTED status inline workspace)
+  const [techBomRows, setTechBomRows] = useState<{ poolId: string; qty: number }[]>([
+    { poolId: "", qty: 1 },
+    { poolId: "", qty: 1 },
+    { poolId: "", qty: 1 },
+  ]);
+
+  const { data: techPools = [] } = useQuery({
+    queryKey: ["inventory-pools"],
+    queryFn: getInventoryPoolsApi,
+    enabled: isTechnician && b.status === "ACCEPTED",
+  });
+
+  const { mutate: techAddBomLine, isPending: techAddingLine } = useMutation({
+    mutationFn: ({ poolId, quantity }: { poolId: string; quantity: number }) =>
+      createBomLineApi(b.id, poolId, quantity),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to add item to BOM");
+    }
+  });
+
+  const { mutate: techUpdateBomLine, isPending: techUpdatingLine } = useMutation({
+    mutationFn: ({ lineId, quantity }: { lineId: string; quantity: number }) =>
+      updateBomLineApi(b.id, lineId, quantity),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to update quantity");
+    }
+  });
+
+  const { mutate: techDeleteBomLine, isPending: techDeletingLine } = useMutation({
+    mutationFn: (lineId: string) =>
+      deleteBomLineApi(b.id, lineId),
+    onSuccess: () => {
+      toast.success("Item removed from BOM");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to remove item");
+    }
+  });
+
+  const handleTechSubmitRows = () => {
+    const valid = techBomRows.filter(r => r.poolId && r.qty > 0);
+    if (valid.length === 0) {
+      toast.error("Add at least one item with a quantity");
+      return;
+    }
+    let submitted = 0;
+    valid.forEach(r => {
+      techAddBomLine({ poolId: r.poolId, quantity: r.qty }, {
+        onSuccess: () => {
+          submitted++;
+          if (submitted === valid.length) {
+            toast.success(`${valid.length} item${valid.length > 1 ? "s" : ""} added to BOM`);
+            setTechBomRows([{ poolId: "", qty: 1 }, { poolId: "", qty: 1 }, { poolId: "", qty: 1 }]);
+          }
+        }
+      });
+    });
+  };
+
+  // ─── Technician Attachments State ───
+  const [techAttachments, setTechAttachments] = useState<Attachment[]>([]);
+  const [isTechUploading, setIsTechUploading] = useState(false);
+  const [techUploadProgress, setTechUploadProgress] = useState(0);
+  const [techUploadingFileName, setTechUploadingFileName] = useState("");
+  const [techDeletingId, setTechDeletingId] = useState<string | null>(null);
+  const [isTechDragActive, setIsTechDragActive] = useState(false);
+
+  const { data: techAttachmentsData, isLoading: techAttachmentsLoading } = useQuery({
+    queryKey: ["booking-attachments", b.id],
+    queryFn: () => getBookingAttachmentsApi(b.id),
+    enabled: isTechnician && b.status === "ACCEPTED",
+  });
+
+  useEffect(() => {
+    if (techAttachmentsData) {
+      setTechAttachments(techAttachmentsData);
+    }
+  }, [techAttachmentsData]);
+
+  const { mutate: techUploadFile } = useMutation({
+    mutationFn: async (file: File) => {
+      setIsTechUploading(true);
+      setTechUploadingFileName(file.name);
+      setTechUploadProgress(0);
+
+      let uploadUrl = "";
+      let objectKey = "";
+
+      try {
+        const res = await getUploadUrlApi(b.id, {
+          fileName: file.name,
+          fileType: file.type || "application/octet-stream"
+        });
+        uploadUrl = res.uploadUrl;
+        objectKey = res.objectKey;
+      } catch (e) {
+        const mockUuid = Math.random().toString(36).substr(2, 9);
+        uploadUrl = `mock://vortex-s3.local/attachments/${b.code}/${mockUuid}_${file.name}`;
+        objectKey = `attachments/${b.code}/${mockUuid}_${file.name}`;
+      }
+
+      try {
+        await uploadFileDirectApi(uploadUrl, file, (percent) => {
+          setTechUploadProgress(percent);
+        });
+      } catch (err) {
+        const mockUuid = Math.random().toString(36).substr(2, 9);
+        const fallbackUrl = `mock://vortex-s3.local/attachments/${b.code}/${mockUuid}_${file.name}`;
+        objectKey = `attachments/${b.code}/${mockUuid}_${file.name}`;
+        
+        await uploadFileDirectApi(fallbackUrl, file, (percent) => {
+          setTechUploadProgress(percent);
+        });
+      }
+
+      return await confirmUploadApi(b.id, {
+        objectKey,
+        originalName: file.name,
+        fileType: file.type || "application/octet-stream",
+        fileSizeBytes: file.size
+      });
+    },
+    onSuccess: () => {
+      toast.success("File attached successfully!");
+      queryClient.invalidateQueries({ queryKey: ["booking-attachments", b.id] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to upload file attachment");
+    },
+    onSettled: () => {
+      setIsTechUploading(false);
+      setTechUploadingFileName("");
+      setTechUploadProgress(0);
+    }
+  });
+
+  const { mutate: techDeleteAttachment, isPending: techDeleting } = useMutation({
+    mutationFn: deleteAttachmentApi,
+    onSuccess: () => {
+      toast.success("Attachment deleted successfully!");
+      queryClient.invalidateQueries({ queryKey: ["booking-attachments", b.id] });
+      setTechDeletingId(null);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to delete attachment");
+    }
+  });
+
+  const handleTechDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setIsTechDragActive(true);
+    } else if (e.type === "dragleave") {
+      setIsTechDragActive(false);
+    }
+  };
+
+  const handleTechDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsTechDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error("File size exceeds the 20MB limit.");
+        return;
+      }
+      techUploadFile(file);
+    }
+  };
+
+  const handleTechDownload = async (att: Attachment) => {
+    try {
+      const { downloadUrl } = await getDownloadUrlApi(att.id);
+      if (downloadUrl && downloadUrl !== "#") {
+        window.open(downloadUrl, "_blank", "noopener,noreferrer");
+      } else {
+        toast.error("Unable to generate preview/download URL");
+      }
+    } catch {
+      toast.error("Failed to fetch download token");
+    }
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  };
+
+  const getFileIcon = (mime: string) => {
+    const m = mime.toLowerCase();
+    if (m.includes("pdf")) return <FileText className="h-7 w-7 text-red-400" />;
+    if (m.includes("image/")) return <Image className="h-7 w-7 text-emerald-400" />;
+    if (m.includes("zip") || m.includes("tar") || m.includes("rar") || m.includes("compressed")) {
+      return <FileArchive className="h-7 w-7 text-amber-400" />;
+    }
+    if (m.includes("sheet") || m.includes("excel") || m.includes("csv")) {
+      return <FileText className="h-7 w-7 text-emerald-500" />;
+    }
+    return <File className="h-7 w-7 text-zinc-400" />;
+  };
+
   return (
     <div className="grid grid-cols-12 gap-4">
       <div className="col-span-8 space-y-4">
+
+        {/* ─── Technician Inline Workspace (ACCEPTED status) ─── */}
+        {isTechnician && b.status === "ACCEPTED" && (
+          <>
+            {/* Job Context Card */}
+            <Section title="Your Assignment — Equipment & Setup Brief" icon={Package}>
+              <div className="space-y-4">
+                <div className="rounded-md border p-3" style={{ borderColor: "var(--border)", background: "color-mix(in oklab, var(--accent) 6%, var(--surface-2))" }}>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-3)" }}>Equipment Specifications</div>
+                  <div className="grid grid-cols-3 gap-3 text-[12px]">
+                    <div>
+                      <span style={{ color: "var(--text-3)" }}>Screen Type</span>
+                      <div className="font-semibold font-mono mt-0.5">{b.screenType || "—"}</div>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--text-3)" }}>Size</span>
+                      <div className="font-semibold font-mono mt-0.5">{b.size ? `${b.size} sqm` : "—"}</div>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--text-3)" }}>Arrangement</span>
+                      <div className="font-semibold font-mono mt-0.5">{b.arrangement || "—"}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {b.ctoNotes && (
+                  <div className="rounded-md border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                    <div className="text-[11px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--text-3)" }}>CTO Technical Notes</div>
+                    <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-1)" }}>{b.ctoNotes}</p>
+                  </div>
+                )}
+
+                <div className="rounded-md border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--text-3)" }}>Event Schedule</div>
+                  <div className="grid grid-cols-3 gap-3 text-[12px]">
+                    <div>
+                      <span style={{ color: "var(--text-3)" }}>Assembly</span>
+                      <div className="font-semibold font-mono mt-0.5">{b.assemblyDate}</div>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--text-3)" }}>Event</span>
+                      <div className="font-semibold font-mono mt-0.5">{b.eventDate}</div>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--text-3)" }}>Dismantle</span>
+                      <div className="font-semibold font-mono mt-0.5">{b.dismantleDate}</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-[12px]">
+                    <span style={{ color: "var(--text-3)" }}>Venue: </span>
+                    <span className="font-semibold">{b.venue}</span>
+                  </div>
+                </div>
+              </div>
+            </Section>
+
+            {/* Inline BOM Creator — Multi-row */}
+            <Section title="Bill of Materials — Add Equipment" icon={Package}>
+              <div className="space-y-2 mb-3">
+                {techBomRows.map((row, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <select
+                      value={row.poolId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setTechBomRows(prev => prev.map((r, i) => i === idx ? { ...r, poolId: val } : r));
+                      }}
+                      className="h-9 flex-1 rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <option value="">-- Choose Equipment --</option>
+                      {techPools.map((p: any) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.category?.name || "General"})
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min="1"
+                      value={row.qty || ""}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 0;
+                        setTechBomRows(prev => prev.map((r, i) => i === idx ? { ...r, qty: val } : r));
+                      }}
+                      placeholder="Qty"
+                      className="h-9 w-20 rounded border bg-[var(--surface-2)] px-2 text-[12px] text-right font-mono"
+                      style={{ borderColor: "var(--border)" }}
+                    />
+                    {techBomRows.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setTechBomRows(prev => prev.filter((_, i) => i !== idx))}
+                        className="h-9 w-9 shrink-0 rounded border flex items-center justify-center text-destructive transition hover:bg-destructive hover:text-white"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setTechBomRows(prev => [...prev, { poolId: "", qty: 1 }])}
+                  className="text-[11px] font-semibold hover:underline"
+                  style={{ color: "var(--accent)" }}
+                >
+                  + Add another row
+                </button>
+                <div className="flex-1" />
+                <button
+                  type="button"
+                  onClick={handleTechSubmitRows}
+                  disabled={techAddingLine}
+                  className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 h-9 flex items-center gap-1.5"
+                  style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+                >
+                  {techAddingLine ? "Adding..." : "Add All to BOM"}
+                </button>
+              </div>
+
+              {/* Existing BOM Items */}
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="border-b" style={{ borderColor: "var(--border)" }}>
+                    <th className="label-eyebrow pb-2 text-left">Item</th>
+                    <th className="label-eyebrow pb-2 text-right w-28">Quantity</th>
+                    <th className="label-eyebrow pb-2 text-center w-20">Actions</th>
+                    <th className="label-eyebrow pb-2 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {b.bomItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
+                        No items in Bill of Materials yet. Use the form above to add equipment.
+                      </td>
+                    </tr>
+                  ) : (
+                    b.bomItems.map((it) => (
+                      <tr key={it.id} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+                        <td className="py-3 font-semibold">{it.name}</td>
+                        <td className="py-3 text-right">
+                          <input
+                            type="number"
+                            min="1"
+                            defaultValue={it.qty}
+                            onBlur={(e) => {
+                              const val = Math.max(1, parseInt(e.target.value) || 1);
+                              if (val !== it.qty) {
+                                techUpdateBomLine({ lineId: it.id, quantity: val });
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
+                            className="h-7 w-20 rounded border bg-[var(--surface-2)] px-2 text-[12px] text-right font-mono"
+                            style={{ borderColor: "var(--border)" }}
+                          />
+                        </td>
+                        <td className="py-3 text-center">
+                          <button
+                            onClick={() => techDeleteBomLine(it.id)}
+                            disabled={techDeletingLine}
+                            className="text-destructive text-[11px] font-semibold hover:underline disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        </td>
+                        <td className="py-3 text-right">
+                          <span className="rounded border px-1.5 py-0.5 text-[10px] font-bold" style={{ borderColor: "var(--border)", color: "var(--text-3)" }}>
+                            {it.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </Section>
+
+            {/* Schematic & Attachments */}
+            <Section title="Schematic & Attachments" icon={Paperclip}>
+              <div className="space-y-3">
+                {/* Upload Zone */}
+                <div
+                  onDragEnter={handleTechDrag}
+                  onDragOver={handleTechDrag}
+                  onDragLeave={handleTechDrag}
+                  onDrop={handleTechDrop}
+                  className={`relative rounded-lg border-2 border-dashed p-4 text-center transition-all ${
+                    isTechDragActive 
+                      ? "border-[var(--accent)] bg-[var(--surface-2)] scale-[0.99]" 
+                      : "border-[var(--border)] hover:border-[var(--accent)] bg-[var(--surface-2)]"
+                  }`}
+                >
+                  <input
+                    type="file"
+                    id="tech-file-upload"
+                    className="hidden"
+                    disabled={isTechUploading}
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) {
+                        const file = e.target.files[0];
+                        if (file.size > 20 * 1024 * 1024) {
+                          toast.error("File size exceeds the 20MB limit.");
+                          return;
+                        }
+                        techUploadFile(file);
+                      }
+                    }}
+                  />
+                  <label htmlFor="tech-file-upload" className="cursor-pointer block">
+                    {isTechUploading ? (
+                      <div className="space-y-2">
+                        <Loader2 className="mx-auto h-6 w-6 animate-spin text-[var(--accent)]" />
+                        <div className="text-[11px] font-semibold">Uploading {techUploadingFileName}... {techUploadProgress}%</div>
+                        <div className="h-1.5 w-full rounded-full bg-[var(--border)] overflow-hidden">
+                          <div className="h-full rounded-full transition-all duration-300 bg-[var(--accent)]" style={{ width: `${techUploadProgress}%` }} />
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="mx-auto h-6 w-6 mb-1.5 text-[var(--accent)]" />
+                        <span className="text-[12px] font-bold block">
+                          Drag & Drop or <span style={{ color: "var(--accent)" }}>browse</span>
+                        </span>
+                        <span className="text-[10px] block mt-0.5" style={{ color: "var(--text-3)" }}>
+                          PDFs, images, spreadsheets, archives up to 20MB
+                        </span>
+                      </>
+                    )}
+                  </label>
+                </div>
+
+                {/* File List */}
+                {techAttachmentsLoading ? (
+                  <div className="py-4 text-center text-[11px]" style={{ color: "var(--text-3)" }}>Loading files...</div>
+                ) : techAttachments.length === 0 ? (
+                  <div className="py-4 text-center text-[11px]" style={{ color: "var(--text-3)" }}>
+                    No attachments yet. Upload schematic drawings or rigging diagrams above.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {techAttachments.map((f) => (
+                      <div
+                        key={f.id}
+                        className="group flex items-center gap-3 rounded-md border p-2.5 transition hover:border-[var(--accent)] bg-[var(--surface-2)]"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <div className="shrink-0">{getFileIcon(f.fileType)}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="truncate text-[12px] font-semibold" title={f.originalName}>{f.originalName}</div>
+                          <div className="text-[10px]" style={{ color: "var(--text-3)" }}>
+                            {formatBytes(f.fileSizeBytes)} · {new Date(f.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleTechDownload(f)}
+                            title="Download"
+                            className="rounded p-1 hover:bg-[var(--surface)] transition"
+                            style={{ color: "var(--accent)" }}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setTechDeletingId(f.id)}
+                            title="Delete"
+                            className="rounded p-1 hover:bg-red-500/10 transition"
+                            style={{ color: "var(--destructive)" }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Section>
+
+            {/* Technician Notes TODO */}
+            <Section title="Technician Notes" icon={MessageSquare}>
+              <textarea
+                disabled
+                placeholder="Technician notes functionality coming soon. TODO: persist per-booking technician field notes."
+                className="mt-1 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px] h-24 block resize-none"
+                style={{ borderColor: "var(--border)", color: "var(--text-3)" }}
+              />
+            </Section>
+
+            {/* Delete Confirmation Modal */}
+            {techDeletingId && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                <div 
+                  className="w-full max-w-sm rounded-lg border p-5 shadow-xl animate-in fade-in zoom-in duration-200"
+                  style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+                >
+                  <h4 className="text-[14px] font-bold text-[var(--destructive)] mb-2">Permanently Delete Attachment</h4>
+                  <p className="text-[12px] leading-relaxed mb-4" style={{ color: "var(--text-2)" }}>
+                    Are you sure you want to delete this file? This action is permanent and cannot be undone.
+                  </p>
+                  <div className="flex items-center justify-end gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                    <button
+                      disabled={techDeleting}
+                      onClick={() => techDeleteAttachment(techDeletingId)}
+                      className="rounded px-3 py-1.5 text-[11px] font-bold text-white bg-[var(--destructive)] hover:opacity-90 disabled:opacity-50"
+                    >
+                      {techDeleting ? "Deleting..." : "Confirm Delete"}
+                    </button>
+                    <button
+                      onClick={() => setTechDeletingId(null)}
+                      className="rounded border px-3 py-1.5 text-[11px] font-bold"
+                      style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
         {/* Stage 1: CTO Technical Allocation (Visible to chief_tech / admin when status is RESERVED) */}
         {/* Stage 1: CTO Technical Allocation (Visible when status is RESERVED) */}
         {b.status === "RESERVED" && (
@@ -1821,7 +2375,7 @@ function EquipmentTab({ b }: { b: B }) {
                 <option value="">-- Choose Equipment --</option>
                 {pools.map((p: any) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} ({p.category || "General"})
+                    {p.name} ({p.category?.name || "General"})
                   </option>
                 ))}
               </select>
