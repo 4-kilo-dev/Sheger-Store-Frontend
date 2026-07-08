@@ -15,6 +15,7 @@ export interface BomItem {
 }
 
 export interface Booking {
+  id: string;
   code: string;
   client: string;
   contactPerson: string;
@@ -39,6 +40,7 @@ export interface Booking {
   mealBudget: number;
   createdAt: string;
   statusHistory?: StatusHistoryItem[];
+  itemServiceSpec?: string;
 }
 
 export interface StatusHistoryItem {
@@ -130,6 +132,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
   }));
 
   return {
+    id: b.id,
     code: b.bookingCode || b.id, // Use human-readable bookingCode if available, fallback to id
     client: customerName,
     contactPerson: customerName,
@@ -146,7 +149,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
     status: (b.status || "RESERVED") as BookingStatus,
     payment,
     amount: parseFloat(b.paymentAmount || b.amount || "0"),
-    ctoNotes: b.notes || "",
+    ctoNotes: b.ctoConsultationNotes || "",
     bomItems: bomItems,
     teamLeader: teamLeader,
     driver,
@@ -154,6 +157,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
     mealBudget,
     createdAt: b.createdAt ? b.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
     statusHistory,
+    itemServiceSpec: b.itemServiceSpec || "",
   };
 }
 
