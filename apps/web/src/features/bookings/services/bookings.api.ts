@@ -41,6 +41,7 @@ export interface Booking {
   createdAt: string;
   statusHistory?: StatusHistoryItem[];
   itemServiceSpec?: string;
+  assignments?: any[];
 }
 
 export interface StatusHistoryItem {
@@ -158,6 +159,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
     createdAt: b.createdAt ? b.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
     statusHistory,
     itemServiceSpec: b.itemServiceSpec || "",
+    assignments: b.assignments || [],
   };
 }
 
@@ -183,7 +185,7 @@ export async function createBookingApi(form: any): Promise<any> {
   const eventDateStr = `${form.eventDate || new Date().toISOString().slice(0, 10)}T18:00:00.000Z`;
   const assemblyStartStr = `${form.assemblyDate || new Date().toISOString().slice(0, 10)}T12:00:00.000Z`;
   const assemblyEndStr = `${form.assemblyDate || new Date().toISOString().slice(0, 10)}T15:00:00.000Z`;
-  const dismantleDateStr = form.dismantleDate ? `${form.dismantleDate}T00:00:00.000Z` : `${form.eventDate || new Date().toISOString().slice(0, 10)}T23:59:00.000Z`;
+  const dismantleDateStr = form.dismantleDate ? `${form.dismantleDate}T23:59:59.000Z` : `${form.eventDate || new Date().toISOString().slice(0, 10)}T23:59:00.000Z`;
 
   const bookingPayload = {
     customerId: customer.id,
@@ -253,5 +255,37 @@ export async function getBookingReservationsApi(bookingId: string): Promise<any>
 
 export async function deleteReservationApi(bookingId: string, id: string): Promise<any> {
   return client.delete(`/api/bookings/${bookingId}/reservations/${id}`);
+}
+
+export async function acceptAssignmentApi(assignmentId: string): Promise<any> {
+  return client.patch(`/api/assignments/${assignmentId}/accept`, {});
+}
+
+export async function declineAssignmentApi(assignmentId: string, reason: string): Promise<any> {
+  return client.patch(`/api/assignments/${assignmentId}/decline`, { declineReason: reason });
+}
+
+export async function createBomLineApi(bookingId: string, payload: { poolId: string; quantity: string }): Promise<any> {
+  return client.post(`/api/bookings/${bookingId}/bom/lines`, payload);
+}
+
+export async function updateBomLineApi(bookingId: string, lineId: string, payload: { quantity: string }): Promise<any> {
+  return client.patch(`/api/bookings/${bookingId}/bom/lines/${lineId}`, payload);
+}
+
+export async function deleteBomLineApi(bookingId: string, lineId: string): Promise<any> {
+  return client.delete(`/api/bookings/${bookingId}/bom/lines/${lineId}`);
+}
+
+export async function createHandoffSnapshotApi(bookingId: string): Promise<any> {
+  return client.post(`/api/bookings/${bookingId}/bom/snapshots`, { kind: "HANDOFF" });
+}
+
+export async function createDamageReportApi(payload: { bookingId: string; description: string; severity: string }): Promise<any> {
+  return client.post("/api/damage-reports", payload);
+}
+
+export async function submitEvaluationApi(bookingId: string, payload: any): Promise<any> {
+  return client.post(`/api/bookings/${bookingId}/evaluation`, payload);
 }
 
