@@ -8,6 +8,7 @@ export interface Notification {
   title: string;
   detail: string;
   message? : string;
+  eventType?: string;
   type: NotificationType;
   priority: NotificationPriority;
   readAt: string | null;
@@ -87,8 +88,9 @@ export function connectNotificationsStream(handlers: SseHandlers): () => void {
 
   const connectRealSse = () => {
     try {
-      const backendBase = import.meta.env.VITE_API_URL || window.location.origin;
-      const ssePath = import.meta.env.VITE_API_URL ? "/notifications/stream" : "/api/notifications/stream";
+      const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      const backendBase = import.meta.env.VITE_API_URL || (isLocal ? "http://localhost:3000" : window.location.origin);
+      const ssePath = (import.meta.env.VITE_API_URL || isLocal) ? "/notifications/stream" : "/api/notifications/stream";
       const sseUrl = `${backendBase}${ssePath}?token=${encodeURIComponent(token)}`;
       eventSource = new EventSource(sseUrl);
 
