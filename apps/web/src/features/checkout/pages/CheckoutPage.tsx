@@ -10,6 +10,7 @@ import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { getBookingsApi, type Booking, type BomItem } from "@/features/bookings/services/bookings.api";
 import { getBookingBomLinesApi, checkoutBookingApi, checkinBookingApi } from "@/features/checkout/services/operations.api";
+import { useAuthUser } from "@/hooks/use-auth-user";
 
 const _Route = createFileRoute("/checkout")({
   head: () => ({
@@ -25,6 +26,8 @@ type Mode = "checkout" | "checkin";
 
 export function CheckoutPage() {
   const queryClient = useQueryClient();
+  const authUser = useAuthUser();
+  const userRole = authUser?.role?.toLowerCase() || "";
   const [mode, setMode] = useState<Mode>("checkout");
   const [selectedCode, setSelectedCode] = useState("");
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
@@ -401,9 +404,18 @@ export function CheckoutPage() {
 
               {selected && (
                 <div className="space-y-2">
+                  {mode === "checkin" && selected.status === "ONSITE" && userRole === "storekeeper" && (
+                    <div className="rounded-lg border p-3.5 text-[12px] font-semibold leading-relaxed" style={{ borderColor: "var(--color-status-onsite)", background: "color-mix(in oklab, var(--color-status-onsite) 10%, var(--surface))", color: "var(--color-status-onsite)" }}>
+                      Gear is on-site. Awaiting event completion and warehouse return.
+                    </div>
+                  )}
                   <button
                     onClick={handleSubmit}
-                    disabled={checkedItems.size === 0 || isPending}
+                    disabled={
+                      checkedItems.size === 0 || 
+                      isPending || 
+                      (mode === "checkin" && selected.status === "ONSITE" && userRole === "storekeeper")
+                    }
                     className="flex w-full items-center justify-center gap-2 rounded-md py-3 text-[13px] font-bold transition hover:brightness-110 disabled:opacity-40"
                     style={{
                       background: mode === "checkout" ? "var(--accent)" : "var(--color-bom-returned)",

@@ -12,6 +12,8 @@ export interface BomItem {
   name: string;
   qty: number;
   status: "Reserved" | "Checked Out" | "Returned";
+  poolId?: string;
+  itemId?: string;
 }
 
 export interface Booking {
@@ -42,6 +44,10 @@ export interface Booking {
   statusHistory?: StatusHistoryItem[];
   itemServiceSpec?: string;
   assignments?: any[];
+  technicianNotes?: string;
+  contentType?: string;
+  venueType?: string;
+  hangingOrSitting?: "hanging" | "sitting" | "";
 }
 
 export interface StatusHistoryItem {
@@ -90,6 +96,8 @@ function mapBackendBookingToFrontend(b: any): Booking {
       name: line.item?.name || line.pool?.name || "Equipment Line",
       qty: parseFloat(line.quantity),
       status: line.acceptedShortfall ? "Checked Out" : "Reserved",
+      poolId: line.poolId || undefined,
+      itemId: line.itemId || undefined,
     };
   });
 
@@ -160,6 +168,10 @@ function mapBackendBookingToFrontend(b: any): Booking {
     statusHistory,
     itemServiceSpec: b.itemServiceSpec || "",
     assignments: b.assignments || [],
+    technicianNotes: b.technicianNotes || "",
+    contentType: b.contentType || "",
+    venueType: b.venueType || "",
+    hangingOrSitting: b.hangingOrSitting || "",
   };
 }
 
@@ -281,11 +293,15 @@ export async function createHandoffSnapshotApi(bookingId: string): Promise<any> 
   return client.post(`/api/bookings/${bookingId}/bom/snapshots`, { kind: "HANDOFF" });
 }
 
-export async function createDamageReportApi(payload: { bookingId: string; description: string; severity: string }): Promise<any> {
-  return client.post("/api/damage-reports", payload);
+export async function createDamageReportApi(bookingId: string, payload: { description?: string; poolId?: string; itemId?: string; reportType: "DAMAGE" | "MISSING"; quantity?: string }): Promise<any> {
+  return client.post(`/api/bookings/${bookingId}/damage-reports`, payload);
 }
 
 export async function submitEvaluationApi(bookingId: string, payload: any): Promise<any> {
   return client.post(`/api/bookings/${bookingId}/evaluation`, payload);
+}
+
+export async function getBookingSnapshotsApi(bookingId: string, params?: { kind?: string }): Promise<any[]> {
+  return client.get<any[]>(`/api/bookings/${bookingId}/bom/snapshots`, params);
 }
 
