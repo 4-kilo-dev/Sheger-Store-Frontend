@@ -38,14 +38,14 @@ export function FeaturedBookingWidget() {
       </div>
       {featured ? (
         <>
-          <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
             <div>
               <div className="text-[11px] font-bold" style={{ color: "var(--text-3)" }}>{featured.code}</div>
-              <h2 className="mt-1 text-[16px] font-bold" style={{ color: "var(--text-1)" }}>
+              <h2 className="mt-1 text-[16px] font-bold leading-tight" style={{ color: "var(--text-1)" }}>
                 {featured.client} · {featured.venue}
               </h2>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <StatusBadge status={featured.status} />
               <Button variant="link" size="default" asChild className="h-auto p-0">
                 <Link to="/bookings/$code" params={{ code: featured.code }}>

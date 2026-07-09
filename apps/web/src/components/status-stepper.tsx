@@ -43,38 +43,40 @@ export function StatusStepper({ current }: { current: BookingStatus }) {
           This booking has been canceled.
         </div>
       )}
-      <div className="flex w-full items-start">
-        {steps.map((s, i) => {
-          const done = !isCanceled && i < idx;
-          const active = !isCanceled && i === idx;
-          const color = VAR[s];
-          return (
-            <div key={s} className="flex flex-1 flex-col items-center">
-              <div className="flex w-full items-center">
-                <div className="h-px flex-1" style={{ background: i === 0 ? "transparent" : i <= idx && !isCanceled ? color : "var(--border)" }} />
-                <div
-                  className={`flex h-7 w-7 items-center justify-center rounded-full border-2 ${active ? "animate-pulse" : ""}`}
-                  style={{
-                    borderColor: done || active ? color : "var(--border)",
-                    background: done ? color : "var(--surface)",
-                    color: done ? "var(--background)" : color,
-                  }}
-                >
-                  {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : <span className="text-[10px] font-bold">{i + 1}</span>}
+      <div className="w-full overflow-x-auto pb-2 scrollbar-none">
+        <div className="flex w-full min-w-[680px] items-start px-1">
+          {steps.map((s, i) => {
+            const done = !isCanceled && i < idx;
+            const active = !isCanceled && i === idx;
+            const color = VAR[s];
+            return (
+              <div key={s} className="flex flex-1 flex-col items-center min-w-[84px] px-1">
+                <div className="flex w-full items-center">
+                  <div className="h-0.5 flex-1 transition-colors" style={{ background: i === 0 ? "transparent" : i <= idx && !isCanceled ? color : "var(--border)" }} />
+                  <div
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 ${active ? "ring-4 ring-accent/20" : ""}`}
+                    style={{
+                      borderColor: done || active ? color : "var(--border)",
+                      background: done ? color : "var(--surface)",
+                      color: done ? "var(--background)" : color,
+                    }}
+                  >
+                    {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : <span className="text-[10px] font-bold">{i + 1}</span>}
+                  </div>
+                  <div className="h-0.5 flex-1 transition-colors" style={{ background: i === steps.length - 1 ? "transparent" : i < idx && !isCanceled ? color : "var(--border)" }} />
                 </div>
-                <div className="h-px flex-1" style={{ background: i === steps.length - 1 ? "transparent" : i < idx && !isCanceled ? color : "var(--border)" }} />
-              </div>
-              <div className="mt-2 text-center">
-                <div
-                  className="text-[10px] font-bold uppercase tracking-wider"
-                  style={{ color: done || active ? color : "var(--text-3)" }}
-                >
-                  {STATUS_LABELS[s]}
+                <div className="mt-2 text-center w-full">
+                  <div
+                    className={`text-[10px] uppercase tracking-wider leading-snug ${active ? "font-bold" : "font-semibold"}`}
+                    style={{ color: done || active ? color : "var(--text-3)" }}
+                  >
+                    {STATUS_LABELS[s]}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

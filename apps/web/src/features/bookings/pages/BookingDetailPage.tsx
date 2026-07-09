@@ -173,7 +173,7 @@ export function BookingDetail() {
     if (booking && booking.code && code !== booking.code) {
       navigate({
         to: "/bookings/$code" as any,
-        params: { code: booking.code },
+        params: { code: booking.code } as any,
         replace: true,
       });
     }
@@ -1532,7 +1532,7 @@ function OverviewTab({ b }: { b: B }) {
 
   const { mutate: techAddBomLine, isPending: techAddingLine } = useMutation({
     mutationFn: ({ poolId, quantity }: { poolId: string; quantity: number }) =>
-      createBomLineApi(b.id, poolId, quantity),
+      createBomLineApi(b.id, { poolId, quantity: String(quantity) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
     },
@@ -1543,7 +1543,7 @@ function OverviewTab({ b }: { b: B }) {
 
   const { mutate: techUpdateBomLine, isPending: techUpdatingLine } = useMutation({
     mutationFn: ({ lineId, quantity }: { lineId: string; quantity: number }) =>
-      updateBomLineApi(b.id, lineId, quantity),
+      updateBomLineApi(b.id, lineId, { quantity: String(quantity) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
     },
@@ -2672,7 +2672,7 @@ function EquipmentTab({ b }: { b: B }) {
   // Mutations
   const { mutate: addBomLine, isPending: addingLine } = useMutation({
     mutationFn: ({ poolId, quantity }: { poolId: string; quantity: number }) => 
-      createBomLineApi(b.id, poolId, quantity),
+      createBomLineApi(b.id, { poolId, quantity: String(quantity) }),
     onSuccess: () => {
       toast.success("Item added to BOM");
       queryClient.invalidateQueries({ queryKey: ["booking", b.code] });
@@ -2686,7 +2686,7 @@ function EquipmentTab({ b }: { b: B }) {
 
   const { mutate: updateBomLine, isPending: updatingLine } = useMutation({
     mutationFn: ({ lineId, quantity }: { lineId: string; quantity: number }) => 
-      updateBomLineApi(b.id, lineId, quantity),
+      updateBomLineApi(b.id, lineId, { quantity: String(quantity) }),
     onSuccess: () => {
       toast.success("BOM quantity updated");
       queryClient.invalidateQueries({ queryKey: ["booking", b.code] });
@@ -3654,7 +3654,7 @@ function EvaluationsTab({ b, openInternalForm }: { b: B; openInternalForm: () =>
 
                       {m.valueType === "rating_5" && (
                         <div className="flex items-center gap-1 mt-1">
-                          {Array.from({ length: 5 }).map((StarIdx) => {
+                          {Array.from({ length: 5 }).map((_, StarIdx) => {
                             const starVal = StarIdx + 1;
                             return (
                               <button

@@ -71,7 +71,7 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[240px_1fr]">
+      <div className="grid gap-5 md:grid-cols-[240px_1fr]">
         {/* Nav */}
         <nav className="h-fit rounded-lg border p-2" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
           {panels.map(({ icon: Icon, label }) => (

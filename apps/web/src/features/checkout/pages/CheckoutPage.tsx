@@ -171,7 +171,7 @@ export function CheckoutPage() {
           </div>
           <div>
             <div className="label-eyebrow">Warehouse Operations</div>
-            <h1 className="text-[24px] font-bold tracking-tight">Material Check-In / Check-Out</h1>
+            <h1 className="text-[20px] sm:text-[24px] font-bold tracking-tight">Material Check-In / Check-Out</h1>
           </div>
         </div>
 
@@ -223,9 +223,9 @@ export function CheckoutPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-12 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Main */}
-          <div className="col-span-8 space-y-4">
+          <div className="lg:col-span-8 space-y-4">
             {/* Booking selector */}
             <div className="rounded-lg border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
               <div className="label-eyebrow mb-3">Select Booking</div>
@@ -350,7 +350,7 @@ export function CheckoutPage() {
           </div>
 
           {/* Sidebar */}
-          <aside className="col-span-4">
+          <aside className="lg:col-span-4">
             <div className="sticky top-20 space-y-4">
               {selected && (
                 <div className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>

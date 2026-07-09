@@ -33,7 +33,7 @@ export function BookingsIndex() {
   const query = searchParams.q || "";
   const setQuery = (val: string) => {
     navigate({
-      search: (prev: any) => ({ ...prev, q: val || undefined }),
+      search: ((prev: any) => ({ ...prev, q: val || undefined })) as any,
       replace: true,
     });
   };
@@ -233,9 +233,9 @@ export function BookingsIndex() {
   return (
     <AppShell>
       {/* Header */}
-      <div className="mb-5 flex items-center justify-between">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-[22px] font-bold tracking-tight">Bookings</h1>
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h1 className="text-[20px] sm:text-[22px] font-bold tracking-tight">Bookings</h1>
           <span className="rounded-md border px-2 py-0.5 text-[11px] font-semibold" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
             {filtered.length} of {bookingsList.length}
           </span>
@@ -256,7 +256,7 @@ export function BookingsIndex() {
         </div>
         <Link
           to="/bookings/new"
-          className="flex h-9 items-center gap-2 rounded-md px-4 text-[13px] font-semibold transition hover:brightness-110"
+          className="flex h-9 items-center gap-2 rounded-md px-4 text-[13px] font-semibold transition hover:brightness-110 w-fit"
           style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
         >
           <Plus className="h-4 w-4" strokeWidth={2.5} />
@@ -265,14 +265,14 @@ export function BookingsIndex() {
       </div>
 
       {/* Tabs */}
-      <div className="mb-3 flex items-center gap-1 border-b" style={{ borderColor: "var(--border)" }}>
+      <div className="mb-3 scrollable-tabs gap-1 border-b" style={{ borderColor: "var(--border)" }}>
         {TABS.map((t) => {
           const active = tab === t;
           return (
             <button
               key={t}
               onClick={() => { setTab(t); setPage(1); }}
-              className="relative px-3 py-2.5 text-[12px] font-semibold transition"
+              className="relative px-3 py-2.5 text-[12px] font-semibold transition whitespace-nowrap"
               style={{ color: active ? "var(--foreground)" : "var(--text-2)" }}
             >
               {t}
@@ -288,7 +288,7 @@ export function BookingsIndex() {
           value={query}
           onChange={(e) => { setQuery(e.target.value); setPage(1); }}
           placeholder="Search code, client, venue…"
-          className="h-9 w-64 rounded-md border bg-[var(--surface-2)] px-3 text-[12px] outline-none placeholder:text-[var(--text-3)] focus:border-[var(--accent)]"
+          className="h-9 w-full sm:w-64 rounded-md border bg-[var(--surface-2)] px-3 text-[12px] outline-none placeholder:text-[var(--text-3)] focus:border-[var(--accent)]"
           style={{ borderColor: "var(--border)" }}
         />
         <FilterDropdown
@@ -448,10 +448,10 @@ export function BookingsIndex() {
         </div>
 
         {/* Pagination */}
-        <div className="flex items-center justify-between border-t px-4 py-3 text-[12px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t px-4 py-3 text-[12px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
           <div>Showing <span className="font-semibold text-foreground">{rows.length === 0 ? 0 : (safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)}</span> of {filtered.length}</div>
-          <div className="flex items-center gap-2">
-            <span>Rows per page</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="hidden sm:inline">Rows per page</span>
             <select
               value={pageSize}
               onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
