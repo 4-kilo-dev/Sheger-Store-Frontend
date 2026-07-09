@@ -63,6 +63,8 @@ import {
   type Attachment
 } from "@/features/bookings/services/attachments.api";
 import { Trash2, File, Image, FileArchive, Loader2 } from "lucide-react";
+import { checkoutBookingApi } from "@/features/checkout/services/operations.api";
+import { getBookingSnapshotsApi } from "@/features/bookings/services/bookings.api";
 
 const _Route = createFileRoute("/bookings/$code")({
   head: ({ params }) => ({
@@ -159,6 +161,13 @@ export function BookingDetail() {
     queryFn: () => getBookingDetailApi(code),
   });
 
+  const { data: checkoutSnapshots = [] } = useQuery({
+    queryKey: ["booking-checkout-snapshots", booking?.id],
+    queryFn: () => getBookingSnapshotsApi(booking!.id, { kind: "CHECKOUT" }),
+    enabled: !!booking?.id && (booking.status === "ONSITE" || booking.status === "COMPLETED" || booking.status === "DONE" || booking.status === "PARTIALLY_RETURNED"),
+  });
+  const checkoutSnapshot = checkoutSnapshots?.[0] || null;
+
   // Auto-redirect to friendly SB code if loaded with a UUID
   useEffect(() => {
     if (booking && booking.code && code !== booking.code) {
@@ -172,6 +181,7 @@ export function BookingDetail() {
 
   // Technician role detection
   const isTechnician = authUser?.role?.toLowerCase() === "technician";
+  const userRole = authUser?.role?.toLowerCase() || "";
 
   // Crew Review Modal states
   const [showInternalModal, setShowInternalModal] = useState(false);
@@ -267,19 +277,69 @@ export function BookingDetail() {
   // Report Damaged Gear Modal States & Mutations
   const [showDamageModal, setShowDamageModal] = useState(false);
   const [damageDescription, setDamageDescription] = useState("");
-  const [damageSeverity, setDamageSeverity] = useState("LOW");
+  const [damageType, setDamageType] = useState<"DAMAGE" | "MISSING">("DAMAGE");
+  const [damageSelectedAssetId, setDamageSelectedAssetId] = useState(""); // Format: "pool:UUID" or "item:UUID"
+  const [damageQty, setDamageQty] = useState("1");
 
   const { mutate: submitDamageReport, isPending: submittingDamage } = useMutation({
-    mutationFn: (payload: { bookingId: string; description: string; severity: string }) => 
-      createDamageReportApi(payload),
+    mutationFn: (payload: { description?: string; poolId?: string; itemId?: string; reportType: "DAMAGE" | "MISSING"; quantity?: string }) => 
+      createDamageReportApi(booking.id, payload),
     onSuccess: () => {
       toast.success("Damage report submitted successfully!");
       setShowDamageModal(false);
       setDamageDescription("");
-      setDamageSeverity("LOW");
+      setDamageSelectedAssetId("");
+      setDamageQty("1");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to submit damage report");
+    }
+  });
+
+  // Checkout Modal states
+  const [checkoutTeamLeader, setCheckoutTeamLeader] = useState("");
+  const [checkoutDriver, setCheckoutDriver] = useState("");
+  const [checkoutVehiclePlate, setCheckoutVehiclePlate] = useState("");
+  const [checkoutMealBudget, setCheckoutMealBudget] = useState(0);
+  const [checkoutSignature, setCheckoutSignature] = useState("");
+
+  useEffect(() => {
+    if (booking) {
+      setCheckoutTeamLeader(booking.teamLeader || "");
+      setCheckoutDriver(booking.driver || "");
+      setCheckoutVehiclePlate(booking.vehiclePlate || "");
+      setCheckoutMealBudget(booking.mealBudget || 0);
+    }
+  }, [booking]);
+
+  const { mutate: performCheckout, isPending: isCheckingOut } = useMutation({
+    mutationFn: async () => {
+      // 1. First update the booking details (logistics info)
+      await updateBookingApi(booking.id, {
+        vehiclePlate: checkoutVehiclePlate,
+        mealProvision: String(checkoutMealBudget),
+        // Wait, the driver can also be updated here
+        vehicleText: `Driver: ${checkoutDriver}`,
+      });
+
+      // 2. Perform the checkout with all assets
+      const assets = booking.bomItems.map((item) => ({
+        poolId: item.poolId || undefined,
+        itemId: item.itemId || undefined,
+        quantity: String(item.qty),
+      }));
+      return await checkoutBookingApi(booking.id, { assets });
+    },
+    onSuccess: () => {
+      toast.success("Checkout completed successfully! Booking status updated to ONSITE.");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      setShowActionModal(false);
+      setSelectedAction(null);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Checkout failed");
     }
   });
 
@@ -357,7 +417,6 @@ export function BookingDetail() {
     }
   });
 
-  const userRole = authUser?.role?.toLowerCase() || "";
   const isUserDriver = authUser?.id && booking?.driverUserId && authUser.id === booking.driverUserId;
 
   const actions = useState(() => [] as BookingAction[])[0]; // initialize empty, will compute below
@@ -547,18 +606,26 @@ export function BookingDetail() {
                 )}
 
                 {booking.status === "PREPARATION" && selectedAction.id === "inventory.checkout" && (
-                  <div className="mt-3 grid grid-cols-3 gap-3">
+                  <div className="mt-3 grid grid-cols-2 gap-3">
                     <label className="text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
                       Team Leader
-                      <input defaultValue={booking.teamLeader} className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 text-[12px]" style={{ borderColor: "var(--border)" }} />
+                      <input value={checkoutTeamLeader} onChange={(e) => setCheckoutTeamLeader(e.target.value)} className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 text-[12px]" style={{ borderColor: "var(--border)" }} />
                     </label>
                     <label className="text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
                       Driver
-                      <input defaultValue={booking.driver} className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 text-[12px]" style={{ borderColor: "var(--border)" }} />
+                      <input value={checkoutDriver} onChange={(e) => setCheckoutDriver(e.target.value)} className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 text-[12px]" style={{ borderColor: "var(--border)" }} />
+                    </label>
+                    <label className="text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+                      Vehicle Plate
+                      <input value={checkoutVehiclePlate} onChange={(e) => setCheckoutVehiclePlate(e.target.value)} placeholder="e.g. AA 3-A12345" className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 text-[12px]" style={{ borderColor: "var(--border)" }} />
                     </label>
                     <label className="text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
                       Meal Budget (ETB)
-                      <input type="number" defaultValue={booking.mealBudget} className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px]" style={{ borderColor: "var(--border)" }} />
+                      <input type="number" value={checkoutMealBudget || ""} onChange={(e) => setCheckoutMealBudget(parseFloat(e.target.value) || 0)} className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px]" style={{ borderColor: "var(--border)" }} />
+                    </label>
+                    <label className="text-[11px] font-semibold col-span-2" style={{ color: "var(--text-2)" }}>
+                      Checkout Signature (Type Full Name)
+                      <input value={checkoutSignature} onChange={(e) => setCheckoutSignature(e.target.value)} placeholder="Type name to sign off checkout..." className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2.5 text-[12px]" style={{ borderColor: "var(--border)" }} />
                     </label>
                   </div>
                 )}
@@ -584,7 +651,13 @@ export function BookingDetail() {
           <div className="mt-4 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
             <button
               onClick={() => {
-                if (selectedAction.id === "booking.confirm" && booking.payment === "UNPAID") {
+                if (selectedAction.id === "inventory.checkout") {
+                  if (!checkoutSignature.trim()) {
+                    toast.error("Please sign off checkout by typing your name.");
+                    return;
+                  }
+                  performCheckout();
+                } else if (selectedAction.id === "booking.confirm" && booking.payment === "UNPAID") {
                   if (amountReceived < 1000) {
                     toast.error("Minimum payment amount is ETB 1,000");
                     return;
@@ -598,13 +671,14 @@ export function BookingDetail() {
                 isTransitioning || 
                 isRecordingPayment || 
                 isConfirmingWithPayment || 
+                isCheckingOut ||
                 (selectedAction.requiresReason && cancellationReason.trim().length < 10) ||
                 (selectedAction.id === "booking.confirm" && booking.payment === "UNPAID" && amountReceived < 1000)
               }
               className="rounded-md px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
               style={{ background: selectedAction.variant === "destructive" ? "var(--destructive)" : "var(--accent)", color: selectedAction.variant === "destructive" ? "#fff" : "var(--accent-foreground)" }}
             >
-              {isTransitioning || isRecordingPayment || isConfirmingWithPayment ? "Processing..." : `Confirm: ${selectedAction.label}`}
+              {isTransitioning || isRecordingPayment || isConfirmingWithPayment || isCheckingOut ? "Processing..." : `Confirm: ${selectedAction.label}`}
             </button>
             <button onClick={() => { setShowActionModal(false); setSelectedAction(null); }} className="rounded-md border px-4 py-2 text-[12px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
               Cancel
@@ -710,7 +784,7 @@ export function BookingDetail() {
               </button>
             )}
 
-            {(booking.status === "ONSITE" || booking.status === "COMPLETED") && (
+            {(booking.status === "ONSITE" || booking.status === "COMPLETED") && ["technician", "chief_tech", "oo", "storekeeper", "admin"].includes(userRole) && (
               <button
                 onClick={() => setShowDamageModal(true)}
                 className="rounded px-3 py-1.5 text-[11px] font-bold transition hover:brightness-110"
@@ -720,7 +794,7 @@ export function BookingDetail() {
               </button>
             )}
 
-            {booking.status === "ONSITE" && (
+            {booking.status === "ONSITE" && ["technician", "chief_tech", "oo", "admin"].includes(userRole) && (
               <button
                 onClick={openInternalForm}
                 className="rounded px-3 py-1.5 text-[11px] font-bold transition hover:brightness-110"
@@ -811,24 +885,57 @@ export function BookingDetail() {
             </div>
             <div className="space-y-4">
               <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                Damage Severity
+                Report Type
                 <select
-                  value={damageSeverity}
-                  onChange={(e) => setDamageSeverity(e.target.value)}
+                  value={damageType}
+                  onChange={(e) => setDamageType(e.target.value as any)}
                   className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
                   style={{ borderColor: "var(--border)" }}
                 >
-                  <option value="LOW">Low (Minor cosmetic / easily fixed)</option>
-                  <option value="MEDIUM">Medium (Requires replacement/repair before next setup)</option>
-                  <option value="HIGH">High (Major failure / completely unusable)</option>
+                  <option value="DAMAGE">Damaged / Broken</option>
+                  <option value="MISSING">Missing / Lost</option>
                 </select>
               </label>
+              
               <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                Description of Damage / Missing items
+                Equipment Item (Checked-out)
+                <select
+                  value={damageSelectedAssetId}
+                  onChange={(e) => setDamageSelectedAssetId(e.target.value)}
+                  className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <option value="">-- Choose Checked-out Equipment --</option>
+                  {checkoutSnapshot?.lines?.map((line: any) => {
+                    const key = line.poolId ? `pool:${line.poolId}` : `item:${line.itemId}`;
+                    const name = line.item?.name || line.pool?.name || `Gear (id: ${line.poolId || line.itemId})`;
+                    return (
+                      <option key={key} value={key}>
+                        {name} ({line.quantity} units loaded)
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+
+              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                Quantity Affected
+                <input
+                  type="number"
+                  min="1"
+                  value={damageQty}
+                  onChange={(e) => setDamageQty(e.target.value)}
+                  className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] font-mono"
+                  style={{ borderColor: "var(--border)" }}
+                />
+              </label>
+
+              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                Description of Incident
                 <textarea
                   value={damageDescription}
                   onChange={(e) => setDamageDescription(e.target.value)}
-                  placeholder="Describe visible damage, symptoms, or what items went missing..."
+                  placeholder="Describe visible damage, symptoms, or how items went missing..."
                   className="mt-1 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px] h-24 block resize-none"
                   style={{ borderColor: "var(--border)" }}
                 />
@@ -836,7 +943,20 @@ export function BookingDetail() {
             </div>
             <div className="mt-5 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
               <button
-                onClick={() => submitDamageReport({ bookingId: booking.id, description: damageDescription, severity: damageSeverity })}
+                onClick={() => {
+                  if (!damageSelectedAssetId) {
+                    toast.error("Please select an equipment item");
+                    return;
+                  }
+                  const [assetType, assetId] = damageSelectedAssetId.split(":");
+                  submitDamageReport({
+                    poolId: assetType === "pool" ? assetId : undefined,
+                    itemId: assetType === "item" ? assetId : undefined,
+                    reportType: damageType,
+                    quantity: damageQty,
+                    description: damageDescription,
+                  });
+                }}
                 disabled={submittingDamage || !damageDescription.trim()}
                 className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
                 style={{ background: "var(--destructive)", color: "#fff" }}
@@ -1130,6 +1250,69 @@ function OverviewTab({ b }: { b: B }) {
   const userRole = authUser?.role?.toLowerCase() || "";
   const isCtoOrAdmin = userRole === "admin" || userRole === "chief_tech";
   const isTechnician = userRole === "technician";
+
+  // OO states
+  const [mealProvision, setMealProvision] = useState(b.mealProvision || "");
+  const [driverOvertime, setDriverOvertime] = useState(b.driverOvertime || "");
+  const [isSavingOO, setIsSavingOO] = useState(false);
+
+  // Tech states
+  const [techNotes, setTechNotes] = useState(b.technicianNotes || "");
+  const [contentType, setContentType] = useState(b.contentType || "");
+  const [venueType, setVenueType] = useState(b.venueType || "");
+  const [hangingOrSitting, setHangingOrSitting] = useState(b.hangingOrSitting || "");
+  const [isSavingTechNotes, setIsSavingTechNotes] = useState(false);
+
+  useEffect(() => {
+    setMealProvision(b.mealProvision || "");
+    setDriverOvertime(b.driverOvertime || "");
+    setTechNotes(b.technicianNotes || "");
+    setContentType(b.contentType || "");
+    setVenueType(b.venueType || "");
+    setHangingOrSitting(b.hangingOrSitting || "");
+  }, [b]);
+
+  const { data: checkoutSnapshots = [] } = useQuery({
+    queryKey: ["booking-checkout-snapshots", b.id],
+    queryFn: () => getBookingSnapshotsApi(b.id, { kind: "CHECKOUT" }),
+    enabled: !!b.id && (b.status === "ONSITE" || b.status === "COMPLETED" || b.status === "DONE" || b.status === "PARTIALLY_RETURNED"),
+  });
+  const checkoutSnapshot = checkoutSnapshots?.[0] || null;
+
+  const handleSaveOO = async () => {
+    setIsSavingOO(true);
+    try {
+      await updateBookingApi(b.id, { mealProvision, driverOvertime });
+      toast.success("Logistics welfare and overtime saved successfully!");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to save logistics info");
+    } finally {
+      setIsSavingOO(false);
+    }
+  };
+
+  const handleSaveTechNotes = async () => {
+    if (hangingOrSitting && hangingOrSitting !== "hanging" && hangingOrSitting !== "sitting") {
+      toast.error("Arrangement style must be either hanging or sitting");
+      return;
+    }
+    setIsSavingTechNotes(true);
+    try {
+      await updateBookingApi(b.id, { 
+        technicianNotes: techNotes,
+        contentType,
+        venueType,
+        hangingOrSitting: hangingOrSitting || null,
+      });
+      toast.success("Technician job details and notes saved!");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to save technician notes");
+    } finally {
+      setIsSavingTechNotes(false);
+    }
+  };
 
   const [screenPools, setScreenPools] = useState<any[]>([]);
   const [screenAvailabilities, setScreenAvailabilities] = useState<Record<string, number>>({});
@@ -1839,16 +2022,6 @@ function OverviewTab({ b }: { b: B }) {
               </div>
             </Section>
 
-            {/* Technician Notes TODO */}
-            <Section title="Technician Notes" icon={MessageSquare}>
-              <textarea
-                disabled
-                placeholder="Technician notes functionality coming soon. TODO: persist per-booking technician field notes."
-                className="mt-1 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px] h-24 block resize-none"
-                style={{ borderColor: "var(--border)", color: "var(--text-3)" }}
-              />
-            </Section>
-
             {/* Delete Confirmation Modal */}
             {techDeletingId && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -1878,6 +2051,181 @@ function OverviewTab({ b }: { b: B }) {
                   </div>
                 </div>
               </div>
+            )}
+          </>
+        )}
+
+        {/* ─── Technician Inline Notes Workspace (ACCEPTED or ONSITE status) ─── */}
+        {isTechnician && (b.status === "ACCEPTED" || b.status === "ONSITE") && (
+          <Section title="Technician Setup Details & Field Notes" icon={MessageSquare}>
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                  Content Type
+                  <input
+                    type="text"
+                    value={contentType}
+                    onChange={(e) => setContentType(e.target.value)}
+                    placeholder="e.g. PPT, Live Stream, Loops"
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
+                    style={{ borderColor: "var(--border)" }}
+                  />
+                </label>
+                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                  Venue Type
+                  <input
+                    type="text"
+                    value={venueType}
+                    onChange={(e) => setVenueType(e.target.value)}
+                    placeholder="e.g. Indoor stage, Marquee"
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
+                    style={{ borderColor: "var(--border)" }}
+                  />
+                </label>
+                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                  Arrangement Style
+                  <select
+                    value={hangingOrSitting}
+                    onChange={(e) => setHangingOrSitting(e.target.value as any)}
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <option value="">-- Select --</option>
+                    <option value="sitting">Sitting</option>
+                    <option value="hanging">Hanging</option>
+                  </select>
+                </label>
+              </div>
+              
+              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                Setup Notes & Observations (Technician-specific)
+                <textarea
+                  value={techNotes}
+                  onChange={(e) => setTechNotes(e.target.value)}
+                  placeholder="Provide specific notes about structure alignment, visual quality, pixel issues, or other technician observations..."
+                  className="mt-1 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px] h-24 block resize-none"
+                  style={{ borderColor: "var(--border)" }}
+                />
+              </label>
+              
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSaveTechNotes}
+                  disabled={isSavingTechNotes}
+                  className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
+                  style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+                >
+                  {isSavingTechNotes ? "Saving..." : "Save Technical Notes"}
+                </button>
+              </div>
+            </div>
+          </Section>
+        )}
+
+        {/* ─── ONSITE Stage Dashboard ─── */}
+        {b.status === "ONSITE" && (
+          <>
+            {/* Prominent Amber Status Banner */}
+            <div className="rounded-lg border p-4 flex items-center gap-3" style={{ borderColor: "color-mix(in oklab, var(--color-status-onsite) 30%, transparent)", background: "color-mix(in oklab, var(--color-status-onsite) 8%, var(--surface))" }}>
+              <div className="h-2 w-2 rounded-full animate-ping" style={{ background: "var(--color-status-onsite)" }} />
+              <div className="flex-1">
+                <span className="text-[12px] font-bold uppercase tracking-wider block" style={{ color: "var(--color-status-onsite)" }}>ONSITE (Active Job)</span>
+                <span className="text-[11px] text-[var(--text-2)] leading-normal mt-0.5 block">
+                  Equipment has been checked out from the warehouse and dispatched to the venue. The crew is currently executing onsite setup.
+                </span>
+              </div>
+            </div>
+
+            {/* Read-Only Checked-Out Equipment List */}
+            <Section title="Dispatched Equipment (Checked-out Snapshot)" icon={Package}>
+              {checkoutSnapshot ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[12px]">
+                    <thead>
+                      <tr className="border-b" style={{ borderColor: "var(--border)" }}>
+                        <th className="label-eyebrow pb-2 text-left">Item Name</th>
+                        <th className="label-eyebrow pb-2 text-right w-28">Checked Out Qty</th>
+                        <th className="label-eyebrow pb-2 text-right w-24">Type</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {checkoutSnapshot.lines?.map((line: any) => {
+                        const name = line.item?.name || line.pool?.name || "Equipment Item";
+                        const isPool = !!line.poolId;
+                        return (
+                          <tr key={line.id} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+                            <td className="py-2.5 font-medium">{name}</td>
+                            <td className="py-2.5 text-right font-mono font-bold">{line.quantity}</td>
+                            <td className="py-2.5 text-right text-[10px] uppercase font-bold" style={{ color: "var(--text-3)" }}>
+                              {isPool ? "Bulk" : "Serialized"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="py-4 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
+                  No checkout snapshot found. Gear check-out signature is pending in the warehouse.
+                </div>
+              )}
+            </Section>
+
+            {/* Read-Only Logistics & Welfare Brief */}
+            <Section title="Onsite Logistics & Team Brief" icon={Truck}>
+              <div className="grid grid-cols-2 gap-4 text-[12px]">
+                <div className="rounded border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-3)] mb-1">Driver & Vehicle</div>
+                  <div className="font-semibold">{b.driver || "No driver assigned"}</div>
+                  <div className="text-[11px] font-mono mt-0.5" style={{ color: "var(--text-2)" }}>Plate: {b.vehiclePlate || "—"}</div>
+                </div>
+                <div className="rounded border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-3)] mb-1">Onsite Crew</div>
+                  <div className="font-semibold">Lead: {b.teamLeader || "—"}</div>
+                  <div className="text-[11px] mt-0.5" style={{ color: "var(--text-2)" }}>{b.stageHand}</div>
+                </div>
+              </div>
+            </Section>
+
+            {/* Operations Officer (OO) Welfare and Overtime Forms */}
+            {(userRole === "oo" || userRole === "admin") && (
+              <Section title="Field Logistics & Welfare Controls (OO Actions)" icon={Wrench}>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                      Labor Welfare (Meals provided, budget, supplier, allowances)
+                      <textarea
+                        value={mealProvision}
+                        onChange={(e) => setMealProvision(e.target.value)}
+                        placeholder="Detail welfare provisions: budget, allowance, meal supplier..."
+                        className="mt-1 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px] h-20 block resize-none"
+                        style={{ borderColor: "var(--border)" }}
+                      />
+                    </label>
+                    <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                      Overtime Tracking (Driver night/public holiday hours)
+                      <textarea
+                        value={driverOvertime}
+                        onChange={(e) => setDriverOvertime(e.target.value)}
+                        placeholder="Detail overtime: driver hours, night work justifications..."
+                        className="mt-1 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px] h-20 block resize-none"
+                        style={{ borderColor: "var(--border)" }}
+                      />
+                    </label>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleSaveOO}
+                      disabled={isSavingOO}
+                      className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
+                      style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+                    >
+                      {isSavingOO ? "Saving..." : "Save Field Logs"}
+                    </button>
+                  </div>
+                </div>
+              </Section>
             )}
           </>
         )}
@@ -2154,6 +2502,9 @@ function OverviewTab({ b }: { b: B }) {
             <KV k="Arrangement" v={b.arrangement} mono />
             <KV k="Screen Type" v={b.screenType} mono />
             <KV k="Size (sqm)" v={b.size} mono />
+            {b.contentType && <KV k="Content Type" v={b.contentType} />}
+            {b.venueType && <KV k="Venue Type" v={b.venueType} />}
+            {b.hangingOrSitting && <KV k="Arrangement Style" v={b.hangingOrSitting} />}
           </div>
         </Section>
 
@@ -2169,9 +2520,22 @@ function OverviewTab({ b }: { b: B }) {
         )}
 
         <Section title="Notes & Special Requirements" icon={MessageSquare}>
-          <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-2)" }}>
-            {b.ctoNotes || "No special requirements noted. Coordinate with venue AV for power distribution."}
-          </p>
+          <div className="space-y-3">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-3)] block mb-1">CTO Consultation Notes</span>
+              <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-2)" }}>
+                {b.ctoNotes || "No special requirements noted. Coordinate with venue AV for power distribution."}
+              </p>
+            </div>
+            {b.technicianNotes && (
+              <div className="border-t pt-2.5" style={{ borderColor: "var(--border)" }}>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-3)] block mb-1">Technician Setup & Field Notes</span>
+                <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-2)" }}>
+                  {b.technicianNotes}
+                </p>
+              </div>
+            )}
+          </div>
         </Section>
       </div>
 
