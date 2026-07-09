@@ -61,15 +61,15 @@ export function InventoryPage() {
 
   return (
     <AppShell>
-      <div className="mb-5 flex items-end justify-between">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="label-eyebrow mb-1">Warehouse Control</div>
-          <h1 className="text-[24px] font-bold tracking-tight">Inventory</h1>
+          <h1 className="text-[20px] sm:text-[24px] font-bold tracking-tight">Inventory</h1>
         </div>
         <Button size="sm"><Boxes /> Add Inventory Item</Button>
       </div>
 
-      <div className="mb-5 grid grid-cols-4 gap-3">
+      <div className="mb-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {[
           { label: "Total Units", value: totals.units, icon: Boxes, tone: "var(--foreground)" },
           { label: "Available Now", value: totals.available, icon: PackageCheck, tone: "var(--color-bom-returned)" },
@@ -83,12 +83,12 @@ export function InventoryPage() {
         ))}
       </div>
 
-      <div className="mb-3 flex items-center gap-1 border-b border-border">
-        {INVENTORY_CATEGORIES.map((item) => <button key={item} onClick={() => setCategory(item)} className="relative px-3 py-2.5 text-[12px] font-semibold" style={{ color: category === item ? "var(--foreground)" : "var(--text-2)" }}>{item}{category === item && <span className="absolute inset-x-2 -bottom-px h-0.5 bg-accent" />}</button>)}
+      <div className="mb-3 scrollable-tabs gap-1 border-b border-border">
+        {INVENTORY_CATEGORIES.map((item) => <button key={item} onClick={() => setCategory(item)} className="relative px-3 py-2.5 text-[12px] font-semibold whitespace-nowrap" style={{ color: category === item ? "var(--foreground)" : "var(--text-2)" }}>{item}{category === item && <span className="absolute inset-x-2 -bottom-px h-0.5 bg-accent" />}</button>)}
       </div>
 
-      <div className="mb-3 flex items-center gap-2">
-        <div className="relative"><Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-3" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search item, asset code, model…" className="h-9 w-72 rounded-md border border-border bg-surface-2 pl-8 pr-3 text-[12px] outline-none focus:border-accent" /></div>
+      <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
+        <div className="relative w-full sm:w-auto sm:flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-3" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search item, asset code, model…" className="h-9 w-full rounded-md border border-border bg-surface-2 pl-8 pr-3 text-[12px] outline-none focus:border-accent" /></div>
         <FilterDropdown
           icon={<Filter className="h-3.5 w-3.5" />}
           label="Condition"

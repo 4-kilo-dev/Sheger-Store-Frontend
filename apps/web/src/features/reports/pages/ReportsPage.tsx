@@ -180,7 +180,7 @@ export function ReportsPage() {
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
           <div className="label-eyebrow mb-1">Business Intelligence</div>
-          <h1 className="text-[24px] font-bold tracking-tight">Operations Reports</h1>
+          <h1 className="text-[20px] sm:text-[24px] font-bold tracking-tight">Operations Reports</h1>
           <p className="mt-1 text-[12px]" style={{ color: "var(--text-2)" }}>Consolidated metrics for booking pipelines, collection summaries, inventory health, and crew scores.</p>
         </div>
 
@@ -266,7 +266,7 @@ export function ReportsPage() {
       </div>
 
       {/* Tabs Navigation Header */}
-      <div className="flex border-b mb-6 overflow-x-auto scrollbar-none" style={{ borderColor: "var(--border)" }}>
+      <div className="scrollable-tabs border-b mb-6" style={{ borderColor: "var(--border)" }}>
         {TABS.map((tab) => {
           const active = activeTab === tab.id;
           return (

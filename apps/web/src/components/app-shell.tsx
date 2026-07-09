@@ -2,9 +2,10 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, CalendarRange, Package, Users, BarChart3, Settings,
   Bell, ChevronsLeft, ChevronsRight, Search, ChevronRight,
-  ClipboardCheck, ShieldAlert, LogOut, Sun, Moon,
+  ClipboardCheck, ShieldAlert, LogOut, Sun, Moon, Menu, X,
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
+import { useMobile } from "@/hooks/use-mobile";
 import { useActiveProfile, PROFILES } from "@/hooks/use-active-profile";
 import { logoutApi } from "@/features/auth/services/auth.api";
 import { useNotifications } from "@/features/notifications/context/NotificationsContext";
@@ -95,40 +96,47 @@ function Breadcrumb() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const isMobile = useMobile();
   const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications();
   const [bellOpen, setBellOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [rolesOpen, setRolesOpen] = useState(true);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [activeProfile, setActiveProfile] = useActiveProfile();
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
-    if (typeof window !== "undefined") {
-      return document.documentElement.classList.contains("light") ? "light" : "dark";
-    }
-    return "dark";
-  });
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   useEffect(() => {
     // Sync React state with the actual DOM on mount
     setTheme(document.documentElement.classList.contains("light") ? "light" : "dark");
   }, []);
 
+  // Close mobile drawer on route change
   const location = useRouterState({ select: (s) => s.location });
   const path = location.pathname;
   const searchRole = (location.search as any)?.role;
 
-  return (
-    <div className="flex min-h-screen" style={{ background: "var(--background)" }}>
-      {/* Sidebar */}
-      <aside
-        className="fixed inset-y-0 left-0 z-30 flex flex-col border-r transition-[width] duration-200"
-        style={{ width: collapsed ? 64 : 240, background: "var(--surface)", borderColor: "var(--border)" }}
-      >
-        <SidebarLogo collapsed={collapsed} />
-        <nav className="flex-1 space-y-0.5 overflow-y-auto p-2 scrollbar-thin">
+  useEffect(() => {
+    if (isMobile) setMobileOpen(false);
+  }, [path, searchRole]);
+
+  // Prevent body scroll when mobile drawer is open
+  useEffect(() => {
+    if (isMobile && mobileOpen) {
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = ""; };
+    }
+  }, [isMobile, mobileOpen]);
+
+  // Sidebar content (shared between desktop and mobile)
+  const sidebarContent = (
+    <>
+      <SidebarLogo collapsed={isMobile ? false : collapsed} />
+      <nav className="flex-1 space-y-0.5 overflow-y-auto p-2 scrollbar-thin">
           {/* Dashboard (Home) */}
           {(() => {
             const active = path === "/" && !searchRole;
+            const showLabel = isMobile ? true : !collapsed;
             return (
               <Link
                 to="/"
@@ -142,7 +150,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r" style={{ background: "var(--accent)" }} />
                 )}
                 <LayoutDashboard className="h-4 w-4 shrink-0" style={{ color: active ? "var(--accent)" : "currentColor" }} />
-                {!collapsed && <span>Dashboard</span>}
+                {showLabel && <span>Dashboard</span>}
               </Link>
             );
           })()}
@@ -153,7 +161,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 to="/"
                 onClick={() => {
-                  if (!collapsed) {
+                  if (isMobile || !collapsed) {
                     setRolesOpen(!rolesOpen);
                   }
                 }}
@@ -168,14 +176,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r" style={{ background: "var(--accent)" }} />
                   )}
                   <LayoutDashboard className="h-4 w-4 shrink-0" style={{ color: path === "/" && searchRole ? "var(--accent)" : "currentColor" }} />
-                  {!collapsed && <span>Role Workspaces</span>}
+                  {(isMobile || !collapsed) && <span>Role Workspaces</span>}
                 </div>
-                {!collapsed && (
+                {(isMobile || !collapsed) && (
                   <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${rolesOpen ? "rotate-90" : ""}`} />
                 )}
               </Link>
 
-              {rolesOpen && !collapsed && (
+              {rolesOpen && (isMobile || !collapsed) && (
                 <div className="pl-6 space-y-0.5 border-l ml-5" style={{ borderColor: "var(--border)" }}>
                   {ROLE_SUBLINKS.map(({ to, label }) => {
                     const active = path === "/" && `/?role=${searchRole}` === to;
@@ -218,7 +226,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r" style={{ background: "var(--accent)" }} />
                   )}
                   <LayoutDashboard className="h-4 w-4 shrink-0" style={{ color: active ? "var(--accent)" : "currentColor" }} />
-                  {!collapsed && <span>{myRoleLabel}</span>}
+                  {(isMobile || !collapsed) && <span>{myRoleLabel}</span>}
                 </Link>
               );
             })()
@@ -245,47 +253,47 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r" style={{ background: "var(--accent)" }} />
                 )}
                 <Icon className="h-4 w-4 shrink-0" style={{ color: active ? "var(--accent)" : "currentColor" }} />
-                {!collapsed && <span>{label}</span>}
+                {(isMobile || !collapsed) && <span>{label}</span>}
               </Link>
             );
           })}
-        </nav>
+      </nav>
 
         {/* Bottom section */}
-        <div className="border-t p-2 relative" style={{ borderColor: "var(--border)" }}>
-          {/* Profile Switcher Popover */}
-          {showSwitcher && !collapsed && (
+      <div className="border-t p-2 relative" style={{ borderColor: "var(--border)" }}>
+        {/* Profile Switcher Popover */}
+        {showSwitcher && (isMobile || !collapsed) && (
             <>
-              {/* Click-outside overlay */}
-              <div 
-                className="fixed inset-0 z-40"
-                onClick={() => setShowSwitcher(false)}
-              />
-              <div 
-                className="profile-popover absolute bottom-[98px] left-2 right-2 z-50 rounded-xl border p-2 shadow-2xl flex flex-col gap-1.5"
-                style={{ 
-                  background: theme === "dark" ? "#1b1b1f" : "#ffffff", 
-                  borderColor: theme === "dark" ? "#2a2a30" : "#e4e4e7",
-                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.3)",
-                }}
+            {/* Click-outside overlay */}
+            <div 
+              className="fixed inset-0 z-40"
+              onClick={() => setShowSwitcher(false)}
+            />
+            <div 
+              className="profile-popover absolute bottom-[98px] left-2 right-2 z-50 rounded-xl border p-2 shadow-2xl flex flex-col gap-1.5"
+              style={{ 
+                background: theme === "dark" ? "#1b1b1f" : "#ffffff", 
+                borderColor: theme === "dark" ? "#2a2a30" : "#e4e4e7",
+                boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.3)",
+              }}
               >
-                <div className="px-2.5 py-1.5 flex items-center justify-between border-b pb-2" style={{ borderColor: "var(--border)" }}>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-3)" }}>
-                    Control Workspaces
-                  </span>
-                  <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-[var(--surface-2)] font-data" style={{ color: "var(--text-2)" }}>
-                    {PROFILES.length} Roles
-                  </span>
-                </div>
-                <div className="space-y-1 max-h-[280px] overflow-y-auto scrollbar-thin pr-0.5">
+              <div className="px-2.5 py-1.5 flex items-center justify-between border-b pb-2" style={{ borderColor: "var(--border)" }}>
+                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-3)" }}>
+                  Control Workspaces
+                </span>
+                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-[var(--surface-2)] font-data" style={{ color: "var(--text-2)" }}>
+                  {PROFILES.length} Roles
+                </span>
+              </div>
+              <div className="space-y-1 max-h-[280px] overflow-y-auto scrollbar-thin pr-0.5">
                   {PROFILES.map((p) => {
                     const isActive = activeProfile.role === p.role;
                     return (
-                      <button
-                        key={p.role}
-                        onClick={() => {
-                          setActiveProfile(p);
-                          setShowSwitcher(false);
+                    <button
+                      key={p.role}
+                      onClick={() => {
+                        setActiveProfile(p);
+                        setShowSwitcher(false);
                         }}
                         className={`switcher-item ${isActive ? "active" : ""}`}
                         style={{
@@ -318,56 +326,57 @@ export function AppShell({ children }: { children: ReactNode }) {
                       </button>
                     );
                   })}
-                </div>
-                <div className="mt-1 border-t pt-1.5" style={{ borderColor: "var(--border)" }}>
-                  <button
-                    onClick={async () => {
-                      await logoutApi();
-                      navigate({ to: "/login" });
-                    }}
-                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] font-medium transition hover:bg-destructive/10 hover:text-destructive"
-                    style={{ color: "var(--text-3)" }}
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                    Sign out
-                  </button>
-                </div>
               </div>
-            </>
+              <div className="mt-1 border-t pt-1.5" style={{ borderColor: "var(--border)" }}>
+                <button
+                  onClick={async () => {
+                    await logoutApi();
+                    navigate({ to: "/login" });
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] font-medium transition hover:bg-destructive/10 hover:text-destructive"
+                  style={{ color: "var(--text-3)" }}
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </>
           )}
 
-          {!collapsed ? (
-            <button 
-              onClick={() => setShowSwitcher(!showSwitcher)}
-              className="mb-2 flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-all duration-150 border"
-              style={{ 
-                borderColor: showSwitcher ? "var(--accent)" : "var(--border)", 
-                background: showSwitcher ? "var(--surface-2)" : "transparent",
-              }}
-            >
-              <div 
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-[10px] font-bold shrink-0" 
-                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
-              >
-                {activeProfile.initials}
-              </div>
-              <div className="flex-1 leading-tight min-w-0">
-                <div className="text-[11px] font-semibold truncate text-foreground">{activeProfile.name}</div>
-                <div className="text-[9px] font-medium truncate" style={{ color: "var(--text-3)" }}>{activeProfile.role}</div>
-              </div>
-              <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${showSwitcher ? "rotate-90" : ""}`} style={{ color: "var(--text-3)" }} />
-            </button>
-          ) : (
-            <button 
-              onClick={() => setCollapsed(false)}
-              className="mb-2 flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-bold mx-auto"
-              style={{ background: activeProfile.color || "var(--accent)", color: "var(--accent-foreground)" }}
-              title={`Active role: ${activeProfile.role}`}
+        {(isMobile || !collapsed) ? (
+          <button 
+            onClick={() => setShowSwitcher(!showSwitcher)}
+            className="mb-2 flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-all duration-150 border"
+            style={{ 
+              borderColor: showSwitcher ? "var(--accent)" : "var(--border)", 
+              background: showSwitcher ? "var(--surface-2)" : "transparent",
+            }}
+          >
+            <div 
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-[10px] font-bold shrink-0" 
+              style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
             >
               {activeProfile.initials}
-            </button>
-          )}
-          
+            </div>
+            <div className="flex-1 leading-tight min-w-0">
+              <div className="text-[11px] font-semibold truncate text-foreground">{activeProfile.name}</div>
+              <div className="text-[9px] font-medium truncate" style={{ color: "var(--text-3)" }}>{activeProfile.role}</div>
+            </div>
+            <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${showSwitcher ? "rotate-90" : ""}`} style={{ color: "var(--text-3)" }} />
+          </button>
+        ) : (
+          <button 
+            onClick={() => setCollapsed(false)}
+            className="mb-2 flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-bold mx-auto"
+            style={{ background: activeProfile.color || "var(--accent)", color: "var(--accent-foreground)" }}
+            title={`Active role: ${activeProfile.role}`}
+          >
+            {activeProfile.initials}
+          </button>
+        )}
+        
+        {!isMobile && (
           <button
             onClick={() => setCollapsed((v) => !v)}
             className="flex w-full items-center justify-center gap-2 rounded-md py-2 text-[12px] font-medium transition hover:bg-[var(--surface-2)]"
@@ -375,17 +384,60 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             {collapsed ? <ChevronsRight className="h-4 w-4" /> : <><ChevronsLeft className="h-4 w-4" /><span>Collapse</span></>}
           </button>
-        </div>
-      </aside>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="flex min-h-screen" style={{ background: "var(--background)" }}>
+      {/* Mobile Sidebar Drawer */}
+      {isMobile && mobileOpen && (
+        <>
+          <div 
+            className="mobile-drawer-backdrop fixed inset-0 z-40"
+            onClick={() => setMobileOpen(false)}
+          />
+          <aside
+            className="mobile-drawer fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col border-r"
+            style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+          >
+            {sidebarContent}
+          </aside>
+        </>
+      )}
+
+      {/* Desktop Sidebar */}
+      {!isMobile && (
+        <aside
+          className="fixed inset-y-0 left-0 z-30 flex flex-col border-r transition-[width] duration-200"
+          style={{ width: collapsed ? 64 : 240, background: "var(--surface)", borderColor: "var(--border)" }}
+        >
+          {sidebarContent}
+        </aside>
+      )}
 
       {/* Main */}
-      <div className="flex flex-1 flex-col" style={{ marginLeft: collapsed ? 64 : 240 }}>
+      {/* Main */}
+      <div className="flex flex-1 flex-col" style={{ marginLeft: isMobile ? 0 : (collapsed ? 64 : 240) }}>
         <header
-          className="sticky top-0 z-20 flex h-14 items-center justify-between border-b px-6"
+          className="sticky top-0 z-20 flex h-14 items-center justify-between border-b px-3 md:px-6"
           style={{ background: "var(--surface)", borderColor: "var(--border)" }}
         >
-          <Breadcrumb />
           <div className="flex items-center gap-2">
+            {isMobile && (
+              <button
+                onClick={() => setMobileOpen(true)}
+                className="flex h-8 w-8 items-center justify-center rounded-md border transition hover:bg-[var(--surface-2)]"
+                style={{ borderColor: "var(--border)" }}
+                aria-label="Open menu"
+              >
+                <Menu className="h-4 w-4" style={{ color: "var(--text-2)" }} />
+              </button>
+            )}
+            <Breadcrumb />
+          </div>
+          <div className="flex items-center gap-1.5 md:gap-2">
             <div className="relative hidden md:block">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: "var(--text-3)" }} />
               <input
@@ -403,6 +455,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               />
             </div>
             <button 
+              suppressHydrationWarning
               onClick={() => {
                 const nextTheme = theme === "dark" ? "light" : "dark";
                 setTheme(nextTheme);
@@ -420,7 +473,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="flex h-8 w-8 items-center justify-center rounded-lg border transition-colors hover:bg-[var(--surface-2)]" 
               style={{ borderColor: "var(--border)" }}
             >
-              {theme === "dark" ? <Sun className="h-4 w-4" style={{ color: "var(--accent)" }} /> : <Moon className="h-4 w-4" style={{ color: "var(--accent)" }} />}
+              <span suppressHydrationWarning className="flex items-center justify-center">
+                {theme === "dark" ? <Sun className="h-4 w-4" style={{ color: "var(--accent)" }} /> : <Moon className="h-4 w-4" style={{ color: "var(--accent)" }} />}
+              </span>
             </button>
             {/* Notification Bell Dropdown */}
             <div className="relative">
@@ -446,7 +501,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   
                   {/* Dropdown panel */}
                   <div
-                    className="absolute right-0 mt-2 w-80 rounded-lg border shadow-xl z-50 p-1 flex flex-col max-h-[420px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+                    className={`absolute mt-2 rounded-lg border shadow-xl z-50 p-1 flex flex-col max-h-[420px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 ${isMobile ? 'right-0 left-0 mx-auto w-[calc(100vw-2rem)] -translate-x-1/4' : 'right-0 w-80'}`}
                     style={{ background: "var(--surface)", borderColor: "var(--border)" }}
                   >
                     <div className="flex items-center justify-between border-b px-3.5 py-2.5" style={{ borderColor: "var(--border)" }}>
@@ -540,7 +595,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 p-3 md:p-6">{children}</main>
       </div>
     </div>
   );

@@ -97,10 +97,10 @@ export function StaffPage() {
   return (
     <AppShell>
       {/* Header */}
-      <div className="mb-6 flex items-end justify-between gap-4">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div>
           <div className="label-eyebrow mb-1">People Operations</div>
-          <h1 className="text-[24px] font-bold tracking-tight">Staff Management</h1>
+          <h1 className="text-[20px] sm:text-[24px] font-bold tracking-tight">Staff Management</h1>
           <p className="mt-1 text-[12px] text-text-2">Roles, duty status, workload, and crew contact directory.</p>
         </div>
         <AddStaffModal />
@@ -126,14 +126,14 @@ export function StaffPage() {
       </div>
 
       {/* Role filter tabs */}
-      <div className="mb-3 flex items-center gap-1 border-b" style={{ borderColor: "var(--border)" }}>
+      <div className="mb-3 scrollable-tabs gap-1 border-b" style={{ borderColor: "var(--border)" }}>
         {STAFF_ROLES.map((role) => {
           const active = roleFilter === role;
           return (
             <button
               key={role}
               onClick={() => setRoleFilter(role)}
-              className="relative px-3 py-2.5 text-[12px] font-semibold transition"
+              className="relative px-3 py-2.5 text-[12px] font-semibold transition whitespace-nowrap"
               style={{ color: active ? "var(--foreground)" : "var(--text-2)" }}
             >
               {role}
@@ -144,8 +144,8 @@ export function StaffPage() {
       </div>
 
       {/* Search & Filters */}
-      <div className="mb-3 flex items-center gap-3">
-        <div className="relative w-80">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-2.5 h-4 w-4" style={{ color: "var(--text-3)" }} />
           <input
             value={query}

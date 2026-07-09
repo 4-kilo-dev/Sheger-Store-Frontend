@@ -74,7 +74,7 @@ export function NewBooking() {
       </div>
 
       {/* Step pills */}
-      <div className="mb-6 grid grid-cols-7 gap-2">
+      <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-2">
         {STEPS.map((s, i) => {
           const done = i < step;
           const active = i === step;
@@ -110,8 +110,8 @@ export function NewBooking() {
         })}
       </div>
 
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-8 rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-8 rounded-lg border p-4 sm:p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
           {/* Step 0: Client */}
           {step === 0 && (
             <Group title="Client Information" icon={Building2}>
@@ -242,7 +242,7 @@ export function NewBooking() {
           </div>
         </div>
 
-        <aside className="col-span-4">
+        <aside className="lg:col-span-4">
           <div className="sticky top-20 rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
             <div className="label-eyebrow mb-3">Booking Preview</div>
             <div className="rounded-md border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
