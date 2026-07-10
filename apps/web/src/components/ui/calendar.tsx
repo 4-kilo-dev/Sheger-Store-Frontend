@@ -100,7 +100,9 @@ function Calendar({
         range_middle: cn("rounded-none", defaultClassNames.range_middle),
         range_end: cn("bg-accent rounded-r-md", defaultClassNames.range_end),
         today: cn(
-          "bg-accent text-accent-foreground rounded-md data-[selected=true]:rounded-none",
+          // Show a subtle ring for "today" only when it is NOT the selected date.
+          // When today IS selected, the DayButton's data-[selected-single=true] styles win.
+          "rounded-md ring-1 ring-primary/40 data-[selected=true]:ring-0",
           defaultClassNames.today,
         ),
         outside: cn(
