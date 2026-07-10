@@ -246,3 +246,23 @@
     display: none;
   }
 }
+
+@media print {
+  body {
+    background: white !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+  header, nav, aside, .no-print, button, .no-print * {
+    display: none !important;
+  }
+  main, .print-container {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #000000 !important;
+  }
+}

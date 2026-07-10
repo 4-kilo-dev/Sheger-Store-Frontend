@@ -20,11 +20,13 @@ export const authStorage = {
   setToken: (token: string) => {
     if (isBrowser) {
       localStorage.setItem("vortex_auth_token", token);
+      window.dispatchEvent(new Event("vortex-auth-change"));
     }
   },
   clearToken: () => {
     if (isBrowser) {
       localStorage.removeItem("vortex_auth_token");
+      window.dispatchEvent(new Event("vortex-auth-change"));
     }
   },
   getUser: () => {
@@ -39,11 +41,13 @@ export const authStorage = {
   setUser: (user: any) => {
     if (isBrowser) {
       localStorage.setItem("vortex_auth_user", JSON.stringify(user));
+      window.dispatchEvent(new Event("vortex-auth-change"));
     }
   },
   clearUser: () => {
     if (isBrowser) {
       localStorage.removeItem("vortex_auth_user");
+      window.dispatchEvent(new Event("vortex-auth-change"));
     }
   },
 };

@@ -2,7 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, CalendarRange, Package, Users, BarChart3, Settings,
   Bell, ChevronsLeft, ChevronsRight, Search, ChevronRight,
-  ClipboardCheck, ShieldAlert, LogOut, Sun, Moon, Menu, X,
+  ClipboardCheck, ShieldAlert, LogOut, Sun, Moon, Menu, X, Trello,
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import { useMobile } from "@/hooks/use-mobile";
@@ -12,6 +12,7 @@ import { useNotifications } from "@/features/notifications/context/Notifications
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/operations", label: "Operations Board", icon: Trello },
   { to: "/bookings", label: "Bookings", icon: CalendarRange },
   { to: "/inventory", label: "Inventory", icon: Package },
   { to: "/checkout", label: "Check-in / out", icon: ClipboardCheck },
@@ -42,11 +43,11 @@ const mapProfileToRoleKey = (profileRole: string): string => {
 };
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
-  Admin: ["/", "/bookings", "/inventory", "/checkout", "/damage-report", "/staff", "/reports", "/settings"],
+  Admin: ["/", "/operations", "/bookings", "/inventory", "/checkout", "/damage-report", "/staff", "/reports", "/settings"],
   CCR: ["/", "/bookings", "/reports", "/settings"],
   CTO: ["/", "/bookings", "/staff", "/settings"],
   TO: ["/", "/bookings", "/checkout"],
-  OO: ["/", "/bookings", "/checkout", "/staff", "/reports"],
+  OO: ["/", "/operations", "/bookings", "/checkout", "/staff", "/reports"],
   SK: ["/", "/checkout", "/damage-report", "/inventory"],
 };
 

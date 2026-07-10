@@ -29,14 +29,21 @@ export function useAuthUser(): AuthUser | null {
 
   // Listen for login/logout changes
   useEffect(() => {
+    const syncUser = () => {
+      const stored = authStorage.getUser();
+      setUser(stored);
+    };
     const handleStorage = (e: StorageEvent) => {
       if (e.key === "vortex_auth_user") {
-        const stored = authStorage.getUser();
-        setUser(stored);
+        syncUser();
       }
     };
     window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    window.addEventListener("vortex-auth-change", syncUser);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("vortex-auth-change", syncUser);
+    };
   }, []);
 
   return user;

@@ -13,6 +13,7 @@ import { Route as StaffRouteImport } from './routes/staff'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as OtpRouteImport } from './routes/otp'
+import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InventoryRouteImport } from './routes/inventory'
@@ -45,6 +46,11 @@ const ReportsRoute = ReportsRouteImport.update({
 const OtpRoute = OtpRouteImport.update({
   id: '/otp',
   path: '/otp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OperationsRoute = OperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NotificationsRoute = NotificationsRouteImport.update({
@@ -122,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof InventoryRouteWithChildren
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
+  '/operations': typeof OperationsRoute
   '/otp': typeof OtpRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
@@ -139,6 +146,7 @@ export interface FileRoutesByTo {
   '/damage-report': typeof DamageReportRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
+  '/operations': typeof OperationsRoute
   '/otp': typeof OtpRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
@@ -159,6 +167,7 @@ export interface FileRoutesById {
   '/inventory': typeof InventoryRouteWithChildren
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
+  '/operations': typeof OperationsRoute
   '/otp': typeof OtpRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/login'
     | '/notifications'
+    | '/operations'
     | '/otp'
     | '/reports'
     | '/settings'
@@ -197,6 +207,7 @@ export interface FileRouteTypes {
     | '/damage-report'
     | '/login'
     | '/notifications'
+    | '/operations'
     | '/otp'
     | '/reports'
     | '/settings'
@@ -216,6 +227,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/login'
     | '/notifications'
+    | '/operations'
     | '/otp'
     | '/reports'
     | '/settings'
@@ -236,6 +248,7 @@ export interface RootRouteChildren {
   InventoryRoute: typeof InventoryRouteWithChildren
   LoginRoute: typeof LoginRoute
   NotificationsRoute: typeof NotificationsRoute
+  OperationsRoute: typeof OperationsRoute
   OtpRoute: typeof OtpRoute
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRoute
@@ -270,6 +283,13 @@ declare module '@tanstack/react-router' {
       path: '/otp'
       fullPath: '/otp'
       preLoaderRoute: typeof OtpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/operations': {
+      id: '/operations'
+      path: '/operations'
+      fullPath: '/operations'
+      preLoaderRoute: typeof OperationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/notifications': {
@@ -405,6 +425,7 @@ const rootRouteChildren: RootRouteChildren = {
   InventoryRoute: InventoryRouteWithChildren,
   LoginRoute: LoginRoute,
   NotificationsRoute: NotificationsRoute,
+  OperationsRoute: OperationsRoute,
   OtpRoute: OtpRoute,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRoute,

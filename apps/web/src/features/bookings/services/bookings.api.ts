@@ -305,3 +305,10 @@ export async function getBookingSnapshotsApi(bookingId: string, params?: { kind?
   return client.get<any[]>(`/api/bookings/${bookingId}/bom/snapshots`, params);
 }
 
+export async function deleteAssignmentApi(assignmentId: string): Promise<any> {
+  return client.delete(`/api/assignments/${assignmentId}`);
+}
+
+export async function checkoutReverseApi(bookingId: string, reason: string): Promise<any> {
+  return client.post(`/api/bookings/${bookingId}/checkout-reverse`, { reason });
+}

@@ -7,6 +7,7 @@ import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { useQuery } from "@tanstack/react-query";
 import { getBookingsApi, STATUS_ORDER, STATUS_LABELS, type Booking, type BookingStatus, type PaymentStatus, type ScreenType } from "@/features/bookings/services/bookings.api";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 const _Route = createFileRoute("/bookings/")({
   head: () => ({
@@ -26,6 +27,7 @@ const ALL_SCREEN_TYPES_SET = new Set(ALL_SCREEN_TYPES);
 const ALL_PAYMENTS: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
 
 export function BookingsIndex() {
+  const { formatDate } = useDateFormatter();
   const navigate = useNavigate();
   const authUser = useAuthUser();
   const role = authUser?.role?.toLowerCase() || "";
@@ -188,8 +190,8 @@ export function BookingsIndex() {
                           {b.code}
                         </Link>
                       </td>
-                      <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.assemblyDate}</td>
-                      <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.eventDate}</td>
+                      <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{formatDate(b.assemblyDate)}</td>
+                      <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{formatDate(b.eventDate)}</td>
                       <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>{b.venue}</td>
                       <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
                         <StatusBadge status={b.status} />
@@ -412,8 +414,8 @@ export function BookingsIndex() {
                     <td className="border-b px-3 py-3 font-medium" style={{ borderColor: "var(--border)" }}>
                       <Link to="/bookings/$code" params={{ code: b.code }}>{b.client}</Link>
                     </td>
-                    <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.assemblyDate}</td>
-                    <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.eventDate}</td>
+                    <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{formatDate(b.assemblyDate)}</td>
+                    <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{formatDate(b.eventDate)}</td>
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}>{b.venue}</td>
                     <td className="border-b px-3 py-3 font-mono text-[11px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.screenType}</td>
                     <td className="border-b px-3 py-3 font-mono font-semibold" style={{ borderColor: "var(--border)" }}>{b.size}</td>

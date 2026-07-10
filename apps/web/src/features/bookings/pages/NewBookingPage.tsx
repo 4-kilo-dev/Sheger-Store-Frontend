@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { createBookingApi } from "@/features/bookings/services/bookings.api";
+import { DatePicker } from "@/components/ui/date-picker";
 
 const _Route = createFileRoute("/bookings/new")({
   head: () => ({
@@ -147,13 +148,13 @@ export function NewBooking() {
               </Field>
               <div className="grid grid-cols-3 gap-4">
                 <Field label="Assembly Date" icon={Calendar}>
-                  <input type="date" value={form.assemblyDate} onChange={(e) => set("assemblyDate", e.target.value)} className={inputCls} />
+                  <DatePicker value={form.assemblyDate} onChange={(val) => set("assemblyDate", val)} />
                 </Field>
                 <Field label="Event Date" icon={Calendar}>
-                  <input type="date" value={form.eventDate} onChange={(e) => set("eventDate", e.target.value)} className={inputCls} />
+                  <DatePicker value={form.eventDate} onChange={(val) => set("eventDate", val)} />
                 </Field>
                 <Field label="Dismantle Date" icon={Calendar}>
-                  <input type="date" value={form.dismantleDate} onChange={(e) => set("dismantleDate", e.target.value)} className={inputCls} />
+                  <DatePicker value={form.dismantleDate} onChange={(val) => set("dismantleDate", val)} />
                 </Field>
               </div>
             </Group>
