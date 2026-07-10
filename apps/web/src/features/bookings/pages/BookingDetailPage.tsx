@@ -14,6 +14,9 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { StatusStepper } from "@/components/status-stepper";
+import { DatePicker } from "@/components/ui/date-picker";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
+
 import { 
   getBookingDetailApi, 
   transitionBookingStatusApi, 
@@ -34,7 +37,9 @@ import {
   deleteBomLineApi,
   createHandoffSnapshotApi,
   createDamageReportApi,
-  submitEvaluationApi
+  submitEvaluationApi,
+  deleteAssignmentApi,
+  checkoutReverseApi
 } from "@/features/bookings/services/bookings.api";
 import { getInventoryCategoriesApi, getInventoryPoolsApi, getPoolAvailabilityApi } from "@/features/inventory/services/inventory.api";
 import { getStaffApi } from "@/features/users/services/staff.api";
@@ -62,7 +67,7 @@ import {
   deleteAttachmentApi,
   type Attachment
 } from "@/features/bookings/services/attachments.api";
-import { Trash2, File, Image, FileArchive, Loader2 } from "lucide-react";
+import { Trash2, File, Image, FileArchive, Loader2, RotateCcw } from "lucide-react";
 import { checkoutBookingApi } from "@/features/checkout/services/operations.api";
 import { getBookingSnapshotsApi } from "@/features/bookings/services/bookings.api";
 
@@ -142,6 +147,7 @@ const BOOKING_ACTIONS: Record<BookingStatus, BookingAction[]> = {
 };
 
 export function BookingDetail() {
+  const { formatDate, formatDateTime } = useDateFormatter();
   const  navigate = useNavigate();
   const { code } = _Route.useParams();
   const queryClient = useQueryClient();
@@ -324,11 +330,18 @@ export function BookingDetail() {
       });
 
       // 2. Perform the checkout with all assets
-      const assets = booking.bomItems.map((item) => ({
-        poolId: item.poolId || undefined,
-        itemId: item.itemId || undefined,
-        quantity: String(item.qty),
-      }));
+      const assets = booking.bomItems.map((item) => {
+        if (item.itemId) {
+          return {
+            itemId: item.itemId,
+          };
+        } else {
+          return {
+            poolId: item.poolId,
+            quantity: String(item.qty),
+          };
+        }
+      });
       return await checkoutBookingApi(booking.id, { assets });
     },
     onSuccess: () => {
@@ -345,13 +358,11 @@ export function BookingDetail() {
 
   const [staff, setStaff] = useState<any[]>([]);
 
-  // TODO(v2): Lazy fix — we skip the staff fetch entirely for technicians because
-  // they lack `user.manage` permission and get a 403. The real question is whether
-  // technicians should see a limited staff list (e.g. their crew) or none at all.
-  // This should be resolved with a proper backend permission scope (e.g. `user.view_team`)
-  // instead of hardcoding role checks on the frontend.
+  // Skip staff fetch only for technicians — they lack user.manage / assignment.assign_crew
+  // and would receive a 403. OO and all other roles with assignment.assign_crew can load.
   useEffect(() => {
-    if (authUser?.role?.toLowerCase() === "technician") return;
+    const role = authUser?.role?.toLowerCase();
+    if (role === "technician") return;
     getStaffApi()
       .then(setStaff)
       .catch((e) => console.error("Failed to load staff in details page", e));
@@ -699,7 +710,7 @@ export function BookingDetail() {
             <div className="mt-2 flex items-center gap-4 text-[13px]" style={{ color: "var(--text-2)" }}>
               <span className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5" />{booking.client}</span>
               <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{booking.venue}</span>
-              <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{booking.eventDate}</span>
+              <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{formatDate(booking.eventDate)}</span>
             </div>
             {booking.ctoNotes && (
               <div className="mt-2 flex items-start gap-1.5 rounded-md border p-2 text-[11px]" style={{ borderColor: "var(--border)", background: "var(--surface-2)", color: "var(--text-2)" }}>
@@ -999,13 +1010,12 @@ export function BookingDetail() {
                 </label>
                 <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
                   Event Date
-                  <input 
-                    type="date" 
-                    value={eventDate} 
-                    onChange={(e) => setEventDate(e.target.value)} 
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
-                    style={{ borderColor: "var(--border)" }} 
-                  />
+                  <div className="mt-1">
+                    <DatePicker 
+                      value={eventDate} 
+                      onChange={setEventDate} 
+                    />
+                  </div>
                 </label>
               </div>
 
@@ -1244,17 +1254,35 @@ function KV({ k, v, mono }: { k: string; v: React.ReactNode; mono?: boolean }) {
 }
 
 function OverviewTab({ b }: { b: B }) {
+  const { formatDate } = useDateFormatter();
   const { code } = _Route.useParams();
   const queryClient = useQueryClient();
   const authUser = useAuthUser();
   const userRole = authUser?.role?.toLowerCase() || "";
   const isCtoOrAdmin = userRole === "admin" || userRole === "chief_tech";
   const isTechnician = userRole === "technician";
+  const isOO = userRole === "oo" || userRole === "admin";
 
   // OO states
   const [mealProvision, setMealProvision] = useState(b.mealProvision || "");
   const [driverOvertime, setDriverOvertime] = useState(b.driverOvertime || "");
   const [isSavingOO, setIsSavingOO] = useState(false);
+
+  // OO — vehicle & driver
+  const [vehicleText, setVehicleText] = useState(b.driver || "");
+  const [vehiclePlate, setVehiclePlate] = useState((b as any).vehiclePlate || "");
+  const [driverUserId, setDriverUserId] = useState((b as any).driverUserId || "");
+  const [isSavingLogistics, setIsSavingLogistics] = useState(false);
+
+  // OO — CREW assignment (PREPARATION stage)
+  const [ooCrewIds, setOoCrewIds] = useState<string[]>([""]);
+  const [isAssigningCrew, setIsAssigningCrew] = useState(false);
+  const [isDeletingCrewId, setIsDeletingCrewId] = useState<string | null>(null);
+
+  // OO — Reverse Checkout
+  const [showReverseModal, setShowReverseModal] = useState(false);
+  const [reverseReason, setReverseReason] = useState("");
+  const [isReversingCheckout, setIsReversingCheckout] = useState(false);
 
   // Tech states
   const [techNotes, setTechNotes] = useState(b.technicianNotes || "");
@@ -1266,6 +1294,9 @@ function OverviewTab({ b }: { b: B }) {
   useEffect(() => {
     setMealProvision(b.mealProvision || "");
     setDriverOvertime(b.driverOvertime || "");
+    setVehicleText(b.driver || "");
+    setVehiclePlate((b as any).vehiclePlate || "");
+    setDriverUserId((b as any).driverUserId || "");
     setTechNotes(b.technicianNotes || "");
     setContentType(b.contentType || "");
     setVenueType(b.venueType || "");
@@ -1289,6 +1320,77 @@ function OverviewTab({ b }: { b: B }) {
       toast.error(e.message || "Failed to save logistics info");
     } finally {
       setIsSavingOO(false);
+    }
+  };
+
+  const handleSaveLogistics = async () => {
+    setIsSavingLogistics(true);
+    try {
+      await updateBookingApi(b.id, {
+        vehicleText,
+        vehiclePlate,
+        driverUserId: driverUserId || undefined,
+      });
+      toast.success("Vehicle & driver details saved!");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to save vehicle details");
+    } finally {
+      setIsSavingLogistics(false);
+    }
+  };
+
+  const handleAssignCrew = async () => {
+    const valid = ooCrewIds.filter(id => id);
+    if (valid.length === 0) {
+      toast.error("Please select at least one crew member.");
+      return;
+    }
+    setIsAssigningCrew(true);
+    try {
+      await Promise.all(valid.map(userId =>
+        createAssignmentApi(b.id, { userId, roleContext: "CREW", isTeamLead: false })
+      ));
+      setOoCrewIds([""]);
+      toast.success(`${valid.length} crew member(s) assigned!`);
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to assign crew");
+    } finally {
+      setIsAssigningCrew(false);
+    }
+  };
+
+  const handleRemoveCrew = async (assignmentId: string) => {
+    setIsDeletingCrewId(assignmentId);
+    try {
+      await deleteAssignmentApi(assignmentId);
+      toast.success("Crew member removed.");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to remove crew member");
+    } finally {
+      setIsDeletingCrewId(null);
+    }
+  };
+
+  const handleReverseCheckout = async () => {
+    if (reverseReason.trim().length < 10) {
+      toast.error("Please provide a reason of at least 10 characters.");
+      return;
+    }
+    setIsReversingCheckout(true);
+    try {
+      await checkoutReverseApi(b.id, reverseReason.trim());
+      toast.success("Checkout reversed. Booking rolled back to PREPARATION.");
+      setShowReverseModal(false);
+      setReverseReason("");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to reverse checkout");
+    } finally {
+      setIsReversingCheckout(false);
     }
   };
 
@@ -1425,9 +1527,8 @@ function OverviewTab({ b }: { b: B }) {
     return () => { active = false; };
   }, [b.assemblyDate, b.eventDate, screenPools]);
 
-  // TODO(v2): Lazy fix — same as above in BookingDetail. Skipping the staff fetch
-  // for technicians because they get a 403. The proper fix is a backend permission
-  // scope that returns only the crew relevant to the technician, not a blanket skip.
+  // Skip staff fetch only for technicians — they lack the required permission.
+  // OO holds assignment.assign_crew which the backend now accepts on GET /api/users.
   useEffect(() => {
     if (isTechnician) return;
     getStaffApi()
@@ -1772,15 +1873,15 @@ function OverviewTab({ b }: { b: B }) {
                   <div className="grid grid-cols-3 gap-3 text-[12px]">
                     <div>
                       <span style={{ color: "var(--text-3)" }}>Assembly</span>
-                      <div className="font-semibold font-mono mt-0.5">{b.assemblyDate}</div>
+                      <div className="font-semibold font-mono mt-0.5">{formatDate(b.assemblyDate)}</div>
                     </div>
                     <div>
                       <span style={{ color: "var(--text-3)" }}>Event</span>
-                      <div className="font-semibold font-mono mt-0.5">{b.eventDate}</div>
+                      <div className="font-semibold font-mono mt-0.5">{formatDate(b.eventDate)}</div>
                     </div>
                     <div>
                       <span style={{ color: "var(--text-3)" }}>Dismantle</span>
-                      <div className="font-semibold font-mono mt-0.5">{b.dismantleDate}</div>
+                      <div className="font-semibold font-mono mt-0.5">{formatDate(b.dismantleDate)}</div>
                     </div>
                   </div>
                   <div className="mt-2 text-[12px]">
@@ -2189,7 +2290,7 @@ function OverviewTab({ b }: { b: B }) {
             </Section>
 
             {/* Operations Officer (OO) Welfare and Overtime Forms */}
-            {(userRole === "oo" || userRole === "admin") && (
+            {isOO && (
               <Section title="Field Logistics & Welfare Controls (OO Actions)" icon={Wrench}>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -2214,17 +2315,59 @@ function OverviewTab({ b }: { b: B }) {
                       />
                     </label>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => setShowReverseModal(true)}
+                      className="flex items-center gap-1.5 rounded px-3 py-2 text-[11px] font-bold transition hover:brightness-110 cursor-pointer"
+                      style={{ background: "color-mix(in oklab, var(--destructive) 15%, transparent)", color: "var(--destructive)", border: "1px solid color-mix(in oklab, var(--destructive) 30%, transparent)" }}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Reverse Checkout
+                    </button>
                     <button
                       onClick={handleSaveOO}
                       disabled={isSavingOO}
-                      className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
+                      className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 cursor-pointer"
                       style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
                     >
                       {isSavingOO ? "Saving..." : "Save Field Logs"}
                     </button>
                   </div>
                 </div>
+
+                {/* Reverse Checkout Inline Modal */}
+                {showReverseModal && (
+                  <div className="mt-4 rounded-lg border-2 p-4 animate-in fade-in slide-in-from-top-2 duration-200" style={{ borderColor: "var(--destructive)", background: "color-mix(in oklab, var(--destructive) 6%, var(--surface))" }}>
+                    <div className="text-[13px] font-bold mb-1" style={{ color: "var(--destructive)" }}>Reverse Checkout — Roll back to PREPARATION</div>
+                    <p className="text-[11px] mb-3" style={{ color: "var(--text-2)" }}>
+                      This will move the booking from <strong>ONSITE</strong> back to <strong>PREPARATION</strong> and clear inventory movements. All held gear will be re-allocated. A reason is required.
+                    </p>
+                    <textarea
+                      value={reverseReason}
+                      onChange={(e) => setReverseReason(e.target.value)}
+                      placeholder="Explain why checkout is being reversed (min. 10 characters)..."
+                      className="w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px] h-20 block resize-none mb-3"
+                      style={{ borderColor: "var(--border)" }}
+                    />
+                    <div className="flex items-center gap-2 justify-end">
+                      <button
+                        onClick={() => { setShowReverseModal(false); setReverseReason(""); }}
+                        className="rounded border px-3 py-1.5 text-[12px] cursor-pointer"
+                        style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleReverseCheckout}
+                        disabled={isReversingCheckout || reverseReason.trim().length < 10}
+                        className="rounded px-4 py-1.5 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-40 cursor-pointer"
+                        style={{ background: "var(--destructive)", color: "#fff" }}
+                      >
+                        {isReversingCheckout ? "Reversing..." : "Confirm Reversal"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </Section>
             )}
           </>
@@ -2241,7 +2384,7 @@ function OverviewTab({ b }: { b: B }) {
                   <div className="space-y-4">
                     <p className="text-[12px]" style={{ color: "var(--text-2)" }}>
                       Specify screen type holds and check live warehouse availability for this event. 
-                      Dates: <strong className="font-mono text-xs">{b.assemblyDate} to {b.dismantleDate}</strong>.
+                      Dates: <strong className="font-mono text-xs">{formatDate(b.assemblyDate)} to {formatDate(b.dismantleDate)}</strong>.
                     </p>
 
                     {/* Multi-screen hold rows */}
@@ -2487,6 +2630,153 @@ function OverviewTab({ b }: { b: B }) {
           </Section>
         )}
 
+        {/* Stage 3: OO Crew & Logistics (PREPARATION stage — OO dispatches crew and vehicle) */}
+        {isOO && b.status === "PREPARATION" && (
+          <>
+            {/* OO Crew Picker */}
+            <Section title="Assign Field Crew (Operations)" icon={Users}>
+              {isStaffRestricted && <AccessLockOverlay sectionName="Crew Assignment" permissionKey="assignment.assign_crew" />}
+              <div className="space-y-4">
+                <p className="text-[12px]" style={{ color: "var(--text-2)" }}>
+                  Assign stagehands and freelancers for this deployment. These crew members will appear on the onsite team brief.
+                </p>
+
+                {/* Existing CREW assignments */}
+                {(b.assignments || []).filter((a: any) => a.roleContext === "CREW").length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Currently Assigned Crew</div>
+                    {(b.assignments || []).filter((a: any) => a.roleContext === "CREW").map((a: any) => (
+                      <div key={a.id} className="flex items-center justify-between rounded border px-3 py-2 text-[12px]" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                        <span className="font-medium">{a.user?.name || "—"}</span>
+                        <button
+                          onClick={() => handleRemoveCrew(a.id)}
+                          disabled={isDeletingCrewId === a.id}
+                          className="text-[11px] font-semibold rounded px-2 py-1 transition hover:brightness-110 disabled:opacity-40 cursor-pointer"
+                          style={{ background: "color-mix(in oklab, var(--destructive) 12%, transparent)", color: "var(--destructive)" }}
+                        >
+                          {isDeletingCrewId === a.id ? "Removing…" : "Remove"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add new crew */}
+                <div className="space-y-2">
+                  {ooCrewIds.map((crewId, idx) => (
+                    <div key={idx} className="flex items-end gap-2">
+                      <label className="flex-1 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+                        Crew member #{idx + 1}
+                        <select
+                          value={crewId}
+                          onChange={(e) => setOoCrewIds(prev => prev.map((c, i) => i === idx ? e.target.value : c))}
+                          className="mt-1 h-9 w-full rounded border bg-[var(--surface)] px-2 text-[12px] cursor-pointer"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          <option value="">— Select crew member —</option>
+                          {staffList
+                            .filter((s) => ["stagehand", "freelancer", "sh", "fl"].includes(s.role.toLowerCase()))
+                            .map((s) => (
+                              <option key={s.id} value={s.id} disabled={ooCrewIds.includes(s.id) && s.id !== crewId}>
+                                {s.name} ({s.role})
+                              </option>
+                            ))
+                          }
+                        </select>
+                      </label>
+                      {ooCrewIds.length > 1 && (
+                        <button
+                          onClick={() => setOoCrewIds(prev => prev.filter((_, i) => i !== idx))}
+                          className="mb-1 rounded px-2 py-2 text-[11px] font-semibold cursor-pointer"
+                          style={{ background: "color-mix(in oklab, var(--destructive) 12%, transparent)", color: "var(--destructive)" }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setOoCrewIds(prev => [...prev, ""])}
+                    className="rounded px-3 py-1.5 text-xs font-semibold hover:brightness-110 cursor-pointer"
+                    style={{ background: "var(--surface-3)", color: "var(--text-1)" }}
+                  >
+                    + Add another crew member
+                  </button>
+                  <button
+                    onClick={handleAssignCrew}
+                    disabled={isAssigningCrew}
+                    className="rounded px-4 py-2 text-[12px] font-bold text-white transition hover:brightness-110 disabled:opacity-50 cursor-pointer"
+                    style={{ background: "var(--accent)" }}
+                  >
+                    {isAssigningCrew ? "Assigning…" : "Assign Crew"}
+                  </button>
+                </div>
+              </div>
+            </Section>
+
+            {/* OO Vehicle & Driver Picker */}
+            <Section title="Vehicle & Driver Details" icon={Truck}>
+              <div className="space-y-4">
+                <p className="text-[12px]" style={{ color: "var(--text-2)" }}>
+                  Record the vehicle and driver dispatched with this booking. This information will appear on the onsite brief.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                    Driver Name / Description
+                    <input
+                      type="text"
+                      value={vehicleText}
+                      onChange={(e) => setVehicleText(e.target.value)}
+                      placeholder="e.g. Abebe Kebede"
+                      className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
+                      style={{ borderColor: "var(--border)" }}
+                    />
+                  </label>
+                  <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                    Vehicle Plate Number
+                    <input
+                      type="text"
+                      value={vehiclePlate}
+                      onChange={(e) => setVehiclePlate(e.target.value)}
+                      placeholder="e.g. AA 3-A12345"
+                      className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] font-mono"
+                      style={{ borderColor: "var(--border)" }}
+                    />
+                  </label>
+                  <label className="text-[11px] font-semibold block col-span-2" style={{ color: "var(--text-2)" }}>
+                    Assign Driver from Staff List
+                    <select
+                      value={driverUserId}
+                      onChange={(e) => setDriverUserId(e.target.value)}
+                      className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px] cursor-pointer"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <option value="">— Select driver (optional) —</option>
+                      {staffList.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleSaveLogistics}
+                    disabled={isSavingLogistics}
+                    className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 cursor-pointer"
+                    style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+                  >
+                    {isSavingLogistics ? "Saving…" : "Save Vehicle & Driver"}
+                  </button>
+                </div>
+              </div>
+            </Section>
+          </>
+        )}
+
         <Section title="Client & Contact" icon={User}>
           <div className="grid grid-cols-2 gap-x-6">
             <KV k="Client" v={b.client} />
@@ -2541,9 +2831,9 @@ function OverviewTab({ b }: { b: B }) {
 
       <div className="col-span-4 space-y-4">
         <Section title="Schedule" icon={Calendar}>
-          <KV k="Assembly" v={b.assemblyDate} mono />
-          <KV k="Event" v={b.eventDate} mono />
-          <KV k="Dismantle" v={b.dismantleDate} mono />
+          <KV k="Assembly" v={formatDate(b.assemblyDate)} mono />
+          <KV k="Event" v={formatDate(b.eventDate)} mono />
+          <KV k="Dismantle" v={formatDate(b.dismantleDate)} mono />
         </Section>
 
         {!isTechnician && (

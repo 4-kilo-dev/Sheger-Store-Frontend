@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { 
   Banknote, CalendarCheck, Download, Gauge, TrendingUp, BarChart3, 
-  Users, Filter, AlertTriangle, Check, ShieldAlert, AlertCircle, RefreshCw
+  Users, Filter, AlertTriangle, Check, ShieldAlert, AlertCircle, RefreshCw, Printer
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,10 @@ import {
   type CanceledBookingReportRecord,
   type UpcomingBookingReportRecord
 } from "../services/reports.api";
+import { getStaffApi } from "@/features/users/services/staff.api";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { DatePicker } from "@/components/ui/date-picker";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 const _Route = createFileRoute("/reports")({
   head: () => ({
@@ -42,9 +47,24 @@ const TABS = [
   { id: "audit_logs", label: "Audit Logs" }
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = "revenue_bookings" | "inventory_health" | "client_directory" | "quality_crew" | "audit_logs" | "staff_work_sheets";
 
 export function ReportsPage() {
+  const { formatDate, formatDateTime } = useDateFormatter();
+  const authUser = useAuthUser();
+  const userRole = authUser?.role?.toLowerCase() || "";
+  const isAdminOrSupervisor = userRole === "admin" || userRole === "supervisor";
+
+  const renderedTabs = useMemo(() => {
+    if (isAdminOrSupervisor) {
+      return [
+        ...TABS,
+        { id: "staff_work_sheets" as const, label: "Staff Work Sheets" }
+      ];
+    }
+    return TABS;
+  }, [isAdminOrSupervisor]);
+
   const [activeTab, setActiveTab] = useState<TabId>("revenue_bookings");
   
   // Filters State
@@ -89,6 +109,41 @@ export function ReportsPage() {
     queryFn: () => getUpcomingBookingsReportApi(7),
   });
 
+  const { data: staffList = [] } = useQuery({
+    queryKey: ["staff"],
+    queryFn: getStaffApi,
+    enabled: isAdminOrSupervisor,
+  });
+
+  // Staff Work Sheets States
+  const [selectedStaffUserId, setSelectedStaffUserId] = useState("");
+  const [sheetStartDate, setSheetStartDate] = useState("");
+  const [sheetEndDate, setSheetEndDate] = useState("");
+  const [sheetBookings, setSheetBookings] = useState<any[]>([]);
+  const [isGeneratingSheet, setIsGeneratingSheet] = useState(false);
+
+  const handleGenerateSheet = async () => {
+    if (!selectedStaffUserId) {
+      toast.error("Please select a staff member");
+      return;
+    }
+    setIsGeneratingSheet(true);
+    try {
+      const res = await getBookingsReportApi({
+        staffUserId: selectedStaffUserId,
+        startDate: sheetStartDate || undefined,
+        endDate: sheetEndDate || undefined,
+        status: "DONE",
+      });
+      setSheetBookings(res.bookings || []);
+      toast.success(`Successfully loaded ${res.bookings?.length || 0} completed bookings.`);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to load bookings");
+    } finally {
+      setIsGeneratingSheet(false);
+    }
+  };
+
   const isTabLoading = useMemo(() => {
     switch (activeTab) {
       case "revenue_bookings": return loadingBookings || loadingRevenue;
@@ -96,8 +151,10 @@ export function ReportsPage() {
       case "client_directory": return loadingCustomers;
       case "quality_crew": return loadingEvaluations;
       case "audit_logs": return loadingCanceled || loadingUpcoming;
+      case "staff_work_sheets": return isGeneratingSheet;
+      default: return false;
     }
-  }, [activeTab, loadingBookings, loadingRevenue, loadingInventory, loadingCustomers, loadingEvaluations, loadingCanceled, loadingUpcoming]);
+  }, [activeTab, loadingBookings, loadingRevenue, loadingInventory, loadingCustomers, loadingEvaluations, loadingCanceled, loadingUpcoming, isGeneratingSheet]);
 
   // Contextual CSV Exporter
   function handleExportCSV() {
@@ -145,6 +202,22 @@ export function ReportsPage() {
           "UPCOMING", u.id, u.eventDate, u.eventLocation, "-", String(u.assignedCrewCount), u.status, u.hasBom ? "BOM Ready" : "BOM Missing"
         ]);
       });
+    } else if (activeTab === "staff_work_sheets") {
+      headers = ["Booking Code", "Client / Customer", "Venue Location", "Rental Start", "Rental End", "Duration (Days)"];
+      rows = sheetBookings.map((b) => {
+        const start = new Date(b.rentalStart);
+        const end = new Date(b.rentalEnd);
+        const diffMs = Math.max(0, end.getTime() - start.getTime());
+        const durationDays = Math.max(1, Math.round((diffMs / (1000 * 60 * 60 * 24)) * 10) / 10);
+        return [
+          b.bookingCode || b.id,
+          b.customerName || "",
+          b.eventLocation || "",
+          b.rentalStart,
+          b.rentalEnd,
+          String(durationDays)
+        ];
+      });
     }
 
     const csvContent = [headers.join(","), ...rows.map((r) => r.map((val) => `"${val.replace(/"/g, '""')}"`).join(","))].join("\n");
@@ -177,7 +250,7 @@ export function ReportsPage() {
   return (
     <AppShell>
       {/* Header */}
-      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end no-print">
         <div>
           <div className="label-eyebrow mb-1">Business Intelligence</div>
           <h1 className="text-[20px] sm:text-[24px] font-bold tracking-tight">Operations Reports</h1>
@@ -192,16 +265,17 @@ export function ReportsPage() {
             size="sm"
             className="flex items-center gap-1.5 h-8.5 text-[11px] font-bold cursor-pointer"
           >
-            <Download className="h-3.5 w-3.5" /> Export {TABS.find(t => t.id === activeTab)?.label} CSV
+            <Download className="h-3.5 w-3.5" /> Export {TABS.find(t => t.id === activeTab)?.label || "Report"} CSV
           </Button>
         </div>
       </div>
 
       {/* Interactive Filters Bar */}
-      <div 
-        className="mb-5 rounded-lg border p-4 flex flex-wrap items-center gap-4 text-[12px]"
-        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-      >
+      {activeTab !== "staff_work_sheets" && (
+        <div 
+          className="mb-5 rounded-lg border p-4 flex flex-wrap items-center gap-4 text-[12px] no-print"
+          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+        >
         <div className="flex items-center gap-1.5 shrink-0" style={{ color: "var(--text-2)" }}>
           <Filter className="h-3.5 w-3.5" />
           <span className="font-bold">Filters:</span>
@@ -209,22 +283,18 @@ export function ReportsPage() {
 
         {/* Date Ranges */}
         <div className="flex items-center gap-2">
-          <input
-            type="date"
+          <DatePicker
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="rounded border bg-[var(--surface-2)] px-2.5 py-1 text-[11px] outline-none"
-            style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+            onChange={setStartDate}
             placeholder="Start Date"
+            className="h-8.5 py-1 text-[11px]"
           />
           <span style={{ color: "var(--text-3)" }}>to</span>
-          <input
-            type="date"
+          <DatePicker
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="rounded border bg-[var(--surface-2)] px-2.5 py-1 text-[11px] outline-none"
-            style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+            onChange={setEndDate}
             placeholder="End Date"
+            className="h-8.5 py-1 text-[11px]"
           />
         </div>
 
@@ -264,10 +334,11 @@ export function ReportsPage() {
           </button>
         )}
       </div>
+      )}
 
       {/* Tabs Navigation Header */}
-      <div className="scrollable-tabs border-b mb-6" style={{ borderColor: "var(--border)" }}>
-        {TABS.map((tab) => {
+      <div className="scrollable-tabs border-b mb-6 no-print" style={{ borderColor: "var(--border)" }}>
+        {renderedTabs.map((tab) => {
           const active = activeTab === tab.id;
           return (
             <button
@@ -663,7 +734,7 @@ export function ReportsPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                             <span className="font-bold text-[13px] text-foreground">{e.clientNameVenue}</span>
-                            <span className="text-[10px] text-zinc-500 font-mono">({new Date(e.eventDate).toLocaleDateString()})</span>
+                            <span className="text-[10px] text-zinc-500 font-mono">({formatDate(e.eventDate)})</span>
                             <span className="text-[11px] font-bold">
                               Booking: <Link to={`/bookings/${e.bookingCode || e.bookingId}` as any} className="text-[var(--accent)] hover:underline cursor-pointer">{e.bookingCode || e.bookingId}</Link>
                             </span>
@@ -727,7 +798,7 @@ export function ReportsPage() {
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold text-[12.5px]" style={{ color: "var(--accent)" }}>{c.id}</span>
-                          <span className="text-[10px] text-zinc-500 font-mono">({new Date(c.eventDate).toLocaleDateString()})</span>
+                          <span className="text-[10px] text-zinc-500 font-mono">({formatDate(c.eventDate)})</span>
                         </div>
                         <span className="font-bold text-zinc-400 font-mono">ETB {parseFloat(c.paymentAmount).toLocaleString()}</span>
                       </div>
@@ -790,7 +861,7 @@ export function ReportsPage() {
                               {u.status}
                             </span>
                           </div>
-                          <span className="font-mono text-[10.5px] text-zinc-400">{new Date(u.eventDate).toLocaleDateString()}</span>
+                          <span className="font-mono text-[10.5px] text-zinc-400">{formatDate(u.eventDate)}</span>
                         </div>
 
                         <div className="text-[11px] leading-relaxed" style={{ color: "var(--text-2)" }}>
@@ -830,6 +901,187 @@ export function ReportsPage() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 6: STAFF WORK SHEETS */}
+        {/* ========================================================================= */}
+        {activeTab === "staff_work_sheets" && (
+          <div className="space-y-4 print-container">
+            {/* Filter Section (no-print) */}
+            <div className="rounded-lg border p-4 space-y-4 no-print" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                <span className="text-[13px] font-bold">HR Staff Work Sheet Filters</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                  Select Staff Member
+                  <select
+                    value={selectedStaffUserId}
+                    onChange={(e) => setSelectedStaffUserId(e.target.value)}
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] cursor-pointer"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <option value="">-- Choose User --</option>
+                    {staffList.map((s: any) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.role})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="text-[11px] font-semibold block w-full text-left" style={{ color: "var(--text-2)" }}>
+                  Start Date
+                  <div className="mt-1">
+                    <DatePicker
+                      value={sheetStartDate}
+                      onChange={setSheetStartDate}
+                    />
+                  </div>
+                </div>
+
+                <div className="text-[11px] font-semibold block w-full text-left" style={{ color: "var(--text-2)" }}>
+                  End Date
+                  <div className="mt-1">
+                    <DatePicker
+                      value={sheetEndDate}
+                      onChange={setSheetEndDate}
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleGenerateSheet}
+                  disabled={isGeneratingSheet || !selectedStaffUserId}
+                  className="h-9 font-bold text-[12px] tracking-wide"
+                >
+                  {isGeneratingSheet ? "Querying..." : "Generate Sheet"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Document Header for Print-only */}
+            {selectedStaffUserId && (
+              <div className="hidden print:block border-b pb-4 mb-4" style={{ borderColor: "#000" }}>
+                <h1 className="text-[22px] font-bold text-black uppercase tracking-tight">Staff Deployment Activity Sheet</h1>
+                <div className="grid grid-cols-2 gap-2 text-[12px] mt-2 text-black">
+                  <div>
+                    <strong>Staff Member:</strong> {staffList.find((s: any) => s.id === selectedStaffUserId)?.name || "—"}
+                  </div>
+                  <div>
+                    <strong>Role:</strong> {staffList.find((s: any) => s.id === selectedStaffUserId)?.role || "—"}
+                  </div>
+                  <div>
+                    <strong>Audit Period:</strong> {sheetStartDate || "Beginning"} to {sheetEndDate || "Present"}
+                  </div>
+                  <div>
+                    <strong>Printed On:</strong> {new Date().toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Work Sheet Detail Table */}
+            {selectedStaffUserId && (
+              <div className="rounded-lg border bg-[var(--surface)] overflow-hidden" style={{ borderColor: "var(--border)" }}>
+                <div className="px-4 py-3 border-b no-print" style={{ borderColor: "var(--border)" }}>
+                  <span className="text-[12px] font-bold uppercase tracking-wider text-[var(--text-3)]">Completed Assignments Gigs</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-[12px]">
+                    <thead>
+                      <tr className="border-b" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                        <th className="px-4 py-2.5 label-eyebrow">Booking Code</th>
+                        <th className="px-4 py-2.5 label-eyebrow">Client / Customer</th>
+                        <th className="px-4 py-2.5 label-eyebrow">Venue Location</th>
+                        <th className="px-4 py-2.5 label-eyebrow">Rental Setup Period</th>
+                        <th className="px-4 py-2.5 label-eyebrow text-right w-36">Duration (Days)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sheetBookings.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="text-center py-8 text-zinc-500">
+                            No completed assignments registered for this user during the selected period.
+                          </td>
+                        </tr>
+                      ) : (
+                        sheetBookings.map((b) => {
+                          const start = new Date(b.rentalStart);
+                          const end = new Date(b.rentalEnd);
+                          const diffMs = Math.max(0, end.getTime() - start.getTime());
+                          const durationDays = Math.max(1, Math.round((diffMs / (1000 * 60 * 60 * 24)) * 10) / 10);
+
+                          return (
+                            <tr key={b.id} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+                              <td className="px-4 py-3 font-semibold">
+                                <Link
+                                  to={`/bookings/${b.bookingCode || b.id}` as any}
+                                  className="font-mono text-zinc-300 hover:text-[var(--accent)] hover:underline print:text-black print:no-underline"
+                                >
+                                  {b.bookingCode || b.id}
+                                </Link>
+                              </td>
+                              <td className="px-4 py-3">{b.customerName || "—"}</td>
+                              <td className="px-4 py-3">{b.eventLocation || "—"}</td>
+                              <td className="px-4 py-3 font-mono text-[11.5px] leading-relaxed">
+                                {formatDateTime(b.rentalStart)} - <br />
+                                {formatDateTime(b.rentalEnd)}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono font-bold">{durationDays} days</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Summary Footer Card */}
+            {selectedStaffUserId && sheetBookings.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                {/* Print button card */}
+                <div className="rounded-lg border p-4 bg-[var(--surface-2)] flex items-center justify-between no-print" style={{ borderColor: "var(--border)" }}>
+                  <div>
+                    <span className="text-[12px] font-bold block">HR Activity Verification</span>
+                    <span className="text-[11px] text-zinc-400 block mt-0.5">Generate a print preview or PDF of this work sheet for submission.</span>
+                  </div>
+                  <Button
+                    onClick={() => window.print()}
+                    variant="outline"
+                    className="h-9 font-bold text-[12px] flex items-center gap-1.5 shrink-0"
+                  >
+                    <Printer className="h-3.5 w-3.5" /> Export PDF
+                  </Button>
+                </div>
+
+                <div className="rounded-lg border p-4 flex items-center justify-between ml-auto w-full md:w-auto md:min-w-[320px] print:w-full print:ml-0 print:border-t-2" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">HR Summary</span>
+                    <div className="text-[20px] font-bold text-foreground print:text-black">
+                      {sheetBookings.length} {sheetBookings.length === 1 ? "Gig" : "Gigs"} Completed
+                    </div>
+                  </div>
+                  <div className="text-right space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">Total Days Deployed</span>
+                    <div className="text-[20px] font-bold text-[var(--accent)] font-mono print:text-black">
+                      {sheetBookings.reduce((sum, b) => {
+                        const start = new Date(b.rentalStart);
+                        const end = new Date(b.rentalEnd);
+                        const diffMs = Math.max(0, end.getTime() - start.getTime());
+                        const durationDays = Math.max(1, Math.round((diffMs / (1000 * 60 * 60 * 24)) * 10) / 10);
+                        return sum + durationDays;
+                      }, 0)} Days
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

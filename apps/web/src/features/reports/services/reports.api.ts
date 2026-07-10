@@ -476,6 +476,7 @@ export async function getBookingsReportApi(filters: {
   endDate?: string;
   customerId?: string;
   location?: string;
+  staffUserId?: string;
 }): Promise<BookingsReportResponse> {
   const query = new URLSearchParams();
   if (filters.status) query.append("status", filters.status);
@@ -483,6 +484,7 @@ export async function getBookingsReportApi(filters: {
   if (filters.endDate) query.append("endDate", filters.endDate);
   if (filters.customerId) query.append("customerId", filters.customerId);
   if (filters.location) query.append("location", filters.location);
+  if (filters.staffUserId) query.append("staffUserId", filters.staffUserId);
 
   return client.get<BookingsReportResponse>(`/api/reports/bookings?${query.toString()}`);
 }

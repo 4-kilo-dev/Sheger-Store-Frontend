@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { BellRing, Building2, Languages, LockKeyhole, Save, Shield, UsersRound, Check, X, ClipboardCheck, Plus } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useActiveProfile } from "@/hooks/use-active-profile";
+import { useCalendarSystem, useDateFormatter } from "@/context/CalendarSystemContext";
 import {
   listPerformanceMetricsApi,
   createPerformanceMetricApi,
@@ -59,7 +60,46 @@ function Toggle({ on, label }: { on: boolean; label: string }) {
 }
 
 export function SettingsPage() {
+  const { calendarSystem, numeralsSystem, commitSettings } = useCalendarSystem();
+  const { formatDate } = useDateFormatter();
   const [active, setActive] = useState("Company");
+
+  const [tempCalendarSystem, setTempCalendarSystem] = useState(calendarSystem);
+  const [tempNumeralsSystem, setTempNumeralsSystem] = useState(numeralsSystem);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  useEffect(() => {
+    setTempCalendarSystem(calendarSystem);
+    setTempNumeralsSystem(numeralsSystem);
+  }, [calendarSystem, numeralsSystem]);
+
+  const handleSaveChanges = async () => {
+    setSavingSettings(true);
+    try {
+      await commitSettings(tempCalendarSystem, tempNumeralsSystem);
+      toast.success("Settings saved successfully!");
+    } catch (e) {
+      toast.error("Failed to save settings. Please try again.");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const formatPreviewDate = (date: Date) => {
+    if (tempCalendarSystem === "ethiopic") {
+      const locale = tempNumeralsSystem === "geez" ? "am-ET-u-ca-ethiopic" : "am-ET-u-ca-ethiopic-nu-latn";
+      return new Intl.DateTimeFormat(locale, {
+        year: "numeric",
+        month: "long",
+        day: "numeric"
+      }).format(date);
+    }
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    }).format(date);
+  };
 
   return (
     <AppShell>
@@ -227,11 +267,28 @@ export function SettingsPage() {
                   </select>
                 </label>
                 <label className="text-[12px] font-semibold">
-                  Date format
-                  <select className={inputCls} style={{ borderColor: "var(--border)" }}>
-                    <option>YYYY-MM-DD</option>
-                    <option>DD/MM/YYYY</option>
-                    <option>MM/DD/YYYY</option>
+                  Calendar System
+                  <select
+                    value={tempCalendarSystem}
+                    onChange={(e) => setTempCalendarSystem(e.target.value as any)}
+                    className={inputCls}
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <option value="gregorian">Gregorian Calendar (Western)</option>
+                    <option value="ethiopic">Ethiopian Calendar (የኢትዮጵያ ዘመን አቆጣጠር)</option>
+                  </select>
+                </label>
+                <label className="text-[12px] font-semibold">
+                  Numerals Style
+                  <select
+                    value={tempNumeralsSystem}
+                    onChange={(e) => setTempNumeralsSystem(e.target.value as any)}
+                    disabled={tempCalendarSystem !== "ethiopic"}
+                    className={inputCls}
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <option value="latn">Latin (1, 2, 3...)</option>
+                    <option value="geez">Ge'ez (፩, ፪, ፫...)</option>
                   </select>
                 </label>
                 <label className="text-[12px] font-semibold">
@@ -245,7 +302,7 @@ export function SettingsPage() {
               <div className="mt-5 rounded-md border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
                 <div className="label-eyebrow mb-2">Preview</div>
                 <div className="grid grid-cols-2 gap-3 text-[12px]">
-                  <div><span style={{ color: "var(--text-3)" }}>Date:</span> 2026-06-14</div>
+                  <div><span style={{ color: "var(--text-3)" }}>Date:</span> {formatPreviewDate(new Date())}</div>
                   <div><span style={{ color: "var(--text-3)" }}>Currency:</span> ETB 125,000</div>
                   <div><span style={{ color: "var(--text-3)" }}>Time:</span> 11:38 EAT</div>
                   <div><span style={{ color: "var(--text-3)" }}>Language:</span> English</div>
@@ -319,8 +376,13 @@ export function SettingsPage() {
           {/* Save button */}
           {active !== "Performance Metrics" && (
             <div className="flex justify-end">
-              <button className="flex items-center gap-2 rounded-md px-5 py-2.5 text-[13px] font-bold transition hover:brightness-110" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
-                <Save className="h-4 w-4" /> Save Changes
+              <button
+                onClick={handleSaveChanges}
+                disabled={savingSettings}
+                className="flex items-center gap-2 rounded-md px-5 py-2.5 text-[13px] font-bold transition hover:brightness-110 disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                <Save className="h-4 w-4" /> {savingSettings ? "Saving..." : "Save Changes"}
               </button>
             </div>
           )}

@@ -80,11 +80,16 @@ export function CheckoutPage() {
           const matchedLine = backendBomLines.find(
             (line) => line.id === item.id || line.item?.name === item.name || line.pool?.name === item.name
           );
-          return {
-            poolId: matchedLine?.poolId || null,
-            itemId: matchedLine?.itemId || null,
-            quantity: String(item.qty),
-          };
+          if (matchedLine?.itemId) {
+            return {
+              itemId: matchedLine.itemId,
+            };
+          } else {
+            return {
+              poolId: matchedLine?.poolId || null,
+              quantity: String(item.qty),
+            };
+          }
         });
         await checkoutBookingApi(selected.code, { assets });
       } else {
