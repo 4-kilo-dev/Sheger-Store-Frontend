@@ -44,10 +44,17 @@ export interface Booking {
   statusHistory?: StatusHistoryItem[];
   itemServiceSpec?: string;
   assignments?: any[];
-  technicianNotes?: string;
-  contentType?: string;
-  venueType?: string;
-  hangingOrSitting?: "hanging" | "sitting" | "";
+  customFields: Record<string, any>;
+}
+
+export interface CustomFieldDefinition {
+  id: string;
+  name: string;
+  key: string;
+  type: "boolean" | "number" | "string" | "date" | "enum" | "multi_select";
+  options?: string[];
+  required?: boolean;
+  isActive?: boolean;
 }
 
 export interface StatusHistoryItem {
@@ -168,10 +175,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
     statusHistory,
     itemServiceSpec: b.itemServiceSpec || "",
     assignments: b.assignments || [],
-    technicianNotes: b.technicianNotes || "",
-    contentType: b.contentType || "",
-    venueType: b.venueType || "",
-    hangingOrSitting: b.hangingOrSitting || "",
+    customFields: b.customFields || {},
   };
 }
 
@@ -311,4 +315,18 @@ export async function deleteAssignmentApi(assignmentId: string): Promise<any> {
 
 export async function checkoutReverseApi(bookingId: string, reason: string): Promise<any> {
   return client.post(`/api/bookings/${bookingId}/checkout-reverse`, { reason });
+}
+
+export async function getCustomFieldDefinitionsApi(): Promise<CustomFieldDefinition[]> {
+  return client.get<CustomFieldDefinition[]>("/api/custom-field-definitions");
+}
+
+export async function createCustomFieldDefinitionApi(
+  payload: Omit<CustomFieldDefinition, "id" | "isActive">
+): Promise<CustomFieldDefinition> {
+  return client.post<CustomFieldDefinition>("/api/custom-field-definitions", payload);
+}
+
+export async function deleteCustomFieldDefinitionApi(id: string): Promise<void> {
+  return client.delete<void>(`/api/custom-field-definitions/${id}`);
 }
