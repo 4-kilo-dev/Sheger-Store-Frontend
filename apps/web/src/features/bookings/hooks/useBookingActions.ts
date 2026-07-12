@@ -33,7 +33,8 @@ export function useBookingActions(
 
   const [paymentType, setPaymentType] = useState<"advance" | "fully_paid">("advance");
   const [paymentMethod, setPaymentMethod] = useState("Bank Transfer");
-  const [amountReceived, setAmountReceived] = useState(0);
+  const [advancePayment, setAdvancePayment] = useState(0);
+  const [ fullPayment, setfullPayment] = useState(0);
 
   const [checkoutTeamLeader, setCheckoutTeamLeader] = useState("");
   const [checkoutDriver, setCheckoutDriver] = useState("");
@@ -52,10 +53,12 @@ export function useBookingActions(
 
   const [staff, setStaff] = useState<any[]>([]);
 
-  // Initialize amountReceived from booking when booking changes
+  // Initialize full payment and advance payment from booking when booking changes
   useEffect(() => {
-    if (booking && amountReceived === 0) {
-      setAmountReceived(booking.amount);
+    if (booking) {
+      setfullPayment(booking.amount);
+      const existingAdvance = booking.customFields?.advancePayment;
+      setAdvancePayment(existingAdvance !== undefined ? parseFloat(existingAdvance) : booking.amount / 2);
     }
   }, [booking]);
 
@@ -71,7 +74,8 @@ export function useBookingActions(
 
   // Load staff list if allowed
   useEffect(() => {
-    if (userRole === "technician") return;
+    const rolesAllowedToFetchStaff = ["admin", "supervisor", "chief_tech", "cto", "oo"];
+    if (!rolesAllowedToFetchStaff.includes(userRole)) return;
     getStaffApi()
       .then(setStaff)
       .catch((e) => console.error("Failed to load staff in useBookingActions", e));
@@ -147,7 +151,7 @@ export function useBookingActions(
   const { mutate: submitDamageReport, isPending: submittingDamage } = useMutation({
     mutationFn: (payload: { description?: string; poolId?: string; itemId?: string; reportType: "DAMAGE" | "MISSING"; quantity?: string }) => {
       if (!booking) throw new Error("Booking is undefined");
-      return createDamageReportApi(booking.id, payload);
+      return createDamageReportApi(booking.code, payload);
     },
     onSuccess: () => {
       toast.success("Damage report submitted successfully!");
@@ -167,7 +171,7 @@ export function useBookingActions(
       if (!booking) throw new Error("Booking is undefined");
       
       // 1. Update logistics details
-      await updateBookingApi(booking.id, {
+      await updateBookingApi(booking.code, {
         vehiclePlate: checkoutVehiclePlate,
         mealProvision: String(checkoutMealBudget),
         vehicleText: `Driver: ${checkoutDriver}`,
@@ -184,7 +188,7 @@ export function useBookingActions(
           };
         }
       });
-      return await checkoutBookingApi(booking.id, { assets });
+      return await checkoutBookingApi(booking.code, { assets });
     },
     onSuccess: () => {
       toast.success("Checkout completed successfully! Booking status updated to ONSITE.");
@@ -229,9 +233,26 @@ export function useBookingActions(
   });
 
   const { mutate: confirmBookingWithPayment, isPending: isConfirmingWithPayment } = useMutation({
-    mutationFn: async ({ toPaymentStatus, amount }: { toPaymentStatus: string; amount: number }) => {
+    mutationFn: async ({
+      toPaymentStatus,
+      amount,
+      totalAmount,
+    }: {
+      toPaymentStatus: string;
+      amount: number;
+      totalAmount: number;
+    }) => {
       if (!booking) throw new Error("Booking is undefined");
+
+      // 1. Update the booking with total contract value
+      await updateBookingApi(booking.code, {
+        amount: totalAmount,
+      });
+
+      // 2. Record the payment
       await recordBookingPaymentApi(code, toPaymentStatus, amount);
+
+      // 3. Transition booking status to CONFIRMED
       await transitionBookingStatusApi(code, "CONFIRMED");
     },
     onSuccess: () => {
@@ -257,8 +278,10 @@ export function useBookingActions(
     setPaymentType,
     paymentMethod,
     setPaymentMethod,
-    amountReceived,
-    setAmountReceived,
+    advancePayment,
+    setAdvancePayment,
+    fullPayment,
+    setfullPayment,
     checkoutTeamLeader,
     setCheckoutTeamLeader,
     checkoutDriver,

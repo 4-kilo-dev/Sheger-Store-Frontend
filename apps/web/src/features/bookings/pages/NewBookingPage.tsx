@@ -1,13 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ArrowLeft, Building2, MapPin, Calendar, User, Phone,
   CheckCircle2, Save, Wrench, MessageSquare,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { createBookingApi } from "@/features/bookings/services/bookings.api";
+import { createBookingApi, getCustomFieldDefinitionsApi } from "@/features/bookings/services/bookings.api";
 import { DatePicker } from "@/components/ui/date-picker";
 
 const _Route = createFileRoute("/bookings/new")({
@@ -36,8 +36,14 @@ export function NewBooking() {
     venue: "", assemblyDate: "", eventDate: "", dismantleDate: "",
     itemServiceSpec: "", notes: "",
     amount: 0, paymentTerms: "UNPAID",
+    customFields: {} as Record<string, any>,
   });
   const set = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  const { data: customFieldDefs = [] } = useQuery({
+    queryKey: ["custom-field-definitions"],
+    queryFn: getCustomFieldDefinitionsApi,
+  });
 
   const { mutate: createBooking, isPending } = useMutation({
     mutationFn: createBookingApi,
@@ -172,6 +178,108 @@ export function NewBooking() {
                 />
               </Field>
 
+
+
+              {/* Dynamic Custom Fields */}
+              {customFieldDefs.length > 0 && (
+                <div className="border-t pt-4 mt-4 space-y-4" style={{ borderColor: "var(--border)" }}>
+                  <div className="text-[12px] font-bold uppercase tracking-wider text-[var(--text-3)] mb-2">
+                    Additional Specifications & Options
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {customFieldDefs.map((def: any) => {
+                      const value =
+                        form.customFields[def.key] ??
+                        (def.type === "boolean" ? false : def.type === "multi_select" ? [] : "");
+
+                      const setCustomField = (val: any) => {
+                        setForm((f) => ({
+                          ...f,
+                          customFields: {
+                            ...f.customFields,
+                            [def.key]: val,
+                          },
+                        }));
+                      };
+
+                      return (
+                        <Field key={def.id} label={`${def.name}${def.required ? " *" : ""}`}>
+                          {def.type === "boolean" ? (
+                            <select
+                              value={value ? "true" : "false"}
+                              onChange={(e) => setCustomField(e.target.value === "true")}
+                              className={inputCls}
+                            >
+                              <option value="false">No</option>
+                              <option value="true">Yes</option>
+                            </select>
+                          ) : def.type === "enum" ? (
+                            <select
+                              value={value}
+                              onChange={(e) => setCustomField(e.target.value)}
+                              className={inputCls}
+                            >
+                              <option value="">-- Select --</option>
+                              {def.options?.map((opt: string) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          ) : def.type === "multi_select" ? (
+                            <div
+                              className="flex flex-wrap gap-2 mt-1 p-2 rounded border bg-[var(--surface-2)]"
+                              style={{ borderColor: "var(--border)" }}
+                            >
+                              {def.options?.map((opt: string) => {
+                                const arr = Array.isArray(value) ? value : [];
+                                const checked = arr.includes(opt);
+                                return (
+                                  <label key={opt} className="flex items-center gap-1.5 text-[11px] cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => {
+                                        const nextArr = checked
+                                          ? arr.filter((x) => x !== opt)
+                                          : [...arr, opt];
+                                        setCustomField(nextArr);
+                                      }}
+                                    />
+                                    {opt}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ) : def.type === "date" ? (
+                            <input
+                              type="date"
+                              value={value ? String(value).slice(0, 10) : ""}
+                              onChange={(e) => setCustomField(e.target.value)}
+                              className={inputCls}
+                            />
+                          ) : def.type === "number" ? (
+                            <input
+                              type="number"
+                              value={value}
+                              onChange={(e) => setCustomField(parseFloat(e.target.value) || 0)}
+                              className={inputCls}
+                            />
+                          ) : (
+                            <input
+                              type="text"
+                              value={value}
+                              onChange={(e) => setCustomField(e.target.value)}
+                              className={inputCls}
+                            />
+                          )}
+                        </Field>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <Field label="Intake Notes / Client Guidance" icon={MessageSquare}>
                 <textarea
                   value={form.notes}
@@ -197,7 +305,16 @@ export function NewBooking() {
                   ["Event Date", form.eventDate || "—"],
                   ["Dismantle Date", form.dismantleDate || "—"],
                   ["Required Spec", form.itemServiceSpec || "—"],
+
                   ["Intake Notes", form.notes || "—"],
+                  ...Object.entries(form.customFields).map(([key, val]) => {
+                    const def = customFieldDefs.find((d: any) => d.key === key);
+                    const label = def ? def.name : key;
+                    let displayVal = val;
+                    if (Array.isArray(val)) displayVal = val.join(", ");
+                    else if (typeof val === "boolean") displayVal = val ? "Yes" : "No";
+                    return [label, String(displayVal || "—")];
+                  }),
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between border-b py-1.5 text-[12px] last:border-0" style={{ borderColor: "var(--border)" }}>
                     <span className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>{k}</span>
