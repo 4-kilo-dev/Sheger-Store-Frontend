@@ -36,6 +36,7 @@ export interface Booking {
   status: BookingStatus;
   payment: PaymentStatus;
   amount: number;
+  paymentAmount?: number;
   ctoNotes: string;
   bomItems: BomItem[];
   teamLeader: string;

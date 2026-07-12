@@ -4,11 +4,17 @@ import { KV } from "@/features/bookings/components/shared/KV";
 import type { Booking } from "@/features/bookings/services/bookings.api";
 
 export function PaymentsTab({ b }: { b: Booking }) {
+  const advanceAmt = b.customFields?.advancePayment !== undefined
+    ? parseFloat(b.customFields.advancePayment)
+    : b.amount / 2;
+  const paymentMethod = b.customFields?.paymentMethod || "Bank Transfer";
+  const dateStr = b.createdAt || "2026-05-12";
+
   const tx =
     b.payment === "PAID"
-      ? [{ d: "2026-05-12", n: "Full payment", a: b.amount, m: "Bank Transfer" }]
+      ? [{ d: dateStr, n: "Full payment", a: b.amount, m: paymentMethod }]
       : b.payment === "ADVANCE"
-        ? [{ d: "2026-05-12", n: "Advance 50%", a: b.amount / 2, m: "Bank Transfer" }]
+        ? [{ d: dateStr, n: "Advance Deposit", a: advanceAmt, m: paymentMethod }]
         : [];
 
   return (

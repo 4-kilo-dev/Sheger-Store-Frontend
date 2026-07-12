@@ -20,8 +20,10 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
     setPaymentType,
     paymentMethod,
     setPaymentMethod,
-    amountReceived,
-    setAmountReceived,
+    advancePayment,
+    setAdvancePayment,
+    fullPayment,
+    setfullPayment,
     checkoutTeamLeader,
     setCheckoutTeamLeader,
     checkoutDriver,
@@ -75,7 +77,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
             {booking.status === "RESERVED" &&
               selectedAction.id === "booking.confirm" &&
               booking.payment === "UNPAID" && (
-                <div className="mt-3 grid grid-cols-3 gap-3">
+                <div className="mt-3 grid grid-cols-4 gap-3">
                   <label
                     className="text-[11px] font-semibold"
                     style={{ color: "var(--text-2)" }}
@@ -113,17 +115,31 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                     className="text-[11px] font-semibold"
                     style={{ color: "var(--text-2)" }}
                   >
+                    Advance Payment (ETB)
+                    <input
+                      type="number"
+                      value={advancePayment || 0}
+                      onChange={(e) => setAdvancePayment(parseFloat(e.target.value))}
+                      className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px]"
+                      style={{ borderColor: "var(--border)" }}
+                    />
+                  </label>
+                  <label
+                    className="text-[11px] font-semibold"
+                    style={{ color: "var(--text-2)" }}
+                  >
                     Total Contract Value (ETB)
                     <input
                       type="number"
-                      value={amountReceived || ""}
-                      onChange={(e) => setAmountReceived(parseFloat(e.target.value) || 0)}
+                      value={fullPayment || ""}
+                      onChange={(e) => setfullPayment(parseFloat(e.target.value) || 0)}
                       className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px]"
                       style={{ borderColor: "var(--border)" }}
                     />
                   </label>
                 </div>
               )}
+              
             {booking.status === "RESERVED" &&
               selectedAction.id === "booking.confirm" &&
               booking.payment === "UNPAID" && (
@@ -131,12 +147,16 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                   {paymentType === "advance" ? (
                     <span>
                       Advance payment will record{" "}
-                      <strong>ETB {(amountReceived / 2).toLocaleString()}</strong> (50%) as paid,
-                      leaving a balance of <strong>ETB {(amountReceived / 2).toLocaleString()}</strong>.
+                      <strong>ETB {advancePayment}</strong> (
+                      {fullPayment > 0
+                        ? ((advancePayment / fullPayment) * 100).toFixed(0)
+                        : 0}
+                      %) as paid, leaving a balance of{" "}
+                      <strong>ETB {fullPayment - advancePayment} remaining.</strong>
                     </span>
                   ) : (
                     <span>
-                      Full payment will record the entire <strong>ETB {amountReceived.toLocaleString()}</strong>{" "}
+                      Full payment will record the entire <strong>ETB {fullPayment}</strong>{" "}
                       as paid, leaving no balance.
                     </span>
                   )}
@@ -145,13 +165,32 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
             {booking.status === "RESERVED" &&
               selectedAction.id === "booking.confirm" &&
               booking.payment === "UNPAID" &&
-              amountReceived < 1000 && (
+              fullPayment < 1000 && (
                 <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
                   <AlertCircle className="h-3.5 w-3.5" />
                   <span>Minimum payment amount is ETB 1,000.</span>
                 </div>
               )}
-
+            {booking.status === "RESERVED" &&
+              selectedAction.id === "booking.confirm" &&
+              booking.payment === "UNPAID" &&
+              paymentType === "advance" &&
+              advancePayment > fullPayment && (
+                <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>Advance Payment can't be greater than total payment.</span>
+                </div>
+              )}
+            {booking.status === "RESERVED" &&
+              selectedAction.id === "booking.confirm" &&
+              booking.payment === "UNPAID" &&
+              paymentType === "advance" &&
+              advancePayment <= 0 && (
+                <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>Advance Payment must be greater than ETB 0.</span>
+                </div>
+              )}
             {booking.status === "CONFIRMED" &&
               selectedAction.id === "assignment.assign_technician" && (
                 <div className="mt-3 grid grid-cols-2 gap-3">
@@ -315,11 +354,31 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
               }
               performCheckout();
             } else if (selectedAction.id === "booking.confirm" && booking.payment === "UNPAID") {
-              if (amountReceived < 1000) {
+              if (fullPayment < 1000) {
                 toast.error("Minimum payment amount is ETB 1,000");
                 return;
               }
-              confirmBookingWithPayment({ toPaymentStatus: paymentType, amount: amountReceived });
+              if (paymentType === "advance") {
+                if (advancePayment <= 0) {
+                  toast.error("Advance payment must be greater than ETB 0");
+                  return;
+                }
+                if (advancePayment > fullPayment) {
+                  toast.error("Advance payment cannot exceed the total payment amount");
+                  return;
+                }
+                confirmBookingWithPayment({
+                  toPaymentStatus: "advance",
+                  amount: advancePayment,
+                  totalAmount: fullPayment,
+                });
+              } else {
+                confirmBookingWithPayment({
+                  toPaymentStatus: "fully_paid",
+                  amount: fullPayment,
+                  totalAmount: fullPayment,
+                });
+              }
             } else {
               transitionStatus({
                 toStatus: selectedAction.targetStatus,
@@ -335,7 +394,9 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
             (selectedAction.requiresReason && cancellationReason.trim().length < 10) ||
             (selectedAction.id === "booking.confirm" &&
               booking.payment === "UNPAID" &&
-              amountReceived < 1000)
+              (fullPayment < 1000 ||
+                (paymentType === "advance" && advancePayment > fullPayment) ||
+                (paymentType === "advance" && advancePayment <= 0)))
           }
           className="rounded-md px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
           style={{

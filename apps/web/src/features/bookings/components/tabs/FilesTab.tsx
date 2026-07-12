@@ -132,16 +132,18 @@ export function FilesTab({ b }: { b: Booking }) {
         </div>
       </div>
 
-      <DeleteConfirmModal
-        isDeleting={false}
-        onConfirm={() => {
-          if (deletingId) {
-            deleteAttachment(deletingId);
-            setDeletingId(null);
-          }
-        }}
-        onCancel={() => setDeletingId(null)}
-      />
+      {deletingId && (
+        <DeleteConfirmModal
+          isDeleting={false}
+          onConfirm={() => {
+            if (deletingId) {
+              deleteAttachment(deletingId);
+              setDeletingId(null);
+            }
+          }}
+          onCancel={() => setDeletingId(null)}
+        />
+      )}
     </Section>
   );
 }

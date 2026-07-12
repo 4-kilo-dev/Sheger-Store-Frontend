@@ -2,15 +2,31 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuthUser } from "@/hooks/use-auth-user";
-import { getBookingDetailApi, getBookingSnapshotsApi, type Booking } from "@/features/bookings/services/bookings.api";
+import { getBookingDetailApi, getBookingSnapshotsApi, getBookingsApi, type Booking } from "@/features/bookings/services/bookings.api";
 
 export function useBookingDetail(code: string) {
   const navigate = useNavigate();
   const authUser = useAuthUser();
+  const userRole = authUser?.role?.toLowerCase() || "";
+  const isDriverOrTech = ["oo", "driver", "technician", "to"].includes(userRole);
 
   const { data: booking, isLoading, error } = useQuery<Booking>({
     queryKey: ["booking", code],
-    queryFn: () => getBookingDetailApi(code),
+    queryFn: async () => {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
+      if (!isUuid && isDriverOrTech) {
+        try {
+          const list = await getBookingsApi();
+          const found = list.find((b) => b.code === code || b.id === code);
+          if (found) {
+            return await getBookingDetailApi(found.id);
+          }
+        } catch (e) {
+          console.error("Failed to resolve booking code to UUID in useBookingDetail", e);
+        }
+      }
+      return getBookingDetailApi(code);
+    },
   });
 
   const { data: checkoutSnapshots = [] } = useQuery({
@@ -34,7 +50,6 @@ export function useBookingDetail(code: string) {
 
   // Role and relationship detection
   const isTechnician = authUser?.role?.toLowerCase() === "technician";
-  const userRole = authUser?.role?.toLowerCase() || "";
   const isUserDriver = !!(authUser?.id && booking?.driverUserId && authUser.id === booking.driverUserId);
 
   return {

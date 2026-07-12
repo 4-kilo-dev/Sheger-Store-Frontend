@@ -34,6 +34,7 @@ export interface Booking {
   status: BookingStatus;
   payment: PaymentStatus;
   amount: number;
+  paymentAmount?: number;
   ctoNotes: string;
   bomItems: BomItem[];
   teamLeader: string;
@@ -164,7 +165,8 @@ function mapBackendBookingToFrontend(b: any): Booking {
     stageHand,
     status: (b.status || "RESERVED") as BookingStatus,
     payment,
-    amount: parseFloat(b.paymentAmount || b.amount || "0"),
+    amount: typeof b.amount === "number" ? b.amount : parseFloat(b.amount || "0"),
+    paymentAmount: typeof b.paymentAmount === "number" ? b.paymentAmount : (b.paymentAmount ? parseFloat(b.paymentAmount) : undefined),
     ctoNotes: b.ctoConsultationNotes || "",
     bomItems: bomItems,
     teamLeader: teamLeader,
@@ -218,6 +220,7 @@ export async function createBookingApi(form: any): Promise<any> {
     itemServiceSpec: form.itemServiceSpec || `${form.screenType || "P4"} - ${form.size || 0}sqm - ${form.arrangement || "standard"}`,
     itemServiceType: "Rental",
     notes: form.notes || form.ctoNotes || "",
+    customFields: form.customFields || {},
   };
 
   // 3. Create booking
@@ -306,7 +309,8 @@ export async function submitEvaluationApi(bookingId: string, payload: any): Prom
 }
 
 export async function getBookingSnapshotsApi(bookingId: string, params?: { kind?: string }): Promise<any[]> {
-  return client.get<any[]>(`/api/bookings/${bookingId}/bom/snapshots`, params);
+  const query = params?.kind ? `?kind=${encodeURIComponent(params.kind)}` : "";
+  return client.get<any[]>(`/api/bookings/${bookingId}/bom/snapshots${query}`);
 }
 
 export async function deleteAssignmentApi(assignmentId: string): Promise<any> {

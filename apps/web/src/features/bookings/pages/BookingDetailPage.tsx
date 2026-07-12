@@ -60,7 +60,7 @@ export function BookingDetail() {
   const { booking, isLoading, error, checkoutSnapshot, isTechnician, userRole, isUserDriver } = detail;
 
   const actions = useBookingActions(code, booking, userRole, isUserDriver);
-  const evaluations = useBookingEvaluations(code, booking);
+  const evaluations = useBookingEvaluations(code, booking, userRole);
 
   if (isLoading) {
     return (

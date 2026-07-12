@@ -771,22 +771,29 @@ export function OverviewTab({ b, code }: { b: Booking; code: string }) {
               </div>
             </Section>
 
-            <DeleteConfirmModal
-              isDeleting={false}
-              onConfirm={() => {
-                if (techDeletingId) {
-                  techDeleteAttachment(techDeletingId);
-                  setTechDeletingId(null);
-                }
-              }}
-              onCancel={() => setTechDeletingId(null)}
-            />
+            {techDeletingId && (
+              <DeleteConfirmModal
+                isDeleting={false}
+                onConfirm={() => {
+                  if (techDeletingId) {
+                    techDeleteAttachment(techDeletingId);
+                    setTechDeletingId(null);
+                  }
+                }}
+                onCancel={() => setTechDeletingId(null)}
+              />
+            )}
           </>
         )}
 
-        {/* ─── Technician Inline Notes Workspace (ACCEPTED or ONSITE status) ─── */}
-        {isTechnician && (b.status === "ACCEPTED" || b.status === "ONSITE") && (
-          <Section title="Technician Setup Details & Field Notes" icon={MessageSquare}>
+        {/* ─── Specifications & Notes Editing Workspace ─── */}
+        {((isTechnician && (b.status === "ACCEPTED" || b.status === "ONSITE")) ||
+          ((userRole === "ccr" || userRole === "admin" || userRole === "chief_tech" || userRole === "cto") &&
+            (b.status === "RESERVED" || b.status === "CONFIRMED" || b.status === "ASSIGNED"))) && (
+          <Section
+            title={isTechnician ? "Technician Setup Details & Field Notes" : "Booking Specifications & Notes"}
+            icon={MessageSquare}
+          >
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {customFieldDefs.map((def) => {
@@ -938,7 +945,7 @@ export function OverviewTab({ b, code }: { b: Booking; code: string }) {
                   className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
                   style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
                 >
-                  {isSavingTechNotes ? "Saving..." : "Save Technical Notes"}
+                  {isSavingTechNotes ? "Saving..." : isTechnician ? "Save Technical Notes" : "Save Specifications"}
                 </button>
               </div>
             </div>
