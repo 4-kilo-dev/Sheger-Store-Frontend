@@ -34,6 +34,7 @@ import {
   updateBomLineApi,
   deleteBomLineApi,
   type Booking,
+  getCustomFieldDefinitionsApi,
 } from "@/features/bookings/services/bookings.api";
 import {
   getInventoryCategoriesApi,
@@ -79,11 +80,12 @@ export function OverviewTab({ b, code }: { b: Booking; code: string }) {
   const [reverseReason, setReverseReason] = useState("");
   const [isReversingCheckout, setIsReversingCheckout] = useState(false);
 
-  // Tech states
-  const [techNotes, setTechNotes] = useState(b.technicianNotes || "");
-  const [contentType, setContentType] = useState(b.contentType || "");
-  const [venueType, setVenueType] = useState(b.venueType || "");
-  const [hangingOrSitting, setHangingOrSitting] = useState(b.hangingOrSitting || "");
+  // Custom Fields Query & State
+  const { data: customFieldDefs = [] } = useQuery({
+    queryKey: ["custom-field-definitions"],
+    queryFn: getCustomFieldDefinitionsApi,
+  });
+  const [customFieldsEdits, setCustomFieldsEdits] = useState<Record<string, any>>({});
   const [isSavingTechNotes, setIsSavingTechNotes] = useState(false);
 
   useEffect(() => {
@@ -92,10 +94,7 @@ export function OverviewTab({ b, code }: { b: Booking; code: string }) {
     setVehicleText(b.driver || "");
     setVehiclePlate((b as any).vehiclePlate || "");
     setDriverUserId((b as any).driverUserId || "");
-    setTechNotes(b.technicianNotes || "");
-    setContentType(b.contentType || "");
-    setVenueType(b.venueType || "");
-    setHangingOrSitting(b.hangingOrSitting || "");
+    setCustomFieldsEdits(b.customFields || {});
   }, [b]);
 
   const { data: checkoutSnapshots = [] } = useQuery({
@@ -192,17 +191,10 @@ export function OverviewTab({ b, code }: { b: Booking; code: string }) {
   };
 
   const handleSaveTechNotes = async () => {
-    if (hangingOrSitting && hangingOrSitting !== "hanging" && hangingOrSitting !== "sitting") {
-      toast.error("Arrangement style must be either hanging or sitting");
-      return;
-    }
     setIsSavingTechNotes(true);
     try {
       await updateBookingApi(b.id, {
-        technicianNotes: techNotes,
-        contentType,
-        venueType,
-        hangingOrSitting: hangingOrSitting || null,
+        customFields: customFieldsEdits,
       });
       toast.success("Technician job details and notes saved!");
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
@@ -779,71 +771,172 @@ export function OverviewTab({ b, code }: { b: Booking; code: string }) {
               </div>
             </Section>
 
-            <DeleteConfirmModal
-              isDeleting={false}
-              onConfirm={() => {
-                if (techDeletingId) {
-                  techDeleteAttachment(techDeletingId);
-                  setTechDeletingId(null);
-                }
-              }}
-              onCancel={() => setTechDeletingId(null)}
-            />
+            {techDeletingId && (
+              <DeleteConfirmModal
+                isDeleting={false}
+                onConfirm={() => {
+                  if (techDeletingId) {
+                    techDeleteAttachment(techDeletingId);
+                    setTechDeletingId(null);
+                  }
+                }}
+                onCancel={() => setTechDeletingId(null)}
+              />
+            )}
           </>
         )}
 
-        {/* ─── Technician Inline Notes Workspace (ACCEPTED or ONSITE status) ─── */}
-        {isTechnician && (b.status === "ACCEPTED" || b.status === "ONSITE") && (
-          <Section title="Technician Setup Details & Field Notes" icon={MessageSquare}>
+        {/* ─── Specifications & Notes Editing Workspace ─── */}
+        {((isTechnician && (b.status === "ACCEPTED" || b.status === "ONSITE")) ||
+          ((userRole === "ccr" || userRole === "admin" || userRole === "chief_tech" || userRole === "cto") &&
+            (b.status === "RESERVED" || b.status === "CONFIRMED" || b.status === "ASSIGNED"))) && (
+          <Section
+            title={isTechnician ? "Technician Setup Details & Field Notes" : "Booking Specifications & Notes"}
+            icon={MessageSquare}
+          >
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                  Content Type
-                  <input
-                    type="text"
-                    value={contentType}
-                    onChange={(e) => setContentType(e.target.value)}
-                    placeholder="e.g. PPT, Live Stream, Loops"
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
-                    style={{ borderColor: "var(--border)" }}
-                  />
-                </label>
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                  Venue Type
-                  <input
-                    type="text"
-                    value={venueType}
-                    onChange={(e) => setVenueType(e.target.value)}
-                    placeholder="e.g. Indoor stage, Marquee"
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
-                    style={{ borderColor: "var(--border)" }}
-                  />
-                </label>
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                  Arrangement Style
-                  <select
-                    value={hangingOrSitting}
-                    onChange={(e) => setHangingOrSitting(e.target.value as any)}
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <option value="">-- Select --</option>
-                    <option value="sitting">Sitting</option>
-                    <option value="hanging">Hanging</option>
-                  </select>
-                </label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {customFieldDefs.map((def) => {
+                  const value =
+                    customFieldsEdits[def.key] ??
+                    (def.type === "boolean" ? false : def.type === "multi_select" ? [] : "");
+
+                  const labelContent = (
+                    <span className="text-[11px] font-semibold block mb-1" style={{ color: "var(--text-2)" }}>
+                      {def.name} {def.required && <span className="text-red-500">*</span>}
+                    </span>
+                  );
+
+                  if (
+                    def.key === "technician_notes" ||
+                    (def.type === "string" && def.key.includes("notes"))
+                  ) {
+                    return null;
+                  }
+
+                  return (
+                    <label key={def.id} className="block">
+                      {labelContent}
+                      {def.type === "boolean" ? (
+                        <select
+                          value={value ? "true" : "false"}
+                          onChange={(e) =>
+                            setCustomFieldsEdits((prev) => ({
+                              ...prev,
+                              [def.key]: e.target.value === "true",
+                            }))
+                          }
+                          className="h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          <option value="false">No</option>
+                          <option value="true">Yes</option>
+                        </select>
+                      ) : def.type === "enum" ? (
+                        <select
+                          value={value}
+                          onChange={(e) =>
+                            setCustomFieldsEdits((prev) => ({ ...prev, [def.key]: e.target.value }))
+                          }
+                          className="h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          <option value="">-- Select --</option>
+                          {def.options?.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      ) : def.type === "multi_select" ? (
+                        <div
+                          className="flex flex-wrap gap-2 mt-1 p-2 rounded border bg-[var(--surface-2)]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          {def.options?.map((opt) => {
+                            const arr = Array.isArray(value) ? value : [];
+                            const checked = arr.includes(opt);
+                            return (
+                              <label key={opt} className="flex items-center gap-1.5 text-[11px] cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => {
+                                    const nextArr = checked ? arr.filter((x) => x !== opt) : [...arr, opt];
+                                    setCustomFieldsEdits((prev) => ({ ...prev, [def.key]: nextArr }));
+                                  }}
+                                />
+                                {opt}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : def.type === "date" ? (
+                        <input
+                          type="date"
+                          value={value ? String(value).slice(0, 10) : ""}
+                          onChange={(e) =>
+                            setCustomFieldsEdits((prev) => ({ ...prev, [def.key]: e.target.value }))
+                          }
+                          className="h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
+                          style={{ borderColor: "var(--border)" }}
+                        />
+                      ) : def.type === "number" ? (
+                        <input
+                          type="number"
+                          value={value}
+                          onChange={(e) =>
+                            setCustomFieldsEdits((prev) => ({
+                              ...prev,
+                              [def.key]: parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                          className="h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
+                          style={{ borderColor: "var(--border)" }}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={value}
+                          onChange={(e) =>
+                            setCustomFieldsEdits((prev) => ({ ...prev, [def.key]: e.target.value }))
+                          }
+                          className="h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px]"
+                          style={{ borderColor: "var(--border)" }}
+                        />
+                      )}
+                    </label>
+                  );
+                })}
               </div>
 
-              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                Setup Notes & Observations (Technician-specific)
-                <textarea
-                  value={techNotes}
-                  onChange={(e) => setTechNotes(e.target.value)}
-                  placeholder="Provide specific notes about structure alignment, visual quality, pixel issues, or other technician observations..."
-                  className="mt-1 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px] h-24 block resize-none"
-                  style={{ borderColor: "var(--border)" }}
-                />
-              </label>
+              {customFieldDefs
+                .filter(
+                  (def) =>
+                    def.key === "technician_notes" ||
+                    (def.type === "string" && def.key.includes("notes"))
+                )
+                .map((def) => {
+                  const value = customFieldsEdits[def.key] ?? "";
+                  return (
+                    <label
+                      key={def.id}
+                      className="text-[11px] font-semibold block mt-3"
+                      style={{ color: "var(--text-2)" }}
+                    >
+                      {def.name} {def.required && <span className="text-red-500">*</span>}
+                      <textarea
+                        value={value}
+                        onChange={(e) =>
+                          setCustomFieldsEdits((prev) => ({ ...prev, [def.key]: e.target.value }))
+                        }
+                        placeholder={`Provide details for ${def.name}...`}
+                        className="mt-1 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px] h-24 block resize-none"
+                        style={{ borderColor: "var(--border)" }}
+                      />
+                    </label>
+                  );
+                })}
 
               <div className="flex justify-end">
                 <button
@@ -852,7 +945,7 @@ export function OverviewTab({ b, code }: { b: Booking; code: string }) {
                   className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
                   style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
                 >
-                  {isSavingTechNotes ? "Saving..." : "Save Technical Notes"}
+                  {isSavingTechNotes ? "Saving..." : isTechnician ? "Save Technical Notes" : "Save Specifications"}
                 </button>
               </div>
             </div>
@@ -1596,9 +1689,19 @@ export function OverviewTab({ b, code }: { b: Booking; code: string }) {
             <KV label="Arrangement" value={b.arrangement} mono />
             <KV label="Screen Type" value={b.screenType} mono />
             <KV label="Size (sqm)" value={b.size} mono />
-            {b.contentType && <KV label="Content Type" value={b.contentType} />}
-            {b.venueType && <KV label="Venue Type" value={b.venueType} />}
-            {b.hangingOrSitting && <KV label="Arrangement Style" value={b.hangingOrSitting} />}
+            {customFieldDefs
+              .filter((def) => def.key !== "technician_notes")
+              .map((def) => {
+                const val = b.customFields?.[def.key];
+                if (val === undefined || val === null || val === "") return null;
+                let displayVal = val;
+                if (def.type === "multi_select" && Array.isArray(val)) {
+                  displayVal = val.join(", ");
+                } else if (def.type === "boolean") {
+                  displayVal = val ? "Yes" : "No";
+                }
+                return <KV key={def.id} label={def.name} value={String(displayVal)} />;
+              })}
           </div>
         </Section>
 
@@ -1623,16 +1726,22 @@ export function OverviewTab({ b, code }: { b: Booking; code: string }) {
                 {b.ctoNotes || "No special requirements noted. Coordinate with venue AV for power distribution."}
               </p>
             </div>
-            {b.technicianNotes && (
-              <div className="border-t pt-2.5" style={{ borderColor: "var(--border)" }}>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-3)] block mb-1">
-                  Technician Setup & Field Notes
-                </span>
-                <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-2)" }}>
-                  {b.technicianNotes}
-                </p>
-              </div>
-            )}
+            {customFieldDefs
+              .filter((def) => def.key === "technician_notes")
+              .map((def) => {
+                const val = b.customFields?.[def.key];
+                if (!val) return null;
+                return (
+                  <div key={def.id} className="border-t pt-2.5" style={{ borderColor: "var(--border)" }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-3)] block mb-1">
+                      {def.name}
+                    </span>
+                    <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-2)" }}>
+                      {val}
+                    </p>
+                  </div>
+                );
+              })}
           </div>
         </Section>
       </div>

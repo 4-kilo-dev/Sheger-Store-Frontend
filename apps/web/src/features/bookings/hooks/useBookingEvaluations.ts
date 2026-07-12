@@ -12,8 +12,10 @@ import {
 } from "@/features/bookings/services/evaluations.api";
 import { transitionBookingStatusApi, type Booking } from "@/features/bookings/services/bookings.api";
 
-export function useBookingEvaluations(code: string, booking: Booking | undefined) {
+export function useBookingEvaluations(code: string, booking: Booking | undefined, userRole?: string) {
   const queryClient = useQueryClient();
+
+  const isAllowedToEvaluate = !!userRole && ["admin", "supervisor", "chief_tech", "cto"].includes(userRole);
 
   // Internal Evaluation Modal states
   const [showInternalModal, setShowInternalModal] = useState(false);
@@ -32,20 +34,21 @@ export function useBookingEvaluations(code: string, booking: Booking | undefined
   const { data: metrics } = useQuery({
     queryKey: ["active-metrics"],
     queryFn: () => listPerformanceMetricsApi({ isActive: true }),
+    enabled: isAllowedToEvaluate,
   });
   
   const { data: internalEval, isLoading: loadingInternal } = useQuery({
-    queryKey: ["booking-internal-eval", code],
-    queryFn: () => getInternalEvaluationApi(code),
+    queryKey: ["booking-internal-eval", booking?.id || code],
+    queryFn: () => getInternalEvaluationApi(booking?.id || code),
     retry: false,
-    enabled: !!code,
+    enabled: !!(booking?.id || code) && isAllowedToEvaluate,
   });
 
   const { data: clientEval, isLoading: loadingClient } = useQuery({
-    queryKey: ["booking-client-eval", code],
-    queryFn: () => getClientEvaluationApi(code),
+    queryKey: ["booking-client-eval", booking?.id || code],
+    queryFn: () => getClientEvaluationApi(booking?.id || code),
     retry: false,
-    enabled: !!code,
+    enabled: !!(booking?.id || code) && isAllowedToEvaluate,
   });
 
   const internalMetrics = metrics?.filter((m) => m.category === "internal") || [];
@@ -53,13 +56,13 @@ export function useBookingEvaluations(code: string, booking: Booking | undefined
 
   const { mutate: submitInternal, isPending: submittingInternal } = useMutation({
     mutationFn: async (payload: SubmitInternalEvaluationPayload) => {
-      const res = await submitInternalEvaluationApi(code, payload);
+      const res = await submitInternalEvaluationApi(booking?.id || code, payload);
       await transitionBookingStatusApi(code, "COMPLETED");
       return res;
     },
     onSuccess: () => {
       toast.success("Internal crew evaluation submitted!");
-      queryClient.invalidateQueries({ queryKey: ["booking-internal-eval", code] });
+      queryClient.invalidateQueries({ queryKey: ["booking-internal-eval", booking?.id || code] });
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       setShowInternalModal(false);
@@ -72,10 +75,10 @@ export function useBookingEvaluations(code: string, booking: Booking | undefined
   });
 
   const { mutate: simulateWebhook, isPending: submittingWebhook } = useMutation({
-    mutationFn: (payload: SubmitClientEvaluationPayload) => submitClientEvaluationApi(code, payload),
+    mutationFn: (payload: SubmitClientEvaluationPayload) => submitClientEvaluationApi(booking?.id || code, payload),
     onSuccess: () => {
       toast.success("Client feedback simulated via webhook!");
-      queryClient.invalidateQueries({ queryKey: ["booking-client-eval", code] });
+      queryClient.invalidateQueries({ queryKey: ["booking-client-eval", booking?.id || code] });
       setShowWebhookModal(false);
       setRespondentName("");
       setClientScores({});

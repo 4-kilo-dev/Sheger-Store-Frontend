@@ -34,6 +34,7 @@ export interface Booking {
   status: BookingStatus;
   payment: PaymentStatus;
   amount: number;
+  paymentAmount?: number;
   ctoNotes: string;
   bomItems: BomItem[];
   teamLeader: string;
@@ -44,10 +45,17 @@ export interface Booking {
   statusHistory?: StatusHistoryItem[];
   itemServiceSpec?: string;
   assignments?: any[];
-  technicianNotes?: string;
-  contentType?: string;
-  venueType?: string;
-  hangingOrSitting?: "hanging" | "sitting" | "";
+  customFields: Record<string, any>;
+}
+
+export interface CustomFieldDefinition {
+  id: string;
+  name: string;
+  key: string;
+  type: "boolean" | "number" | "string" | "date" | "enum" | "multi_select";
+  options?: string[];
+  required?: boolean;
+  isActive?: boolean;
 }
 
 export interface StatusHistoryItem {
@@ -157,7 +165,8 @@ function mapBackendBookingToFrontend(b: any): Booking {
     stageHand,
     status: (b.status || "RESERVED") as BookingStatus,
     payment,
-    amount: parseFloat(b.paymentAmount || b.amount || "0"),
+    amount: typeof b.amount === "number" ? b.amount : parseFloat(b.amount || "0"),
+    paymentAmount: typeof b.paymentAmount === "number" ? b.paymentAmount : (b.paymentAmount ? parseFloat(b.paymentAmount) : undefined),
     ctoNotes: b.ctoConsultationNotes || "",
     bomItems: bomItems,
     teamLeader: teamLeader,
@@ -168,10 +177,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
     statusHistory,
     itemServiceSpec: b.itemServiceSpec || "",
     assignments: b.assignments || [],
-    technicianNotes: b.technicianNotes || "",
-    contentType: b.contentType || "",
-    venueType: b.venueType || "",
-    hangingOrSitting: b.hangingOrSitting || "",
+    customFields: b.customFields || {},
   };
 }
 
@@ -214,6 +220,7 @@ export async function createBookingApi(form: any): Promise<any> {
     itemServiceSpec: form.itemServiceSpec || `${form.screenType || "P4"} - ${form.size || 0}sqm - ${form.arrangement || "standard"}`,
     itemServiceType: "Rental",
     notes: form.notes || form.ctoNotes || "",
+    customFields: form.customFields || {},
   };
 
   // 3. Create booking
@@ -302,7 +309,8 @@ export async function submitEvaluationApi(bookingId: string, payload: any): Prom
 }
 
 export async function getBookingSnapshotsApi(bookingId: string, params?: { kind?: string }): Promise<any[]> {
-  return client.get<any[]>(`/api/bookings/${bookingId}/bom/snapshots`, params);
+  const query = params?.kind ? `?kind=${encodeURIComponent(params.kind)}` : "";
+  return client.get<any[]>(`/api/bookings/${bookingId}/bom/snapshots${query}`);
 }
 
 export async function deleteAssignmentApi(assignmentId: string): Promise<any> {
@@ -311,4 +319,18 @@ export async function deleteAssignmentApi(assignmentId: string): Promise<any> {
 
 export async function checkoutReverseApi(bookingId: string, reason: string): Promise<any> {
   return client.post(`/api/bookings/${bookingId}/checkout-reverse`, { reason });
+}
+
+export async function getCustomFieldDefinitionsApi(): Promise<CustomFieldDefinition[]> {
+  return client.get<CustomFieldDefinition[]>("/api/custom-field-definitions");
+}
+
+export async function createCustomFieldDefinitionApi(
+  payload: Omit<CustomFieldDefinition, "id" | "isActive">
+): Promise<CustomFieldDefinition> {
+  return client.post<CustomFieldDefinition>("/api/custom-field-definitions", payload);
+}
+
+export async function deleteCustomFieldDefinitionApi(id: string): Promise<void> {
+  return client.delete<void>(`/api/custom-field-definitions/${id}`);
 }
