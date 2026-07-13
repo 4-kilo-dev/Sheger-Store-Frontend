@@ -13,6 +13,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles/styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { authStorage } from "../lib/api/client";
+import { refreshAuthUser } from "@/features/auth/services/auth.api";
 
 function NotFoundComponent() {
   return (
@@ -102,7 +103,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
     const token = authStorage.getToken();
     const isPublicRoute = ["/login", "/otp"].includes(location.pathname);
-    
+
     // Treat stringified undefined/null as falsy
     const hasValidToken = !!(token && token !== "undefined" && token !== "null");
 
@@ -162,6 +163,16 @@ import { CalendarSystemProvider } from "@/context/CalendarSystemContext";
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  // Bootstrap effective permissions once per session load
+  useEffect(() => {
+    const token = authStorage.getToken();
+    const hasValidToken = !!(token && token !== "undefined" && token !== "null");
+    if (!hasValidToken) return;
+    refreshAuthUser().catch(() => {
+      // 401 handled by API client; keep cached user on other errors
+    });
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
