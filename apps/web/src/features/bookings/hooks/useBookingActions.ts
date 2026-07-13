@@ -15,17 +15,17 @@ import {
 } from "@/features/bookings/services/bookings.api";
 import { getStaffApi } from "@/features/users/services/staff.api";
 import { checkoutBookingApi } from "@/features/checkout/services/operations.api";
-import { BOOKING_ACTIONS, type BookingAction } from "@/features/bookings/constants";
+import type { BookingAction } from "@/features/bookings/constants";
 
 export function useBookingActions(
   code: string,
   booking: Booking | undefined,
-  userRole: string,
-  isUserDriver: boolean
+  options?: { canFetchStaff?: boolean }
 ) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const authUser = useAuthUser();
+  const canFetchStaff = options?.canFetchStaff ?? false;
 
   const [showActionModal, setShowActionModal] = useState(false);
   const [selectedAction, setSelectedAction] = useState<BookingAction | null>(null);
@@ -34,7 +34,7 @@ export function useBookingActions(
   const [paymentType, setPaymentType] = useState<"advance" | "fully_paid">("advance");
   const [paymentMethod, setPaymentMethod] = useState("Bank Transfer");
   const [advancePayment, setAdvancePayment] = useState(0);
-  const [ fullPayment, setfullPayment] = useState(0);
+  const [fullPayment, setfullPayment] = useState(0);
 
   const [checkoutTeamLeader, setCheckoutTeamLeader] = useState("");
   const [checkoutDriver, setCheckoutDriver] = useState("");
@@ -53,16 +53,16 @@ export function useBookingActions(
 
   const [staff, setStaff] = useState<any[]>([]);
 
-  // Initialize full payment and advance payment from booking when booking changes
   useEffect(() => {
     if (booking) {
       setfullPayment(booking.amount);
       const existingAdvance = booking.customFields?.advancePayment;
-      setAdvancePayment(existingAdvance !== undefined ? parseFloat(existingAdvance) : booking.amount / 2);
+      setAdvancePayment(
+        existingAdvance !== undefined ? parseFloat(existingAdvance) : booking.amount / 2
+      );
     }
   }, [booking]);
 
-  // Initialize checkout fields when booking changes
   useEffect(() => {
     if (booking) {
       setCheckoutTeamLeader(booking.teamLeader || "");
@@ -72,49 +72,27 @@ export function useBookingActions(
     }
   }, [booking]);
 
-  // Load staff list if allowed
   useEffect(() => {
-    const rolesAllowedToFetchStaff = ["admin", "supervisor", "chief_tech", "cto", "oo"];
-    if (!rolesAllowedToFetchStaff.includes(userRole)) return;
+    if (!canFetchStaff) return;
     getStaffApi()
       .then(setStaff)
       .catch((e) => console.error("Failed to load staff in useBookingActions", e));
-  }, [userRole]);
+  }, [canFetchStaff]);
 
-  // Find technician's pending assignment
   const myTechnicianAssignment = useMemo(() => {
-    if (!booking || !booking.assignments) return null;
-    return booking.assignments.find(
-      (a: any) => a.userId === authUser?.id && a.roleContext === "TECHNICIAN"
+    if (!booking?.assignments || !authUser?.id) return null;
+    return (
+      booking.assignments.find(
+        (a: any) =>
+          a.userId === authUser.id &&
+          (a.roleContext === "TECHNICIAN" || a.roleContext === "technician")
+      ) || null
     );
   }, [booking, authUser]);
 
-  const pendingAssignment = useMemo(() => {
-    return !!(myTechnicianAssignment && myTechnicianAssignment.respondedAt === null);
-  }, [myTechnicianAssignment]);
-
-  const computedActions = useMemo(() => {
-    if (!booking || !userRole) return [];
-    const list = BOOKING_ACTIONS[booking.status] || [];
-    const hasTechnicalHolds = !!booking.ctoNotes || !!booking.itemServiceSpec;
-
-    return list.filter((act) => {
-      const isRoleAllowed = act.allowedRoles.includes(userRole);
-      if (!isRoleAllowed) return false;
-
-      // Special case: Confirm Booking is gated by technical holds being saved
-      if (booking.status === "RESERVED" && act.id === "booking.confirm") {
-        return hasTechnicalHolds;
-      }
-
-      // Special case: Accept/Decline is driver-restricted
-      if (booking.status === "ASSIGNED" && (act.id === "assignment.accept" || act.id === "assignment.decline")) {
-        const isSupervisorOrAdmin = ["admin", "supervisor"].includes(userRole);
-        return isUserDriver || isSupervisorOrAdmin;
-      }
-      return true;
-    });
-  }, [booking, userRole, isUserDriver]);
+  const pendingAssignment = !!(
+    myTechnicianAssignment && myTechnicianAssignment.respondedAt == null
+  );
 
   const { mutate: acceptAssignment, isPending: accepting } = useMutation({
     mutationFn: () => {
@@ -125,6 +103,7 @@ export function useBookingActions(
       toast.success("Assignment accepted successfully!");
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions"] });
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to accept assignment");
@@ -194,6 +173,7 @@ export function useBookingActions(
       toast.success("Checkout completed successfully! Booking status updated to ONSITE.");
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions", booking?.id] });
       setShowActionModal(false);
       setSelectedAction(null);
     },
@@ -203,12 +183,20 @@ export function useBookingActions(
   });
 
   const { mutate: transitionStatus, isPending: isTransitioning } = useMutation({
-    mutationFn: ({ toStatus, reason }: { toStatus: BookingStatus; reason?: string }) =>
-      transitionBookingStatusApi(code, toStatus, reason),
+    mutationFn: ({
+      toStatus,
+      reason,
+      override,
+    }: {
+      toStatus: BookingStatus;
+      reason?: string;
+      override?: boolean;
+    }) => transitionBookingStatusApi(code, toStatus, reason, override ?? false),
     onSuccess: () => {
       toast.success("Booking state advanced successfully!");
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions", booking?.id] });
       setShowActionModal(false);
       setSelectedAction(null);
     },
@@ -224,6 +212,7 @@ export function useBookingActions(
       toast.success("Payment recorded successfully!");
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions", booking?.id] });
       setShowActionModal(false);
       setSelectedAction(null);
     },
@@ -259,6 +248,7 @@ export function useBookingActions(
       toast.success("Booking confirmed and payment recorded successfully!");
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions", booking?.id] });
       setShowActionModal(false);
       setSelectedAction(null);
     },
@@ -309,7 +299,6 @@ export function useBookingActions(
     staff,
     myTechnicianAssignment,
     pendingAssignment,
-    computedActions,
     acceptAssignment,
     accepting,
     declineAssignment,

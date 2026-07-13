@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { authStorage } from "@/lib/api/client";
 
 /**
- * The raw user object returned by the backend login response.
- * `role` is the backend role key (e.g., "admin", "ccr", "chief_tech", "technician", "oo", "storekeeper").
+ * Backend auth user from login / GET /auth/me.
+ * - `permissions` = raw DB union of permission keys (sole source for can()).
+ * - `roles` = informational role keys (badges / admin UX).
+ * - `role` = cosmetic first role (display / back-compat only — never gate on it).
  */
 export interface AuthUser {
   id: string;
@@ -11,13 +13,15 @@ export interface AuthUser {
   email: string;
   phone?: string;
   role: string;
+  roles?: string[];
+  permissions?: string[];
   team?: string;
 }
 
 /**
- * Hook that exposes the raw backend user object stored at login.
- * Use this for permission checks (user.role is the backend role key).
- * For display purposes (name, initials, color), use `useActiveProfile()` instead.
+ * Hook that exposes the stored backend user (login or /auth/me).
+ * For permission checks use `usePermissions()` / `can()`.
+ * For display (name, initials, color), use `useActiveProfile()`.
  */
 export function useAuthUser(): AuthUser | null {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -27,7 +31,6 @@ export function useAuthUser(): AuthUser | null {
     if (stored) setUser(stored);
   }, []);
 
-  // Listen for login/logout changes
   useEffect(() => {
     const syncUser = () => {
       const stored = authStorage.getUser();

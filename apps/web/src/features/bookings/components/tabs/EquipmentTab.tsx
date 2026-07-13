@@ -1,93 +1,24 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { useAuthUser } from "@/hooks/use-auth-user";
 import { Package, Trash2 } from "lucide-react";
 import { Section } from "@/features/bookings/components/shared/Section";
-import {
-  createBomLineApi,
-  updateBomLineApi,
-  deleteBomLineApi,
-  type Booking,
-} from "@/features/bookings/services/bookings.api";
-import { getInventoryPoolsApi } from "@/features/inventory/services/inventory.api";
+import type { Booking } from "@/features/bookings/services/bookings.api";
+import type { BookingCapabilities } from "@/features/bookings/hooks/useBookingCapabilities";
+import { useBookingBom } from "@/features/bookings/hooks/useBookingBom";
 
-export function EquipmentTab({ b }: { b: Booking }) {
-  const queryClient = useQueryClient();
-  const authUser = useAuthUser();
-  const userRole = authUser?.role?.toLowerCase() || "";
-  const isCtoOrAdmin = userRole === "admin" || userRole === "chief_tech";
-  const isTechnician = userRole === "technician";
-
-  const isEditable = isCtoOrAdmin || (isTechnician && b.status === "ACCEPTED");
-
-  // Local state for adding items
-  const [selectedPoolId, setSelectedPoolId] = useState("");
-  const [addQty, setAddQty] = useState(1);
-
-  // Queries
-  const { data: pools = [] } = useQuery({
-    queryKey: ["inventory-pools"],
-    queryFn: getInventoryPoolsApi,
-    enabled: isEditable,
-  });
-
-  // Mutations
-  const { mutate: addBomLine, isPending: addingLine } = useMutation({
-    mutationFn: ({ poolId, quantity }: { poolId: string; quantity: number }) =>
-      createBomLineApi(b.id, { poolId, quantity: String(quantity) }),
-    onSuccess: () => {
-      toast.success("Item added to BOM");
-      queryClient.invalidateQueries({ queryKey: ["booking", b.code] });
-      setSelectedPoolId("");
-      setAddQty(1);
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to add item to BOM");
-    },
-  });
-
-  const { mutate: updateBomLine, isPending: updatingLine } = useMutation({
-    mutationFn: ({ lineId, quantity }: { lineId: string; quantity: number }) =>
-      updateBomLineApi(b.id, lineId, { quantity: String(quantity) }),
-    onSuccess: () => {
-      toast.success("BOM quantity updated");
-      queryClient.invalidateQueries({ queryKey: ["booking", b.code] });
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to update quantity");
-    },
-  });
-
-  const { mutate: deleteBomLine, isPending: deletingLine } = useMutation({
-    mutationFn: (lineId: string) => deleteBomLineApi(b.id, lineId),
-    onSuccess: () => {
-      toast.success("Item removed from BOM");
-      queryClient.invalidateQueries({ queryKey: ["booking", b.code] });
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to remove item");
-    },
-  });
-
-  const handleAddItem = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedPoolId) {
-      toast.error("Please select an item pool");
-      return;
-    }
-    if (addQty <= 0) {
-      toast.error("Quantity must be at least 1");
-      return;
-    }
-    addBomLine({ poolId: selectedPoolId, quantity: addQty });
-  };
+export function EquipmentTab({
+  b,
+  caps,
+}: {
+  b: Booking;
+  caps: BookingCapabilities;
+}) {
+  const isEditable = caps.canEditBom;
+  const bom = useBookingBom(b, isEditable);
 
   return (
     <div className="space-y-4">
       {isEditable && (
         <Section title="BOM Creator - Add Item" icon={Package}>
-          <form onSubmit={handleAddItem} className="flex flex-col md:flex-row items-end gap-3">
+          <form onSubmit={bom.handleAddItem} className="flex flex-col md:flex-row items-end gap-3">
             <div className="flex-1 w-full">
               <label
                 className="text-[11px] font-semibold block mb-1"
@@ -96,13 +27,13 @@ export function EquipmentTab({ b }: { b: Booking }) {
                 Select Equipment / Pool
               </label>
               <select
-                value={selectedPoolId}
-                onChange={(e) => setSelectedPoolId(e.target.value)}
+                value={bom.selectedPoolId}
+                onChange={(e) => bom.setSelectedPoolId(e.target.value)}
                 className="h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
                 style={{ borderColor: "var(--border)" }}
               >
                 <option value="">-- Choose Equipment --</option>
-                {pools.map((p: any) => (
+                {bom.pools.map((p: any) => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.category?.name || "General"})
                   </option>
@@ -119,15 +50,15 @@ export function EquipmentTab({ b }: { b: Booking }) {
               <input
                 type="number"
                 min="1"
-                value={addQty}
-                onChange={(e) => setAddQty(Math.max(1, parseInt(e.target.value) || 1))}
+                value={bom.addQty}
+                onChange={(e) => bom.setAddQty(Math.max(1, parseInt(e.target.value) || 1))}
                 className="h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] text-right font-mono"
                 style={{ borderColor: "var(--border)" }}
               />
             </div>
             <button
               type="submit"
-              disabled={addingLine}
+              disabled={bom.addingLine}
               className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 h-9 flex items-center gap-1.5 shrink-0"
               style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
             >
@@ -176,9 +107,12 @@ export function EquipmentTab({ b }: { b: Booking }) {
                         <button
                           type="button"
                           onClick={() =>
-                            updateBomLine({ lineId: it.id, quantity: Math.max(1, it.qty - 1) })
+                            bom.updateBomLine({
+                              lineId: it.id,
+                              quantity: Math.max(1, it.qty - 1),
+                            })
                           }
-                          disabled={updatingLine || it.qty <= 1}
+                          disabled={bom.updatingLine || it.qty <= 1}
                           className="h-6 w-6 rounded border bg-[var(--surface-2)] flex items-center justify-center text-[12px] transition hover:border-[var(--accent)] disabled:opacity-30"
                           style={{ borderColor: "var(--border)" }}
                         >
@@ -187,8 +121,10 @@ export function EquipmentTab({ b }: { b: Booking }) {
                         <span className="font-mono font-semibold w-10 text-center">{it.qty}</span>
                         <button
                           type="button"
-                          onClick={() => updateBomLine({ lineId: it.id, quantity: it.qty + 1 })}
-                          disabled={updatingLine}
+                          onClick={() =>
+                            bom.updateBomLine({ lineId: it.id, quantity: it.qty + 1 })
+                          }
+                          disabled={bom.updatingLine}
                           className="h-6 w-6 rounded border bg-[var(--surface-2)] flex items-center justify-center text-[12px] transition hover:border-[var(--accent)]"
                           style={{ borderColor: "var(--border)" }}
                         >
@@ -205,10 +141,10 @@ export function EquipmentTab({ b }: { b: Booking }) {
                         type="button"
                         onClick={() => {
                           if (confirm(`Remove ${it.name} from the BOM?`)) {
-                            deleteBomLine(it.id);
+                            bom.deleteBomLine(it.id);
                           }
                         }}
-                        disabled={deletingLine}
+                        disabled={bom.deletingLine}
                         className="text-destructive hover:scale-110 transition p-1"
                         title="Remove item"
                       >
