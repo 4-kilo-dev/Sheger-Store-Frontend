@@ -1,16 +1,12 @@
-import { TABS, type TabName } from "@/features/bookings/constants";
+import type { TabName } from "@/features/bookings/constants";
 
 interface BookingTabBarProps {
-  isTechnician: boolean;
+  visibleTabs: TabName[];
   tab: TabName;
   setTab: (tab: TabName) => void;
 }
 
-export function BookingTabBar({ isTechnician, tab, setTab }: BookingTabBarProps) {
-  const visibleTabs = isTechnician
-    ? TABS.filter((t) => t !== "Payments" && t !== "Schedule" && t !== "Team")
-    : TABS;
-
+export function BookingTabBar({ visibleTabs, tab, setTab }: BookingTabBarProps) {
   return (
     <div
       className="mb-4 flex items-center gap-1 border-b"

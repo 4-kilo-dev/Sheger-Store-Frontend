@@ -8,6 +8,7 @@ import {
   Truck,
   AlertTriangle,
   PackageCheck,
+  Undo2,
 } from "lucide-react";
 import type { BookingStatus } from "@/features/bookings/services/bookings.api";
 
@@ -24,192 +25,130 @@ export const TABS = [
 
 export type TabName = (typeof TABS)[number];
 
-export interface BookingAction {
+/** Presentation-only metadata keyed by backend `actionId` (not auth). */
+export interface BookingActionUI {
   id: string;
   label: string;
   icon: LucideIcon;
-  targetStatus: BookingStatus;
-  allowedRoles: string[];
   variant: "primary" | "outline" | "destructive";
-  requiresReason?: boolean;
   requiresForm?: string;
-  color?: string;
 }
 
-export const BOOKING_ACTIONS: Record<BookingStatus, BookingAction[]> = {
-  RESERVED: [
-    {
-      id: "booking.confirm",
-      label: "Confirm Booking",
-      icon: DollarSign,
-      targetStatus: "CONFIRMED",
-      allowedRoles: ["admin", "supervisor", "ccr", "chief_tech"],
-      variant: "primary",
-      requiresForm: "payment",
-    },
-    {
-      id: "booking.cancel",
-      label: "Cancel Booking",
-      icon: X,
-      targetStatus: "CANCELED",
-      allowedRoles: ["admin", "supervisor", "ccr", "chief_tech", "oo"],
-      variant: "destructive",
-    },
-  ],
-  CONFIRMED: [
-    {
-      id: "assignment.assign_technician",
-      label: "Assign Technician",
-      icon: UserCheck,
-      targetStatus: "ASSIGNED",
-      allowedRoles: ["admin", "supervisor", "chief_tech"],
-      variant: "primary",
-      requiresForm: "assign",
-    },
-    {
-      id: "booking.cancel",
-      label: "Cancel Booking",
-      icon: X,
-      targetStatus: "CANCELED",
-      allowedRoles: ["admin", "supervisor", "ccr", "chief_tech", "oo"],
-      variant: "destructive",
-    },
-  ],
-  ASSIGNED: [
-    {
-      id: "assignment.accept",
-      label: "Accept Assignment",
-      icon: CheckCircle2,
-      targetStatus: "ACCEPTED",
-      allowedRoles: ["admin", "supervisor", "technician"],
-      variant: "primary",
-    },
-    {
-      id: "assignment.decline",
-      label: "Decline",
-      icon: X,
-      targetStatus: "CONFIRMED",
-      allowedRoles: ["admin", "supervisor", "technician"],
-      variant: "outline",
-      requiresReason: true,
-    },
-    {
-      id: "booking.cancel",
-      label: "Cancel Booking",
-      icon: X,
-      targetStatus: "CANCELED",
-      allowedRoles: ["admin", "supervisor", "ccr", "chief_tech", "oo"],
-      variant: "destructive",
-    },
-  ],
-  ACCEPTED: [
-    {
-      id: "bom.create",
-      label: "Prepare Checklist (BOM)",
-      icon: Package,
-      targetStatus: "PREPARATION",
-      allowedRoles: ["admin", "supervisor", "chief_tech"],
-      variant: "primary",
-    },
-    {
-      id: "booking.cancel",
-      label: "Cancel Booking",
-      icon: X,
-      targetStatus: "CANCELED",
-      allowedRoles: ["admin", "supervisor", "ccr", "chief_tech", "oo"],
-      variant: "destructive",
-    },
-  ],
-  PREPARATION: [
-    {
-      id: "inventory.checkout",
-      label: "Check-out Gear",
-      icon: Truck,
-      targetStatus: "ONSITE",
-      allowedRoles: ["admin", "supervisor", "storekeeper", "oo"],
-      variant: "primary",
-      requiresForm: "dispatch",
-    },
-    {
-      id: "booking.cancel_override",
-      label: "Force Cancel",
-      icon: AlertTriangle,
-      targetStatus: "CANCELED",
-      allowedRoles: ["admin", "supervisor"],
-      variant: "destructive",
-      requiresReason: true,
-    },
-  ],
-  ONSITE: [
-    {
-      id: "eval.submit_internal",
-      label: "Submit Event Evaluation",
-      icon: CheckCircle2,
-      targetStatus: "COMPLETED",
-      allowedRoles: [
-        "admin",
-        "supervisor",
-        "chief_tech",
-        "technician",
-        "oo",
-      ],
-      variant: "primary",
-    },
-    {
-      id: "inventory.checkin",
-      label: "Check-in Gear",
-      icon: PackageCheck,
-      targetStatus: "DONE",
-      allowedRoles: ["admin", "supervisor", "storekeeper", "oo"],
-      variant: "outline",
-    },
-    {
-      id: "booking.cancel_override",
-      label: "Force Cancel",
-      icon: AlertTriangle,
-      targetStatus: "CANCELED",
-      allowedRoles: ["admin", "supervisor"],
-      variant: "destructive",
-      requiresReason: true,
-    },
-  ],
-  COMPLETED: [
-    {
-      id: "inventory.checkin",
-      label: "Check-in Remaining Gear",
-      icon: PackageCheck,
-      targetStatus: "DONE",
-      allowedRoles: ["admin", "supervisor", "storekeeper", "oo"],
-      variant: "primary",
-    },
-    {
-      id: "booking.cancel_override",
-      label: "Force Cancel",
-      icon: AlertTriangle,
-      targetStatus: "CANCELED",
-      allowedRoles: ["admin", "supervisor"],
-      variant: "destructive",
-      requiresReason: true,
-    },
-  ],
-  PARTIALLY_RETURNED: [
-    {
-      id: "inventory.checkin",
-      label: "Check-in Remaining Gear",
-      icon: PackageCheck,
-      targetStatus: "DONE",
-      allowedRoles: ["admin", "supervisor", "storekeeper", "oo"],
-      variant: "primary",
-    },
-    {
-      id: "inventory.checkout",
-      label: "Check-out Equipment",
-      icon: Truck,
-      targetStatus: "ONSITE",
-      allowedRoles: ["admin", "supervisor", "storekeeper", "oo"],
-      variant: "outline",
-    },
-  ],
-  DONE: [],
-  CANCELED: [],
+/** Action ready for the action bar / modal — transition + UI registry. */
+export interface BookingAction extends BookingActionUI {
+  targetStatus: BookingStatus;
+  permissionKey: string;
+  /** @deprecated prefer reasonRequired — kept for modal compat */
+  requiresReason?: boolean;
+  reasonRequired?: boolean;
+  viaBypass?: boolean;
+}
+
+function ui(
+  id: string,
+  label: string,
+  icon: LucideIcon,
+  variant: BookingActionUI["variant"] = "primary",
+  requiresForm?: string
+): BookingActionUI {
+  return { id, label, icon, variant, requiresForm };
+}
+
+/**
+ * FE labels/icons/forms keyed by backend transition `actionId`
+ * (see backend `transition-action-ids.ts`). Also keyed by permissionKey as fallback.
+ * Auth comes from GET /bookings/:id/allowed-transitions — not role lists.
+ */
+export const BOOKING_ACTION_UI: Record<string, BookingActionUI> = {
+  // Forward transitions (BE actionIds)
+  "booking.confirm": ui("booking.confirm", "Confirm Booking", DollarSign, "primary", "payment"),
+  "booking.assign": ui(
+    "assignment.assign_technician",
+    "Assign Technician",
+    UserCheck,
+    "primary",
+    "assign"
+  ),
+  "booking.accept": ui("assignment.accept", "Accept Assignment", CheckCircle2),
+  "booking.advance_preparation": ui("bom.create", "Submit BOM to Operations", Package),
+  "booking.checkout": ui("inventory.checkout", "Check-out Gear", Truck, "primary", "dispatch"),
+  "booking.complete": ui("eval.submit_internal", "Submit Event Evaluation", CheckCircle2),
+  "booking.partial_return": ui("inventory.checkin", "Partial Check-in", PackageCheck, "outline"),
+  "booking.done": ui("inventory.checkin", "Check-in Gear", PackageCheck, "outline"),
+  "booking.checkout_reverse": ui(
+    "inventory.checkout_reverse",
+    "Reverse Checkout",
+    Undo2,
+    "outline"
+  ),
+  "booking.cancel": ui("booking.cancel", "Cancel Booking", X, "destructive"),
+  "booking.cancel_override": ui(
+    "booking.cancel_override",
+    "Force Cancel",
+    AlertTriangle,
+    "destructive"
+  ),
+
+  // Reverse / undo edges
+  "booking.unconfirm": ui("booking.confirm", "Revert to Reserved", Undo2, "outline"),
+  "booking.unassign": ui("assignment.assign_technician", "Revert to Confirmed", Undo2, "outline"),
+  "booking.revert_accept": ui("assignment.accept", "Revert to Assigned", Undo2, "outline"),
+  "booking.revert_preparation": ui("bom.create", "Revert to Accepted", Undo2, "outline"),
+
+  // Permission-key fallbacks (when actionId missing or unknown)
+  "assignment.assign_technician": ui(
+    "assignment.assign_technician",
+    "Assign Technician",
+    UserCheck,
+    "primary",
+    "assign"
+  ),
+  "assignment.accept": ui("assignment.accept", "Accept Assignment", CheckCircle2),
+  "assignment.decline": ui("assignment.decline", "Decline", X, "outline"),
+  "bom.create": ui("bom.create", "Prepare Checklist (BOM)", Package),
+  "inventory.checkout": ui("inventory.checkout", "Check-out Gear", Truck, "primary", "dispatch"),
+  "inventory.checkin": ui("inventory.checkin", "Check-in Gear", PackageCheck, "outline"),
+  "inventory.checkout_reverse": ui(
+    "inventory.checkout_reverse",
+    "Reverse Checkout",
+    Undo2,
+    "outline"
+  ),
+  "eval.submit_internal": ui("eval.submit_internal", "Submit Event Evaluation", CheckCircle2),
 };
+
+/**
+ * Status-transition edges that are actually assignment-row actions.
+ * Hide from the status action bar — Field Ops banner + assignment APIs own them.
+ */
+export const ASSIGNMENT_ACTION_IDS = new Set([
+  "booking.accept",
+  "assignment.accept",
+  "assignment.decline",
+  "assignment_accept",
+  "assignment_decline",
+]);
+
+export function resolveBookingActionUI(
+  actionId: string | undefined,
+  permissionKey: string,
+  toStatus: BookingStatus
+): BookingActionUI {
+  if (actionId && BOOKING_ACTION_UI[actionId]) {
+    return BOOKING_ACTION_UI[actionId];
+  }
+  if (BOOKING_ACTION_UI[permissionKey]) {
+    return BOOKING_ACTION_UI[permissionKey];
+  }
+
+  const isCancel = permissionKey.includes("cancel") || toStatus === "CANCELED";
+  return {
+    id: actionId || permissionKey,
+    label: (actionId || permissionKey)
+      .split(/[._]/)
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+      .join(" "),
+    icon: isCancel ? X : CheckCircle2,
+    variant: isCancel ? "destructive" : "primary",
+  };
+}

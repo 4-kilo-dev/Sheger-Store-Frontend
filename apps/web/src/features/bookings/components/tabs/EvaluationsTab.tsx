@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { ClipboardCheck, Star, MessageSquare, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { useActiveProfile } from "@/hooks/use-active-profile";
 import { Section } from "@/features/bookings/components/shared/Section";
 import {
   ScoreDisplay,
@@ -19,10 +18,8 @@ interface EvaluationsTabProps {
 }
 
 export function EvaluationsTab({ b, evaluations }: EvaluationsTabProps) {
-  const [activeProfile] = useActiveProfile();
-  const canSubmitInternal = ["Admin", "CTO", "TO"].includes(activeProfile.role);
-
   const {
+    canSubmitEval,
     showWebhookModal,
     setShowWebhookModal,
     respondentName,
@@ -53,7 +50,7 @@ export function EvaluationsTab({ b, evaluations }: EvaluationsTabProps) {
           title="Internal Crew Review"
           icon={ClipboardCheck}
           action={
-            !loadingInternal && !internalEval && canSubmitInternal && (
+            !loadingInternal && !internalEval && canSubmitEval && (
               <button
                 onClick={openInternalForm}
                 className="rounded border bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-semibold transition hover:border-[var(--accent)]"
@@ -137,7 +134,7 @@ export function EvaluationsTab({ b, evaluations }: EvaluationsTabProps) {
                 Technicians and administrators can complete the operations review for safety, PPE
                 compliance, and load-in efficiency.
               </p>
-              {canSubmitInternal && (
+              {canSubmitEval && (
                 <button
                   onClick={openInternalForm}
                   className="mt-4 rounded px-3 py-1.5 text-[11px] font-bold transition hover:brightness-110"

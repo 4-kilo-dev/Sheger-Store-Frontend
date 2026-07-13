@@ -1,11 +1,12 @@
-import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 
 import { useBookingDetail } from "../hooks/useBookingDetail";
 import { useBookingActions } from "../hooks/useBookingActions";
 import { useBookingEvaluations } from "../hooks/useBookingEvaluations";
+import { useBookingCapabilities } from "../hooks/useBookingCapabilities";
 
 import { BookingHeader } from "../components/BookingHeader";
 import { BookingActionBar } from "../components/BookingActionBar";
@@ -55,12 +56,22 @@ export function BookingDetail() {
   const { code } = _Route.useParams();
   const [tab, setTab] = useState<TabName>("Overview");
 
-  // Custom Hooks managing queries, mutations and UI states
   const detail = useBookingDetail(code);
-  const { booking, isLoading, error, checkoutSnapshot, isTechnician, userRole, isUserDriver } = detail;
+  const { booking, isLoading, error, checkoutSnapshot } = detail;
 
-  const actions = useBookingActions(code, booking, userRole, isUserDriver);
-  const evaluations = useBookingEvaluations(code, booking, userRole);
+  const caps = useBookingCapabilities(booking);
+  const actions = useBookingActions(code, booking, { canFetchStaff: caps.canFetchStaff });
+  const evaluations = useBookingEvaluations(code, booking);
+
+  const barActions = caps.statusActions.filter((a) => {
+    // Field-ops banner owns BOM advance + eval CTA when visible
+    if (caps.showFieldOpsBanner && a.targetStatus === "PREPARATION") return false;
+    if (caps.showFieldOpsBanner && a.permissionKey === "eval.submit_internal") return false;
+    return true;
+  });
+
+  // Keep active tab in the visible set when capabilities change
+  const safeTab = caps.visibleTabs.includes(tab) ? tab : caps.visibleTabs[0] || "Overview";
 
   if (isLoading) {
     return (
@@ -88,44 +99,42 @@ export function BookingDetail() {
 
   return (
     <AppShell>
-      {/* Top action row */}
       <BookingActionBar
-        isTechnician={isTechnician}
-        computedActions={actions.computedActions}
+        canEditBooking={caps.canEditBooking}
+        statusActions={barActions}
         setSelectedAction={actions.setSelectedAction}
         setShowActionModal={actions.setShowActionModal}
         setCancellationReason={actions.setCancellationReason}
       />
 
-      {/* SOP Action Form Banner */}
       <BookingActionModal booking={booking} actions={actions} />
 
-      {/* Booking Header Card */}
       <BookingHeader booking={booking} />
 
-      {/* Technician workflow operations panel */}
       <TechnicianBanner
         booking={booking}
-        isTechnician={isTechnician}
-        userRole={userRole}
+        caps={caps}
         actions={actions}
         openInternalForm={evaluations.openInternalForm}
       />
 
-      {/* Tab selection navigation strip */}
-      <BookingTabBar isTechnician={isTechnician} tab={tab} setTab={setTab} />
+      <BookingTabBar
+        visibleTabs={caps.visibleTabs}
+        tab={safeTab}
+        setTab={setTab}
+      />
 
-      {/* Active Tab Panel */}
-      {tab === "Overview" && <OverviewTab b={booking} code={code} />}
-      {tab === "Schedule" && <ScheduleTab b={booking} />}
-      {tab === "Team" && <TeamTab b={booking} />}
-      {tab === "Equipment" && <EquipmentTab b={booking} />}
-      {tab === "Payments" && <PaymentsTab b={booking} />}
-      {tab === "Files" && <FilesTab b={booking} />}
-      {tab === "Activity" && <ActivityTab b={booking} />}
-      {tab === "Evaluations" && <EvaluationsTab b={booking} evaluations={evaluations} />}
+      {safeTab === "Overview" && <OverviewTab b={booking} code={code} caps={caps} />}
+      {safeTab === "Schedule" && <ScheduleTab b={booking} />}
+      {safeTab === "Team" && <TeamTab b={booking} />}
+      {safeTab === "Equipment" && <EquipmentTab b={booking} caps={caps} />}
+      {safeTab === "Payments" && <PaymentsTab b={booking} />}
+      {safeTab === "Files" && <FilesTab b={booking} />}
+      {safeTab === "Activity" && <ActivityTab b={booking} />}
+      {safeTab === "Evaluations" && (
+        <EvaluationsTab b={booking} evaluations={evaluations} />
+      )}
 
-      {/* Page-level confirmation modals */}
       <DeclineAssignmentModal actions={actions} />
       <DamageReportModal checkoutSnapshot={checkoutSnapshot} actions={actions} />
       <InternalEvalModal booking={booking} evaluations={evaluations} />
