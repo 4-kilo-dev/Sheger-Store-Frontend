@@ -1,12 +1,14 @@
 import { createFileRoute, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Plus, Filter, ArrowUpDown, MoreVertical, Calendar } from "lucide-react";
+import { Plus, Filter, ArrowUpDown, MoreVertical } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { FilterDropdown, SortButton } from "@/components/filter-dropdown";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { useQuery } from "@tanstack/react-query";
-import { getBookingsApi, STATUS_ORDER, STATUS_LABELS, type Booking, type BookingStatus, type PaymentStatus, type ScreenType } from "@/features/bookings/services/bookings.api";
+import { getBookingsApi, STATUS_ORDER, STATUS_LABELS, type Booking, type PaymentStatus, type ScreenType } from "@/features/bookings/services/bookings.api";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 const _Route = createFileRoute("/bookings/")({
@@ -23,14 +25,17 @@ const TABS = ["All", "This Week", "Upcoming", "Onsite", "Last Week", "Assigned t
 
 const ALL_STATUSES = STATUS_ORDER.map((s) => STATUS_LABELS[s]);
 const ALL_SCREEN_TYPES: ScreenType[] = ["P2.97", "P2.97-New", "P3.91 INDOOR", "P3.91 OUTDOOR", "P4", "P5"];
-const ALL_SCREEN_TYPES_SET = new Set(ALL_SCREEN_TYPES);
 const ALL_PAYMENTS: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
 
 export function BookingsIndex() {
   const { formatDate } = useDateFormatter();
   const navigate = useNavigate();
   const authUser = useAuthUser();
-  const role = authUser?.role?.toLowerCase() || "";
+  const { can } = usePermissions();
+  /** Assigned-scope actors (no view_all) get the simplified assignments list. */
+  const isAssignedScopeOnly =
+    !can(PERMISSION.BOOKING_VIEW_ALL) && can(PERMISSION.BOOKING_VIEW_ASSIGNED);
+  const canCreateBooking = can(PERMISSION.BOOKING_CREATE);
   const searchParams = useRouterState({ select: (s) => s.location.search }) as any;
   const query = searchParams.q || "";
   const setQuery = (val: string) => {
@@ -124,7 +129,7 @@ export function BookingsIndex() {
     });
 
     return r;
-  }, [tab, query, statusFilter, screenFilter, assigneeFilter, paymentFilter, sortDir, bookingsList]);
+  }, [tab, query, statusFilter, screenFilter, assigneeFilter, paymentFilter, sortDir, bookingsList, authUser?.name]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -144,7 +149,7 @@ export function BookingsIndex() {
   // Reset page when filters change
   const activeFilterCount = statusFilter.size + screenFilter.size + assigneeFilter.size + paymentFilter.size;
 
-  if (role === "technician") {
+  if (isAssignedScopeOnly) {
     return (
       <AppShell>
         {/* Header */}
@@ -256,14 +261,16 @@ export function BookingsIndex() {
             </button>
           )}
         </div>
-        <Link
-          to="/bookings/new"
-          className="flex h-9 items-center gap-2 rounded-md px-4 text-[13px] font-semibold transition hover:brightness-110 w-fit"
-          style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
-        >
-          <Plus className="h-4 w-4" strokeWidth={2.5} />
-          New Booking
-        </Link>
+        {canCreateBooking && (
+          <Link
+            to="/bookings/new"
+            className="flex h-9 items-center gap-2 rounded-md px-4 text-[13px] font-semibold transition hover:brightness-110 w-fit"
+            style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.5} />
+            New Booking
+          </Link>
+        )}
       </div>
 
       {/* Tabs */}

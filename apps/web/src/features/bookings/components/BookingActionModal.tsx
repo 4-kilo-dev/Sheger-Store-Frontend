@@ -71,7 +71,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
               This will transition the booking from <strong>{booking.status}</strong> to{" "}
               <strong>{selectedAction.targetStatus}</strong>.
               <br />
-              Permission required: <strong>{selectedAction.id}</strong>
+              Permission required: <strong>{selectedAction.permissionKey || selectedAction.id}</strong>
             </p>
 
             {booking.status === "RESERVED" &&
@@ -383,6 +383,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
               transitionStatus({
                 toStatus: selectedAction.targetStatus,
                 reason: cancellationReason || undefined,
+                override: selectedAction.id === "booking.cancel_override",
               });
             }
           }}

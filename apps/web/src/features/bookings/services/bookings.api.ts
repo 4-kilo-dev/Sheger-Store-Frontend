@@ -249,6 +249,29 @@ export async function transitionBookingStatusApi(bookingId: string, toStatus: Bo
   });
 }
 
+export interface AllowedTransition {
+  fromStatus: BookingStatus;
+  toStatus: BookingStatus;
+  permissionKey: string;
+  reasonRequired?: boolean;
+  viaBypass?: boolean;
+  actionId?: string;
+}
+
+export interface AllowedTransitionsResponse {
+  bookingId: string;
+  status: BookingStatus;
+  transitions: AllowedTransition[];
+}
+
+export async function getBookingAllowedTransitionsApi(
+  bookingId: string
+): Promise<AllowedTransitionsResponse> {
+  return client.get<AllowedTransitionsResponse>(
+    `/api/bookings/${bookingId}/allowed-transitions`
+  );
+}
+
 export async function recordBookingPaymentApi(bookingId: string, toStatus: string, amount: number): Promise<any> {
   return client.post(`/api/bookings/${bookingId}/payment`, {
     toStatus, // 'advance' or 'fully_paid'
