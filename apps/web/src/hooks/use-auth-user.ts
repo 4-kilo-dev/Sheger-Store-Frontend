@@ -3,7 +3,8 @@ import { authStorage } from "@/lib/api/client";
 
 /**
  * Backend auth user from login / GET /auth/me.
- * - `permissions` = raw DB union of permission keys (sole source for can()).
+ * - `permissions` = effective keys from the API (DB grants + shallow expansions
+ *   like manage⇒view, checkout⇒reserve). Exact includes() only — never expand on FE.
  * - `roles` = informational role keys (badges / admin UX).
  * - `role` = cosmetic first role (display / back-compat only — never gate on it).
  */

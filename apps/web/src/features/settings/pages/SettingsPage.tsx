@@ -174,7 +174,15 @@ export function SettingsPage() {
           )}
 
           {active === "Roles & permissions" && (
-            <Section title="Role Permissions Matrix" aside="Access control">
+            <Section
+              title="Role Permissions Matrix"
+              aside="Explicit DB grants — implied keys (e.g. manage⇒view) appear in /me automatically"
+            >
+              <div className="mb-3 rounded border px-3 py-2 text-[11px]" style={{ borderColor: "var(--border)", background: "var(--surface-2)", color: "var(--text-2)" }}>
+                Seed labels: <strong>Reserve / soft-hold</strong> (<code className="font-mono">inventory.reserve</code>) is separate from{" "}
+                <strong>Warehouse checkout</strong> (<code className="font-mono">inventory.checkout</code>). CTO can reserve + view staff without checkout or{" "}
+                <code className="font-mono">user.manage</code>.
+              </div>
               <div className="overflow-x-auto scrollbar-thin">
                 <table className="w-full text-[11px]">
                   <thead>
@@ -193,11 +201,15 @@ export function SettingsPage() {
                       { perm: "Accept Tasks", access: [true, false, false, true, false, false] },
                       { perm: "Prepare BOM", access: [true, false, true, true, false, false] },
                       { perm: "Dispatch Team", access: [true, false, false, false, true, false] },
-                      { perm: "Check-Out Materials", access: [true, false, false, false, true, true] },
+                      { perm: "Reserve / soft-hold", access: [true, true, true, false, true, false] },
+                      { perm: "Warehouse checkout", access: [true, false, false, false, true, true] },
                       { perm: "Check-In Materials", access: [true, false, false, false, true, true] },
                       { perm: "Report Damage", access: [true, true, true, true, true, true] },
+                      { perm: "View Staff", access: [true, false, true, false, true, false] },
+                      { perm: "Manage Staff (write)", access: [true, false, false, false, false, false] },
+                      { perm: "View Roles & Catalog", access: [true, false, false, false, false, false] },
+                      { perm: "Manage Roles", access: [true, false, false, false, false, false] },
                       { perm: "View Reports", access: [true, true, true, false, true, false] },
-                      { perm: "Manage Staff", access: [true, false, false, false, false, false] },
                       { perm: "System Settings", access: [true, false, false, false, false, false] },
                     ].map(({ perm, access }) => (
                       <tr key={perm} className="border-b last:border-0 transition hover:bg-[var(--surface-2)]" style={{ borderColor: "var(--border)" }}>

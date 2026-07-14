@@ -70,8 +70,9 @@ function persistAuthUser(user: AuthUser) {
 }
 
 /**
- * Refresh the stored user from GET /auth/me (effective DB permissions).
- * Call after login and on authenticated app bootstrap.
+ * Refresh the stored user from GET /auth/me (effective permissions, including
+ * shallow manage⇒view / checkout⇒reserve expansions). Call after login, on
+ * authenticated app bootstrap, and after deploy when permission sets change.
  */
 export async function refreshAuthUser(): Promise<AuthUser> {
   const me = await client.get<MeResponse>("/api/auth/me");

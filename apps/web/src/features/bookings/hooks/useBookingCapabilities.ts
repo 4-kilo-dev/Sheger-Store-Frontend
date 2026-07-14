@@ -86,7 +86,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canFetchStaff = canAny([
     PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN,
     PERMISSION.ASSIGNMENT_ASSIGN_CREW,
-    PERMISSION.USER_MANAGE,
+    PERMISSION.USER_VIEW,
   ]);
 
   const canAssignTechnician = can(PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN);
@@ -95,7 +95,8 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canEditBom =
     can(PERMISSION.BOM_CREATE) ||
     (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned && booking?.status === "ACCEPTED");
-  const canWriteTechnicalHolds = can(PERMISSION.BOM_CREATE);
+  /** Soft-hold create/release — inventory.reserve (not warehouse checkout). */
+  const canWriteTechnicalHolds = can(PERMISSION.INVENTORY_RESERVE);
   const showOpsSidebar = canAny([
     PERMISSION.BOOKING_VIEW_ALL,
     PERMISSION.BOOKING_EDIT,

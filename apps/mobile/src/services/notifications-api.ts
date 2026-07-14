@@ -13,6 +13,11 @@ const EVENT_DISPLAY: Record<
     type: "Booking",
     priority: "NORMAL",
   },
+  "booking.technical_allocated": {
+    title: "Technical review ready to quote",
+    type: "Booking",
+    priority: "NORMAL",
+  },
   "assignment.created": { title: "New assignment", type: "Booking", priority: "NORMAL" },
   "assignment.declined": { title: "Assignment declined", type: "Booking", priority: "URGENT" },
   "technician.issue_reported": {
