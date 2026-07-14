@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Search, UserCheck, Users, Radio, BriefcaseBusiness, Phone, Calendar, ChevronDown, Filter } from "lucide-react";
+import { Search, UserCheck, Users, Radio, BriefcaseBusiness, Phone, Calendar } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { STAFF_ROLES } from "@/features/checkout/services/operations.api";
 import { AddStaffModal } from "../components/AddStaffModal";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStaffApi, resetPasswordApi, toggleUserActiveApi } from "@/features/users/services/staff.api";
-import { useActiveProfile } from "@/hooks/use-active-profile";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 import { toast } from "sonner";
 
 const _Route = createFileRoute("/staff")({
@@ -29,13 +30,15 @@ const statusColor: Record<string, string> = {
 export function StaffPage() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<(typeof STAFF_ROLES)[number]>("All");
-  const [activeProfile] = useActiveProfile();
-  const isAdmin = activeProfile.role === "Admin";
+  const { can } = usePermissions();
+  const canViewStaff = can(PERMISSION.USER_VIEW);
+  const canManageStaff = can(PERMISSION.USER_MANAGE);
   const queryClient = useQueryClient();
 
   const { data: staffList = [] } = useQuery({
     queryKey: ["staff"],
     queryFn: getStaffApi,
+    enabled: canViewStaff,
   });
 
   const { mutate: resetPassword } = useMutation({
@@ -103,9 +106,18 @@ export function StaffPage() {
           <h1 className="text-[20px] sm:text-[24px] font-bold tracking-tight">Staff Management</h1>
           <p className="mt-1 text-[12px] text-text-2">Roles, duty status, workload, and crew contact directory.</p>
         </div>
-        <AddStaffModal />
+        {canManageStaff && <AddStaffModal />}
       </div>
 
+      {!canViewStaff ? (
+        <div
+          className="rounded-lg border p-8 text-center text-[13px]"
+          style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--text-2)" }}
+        >
+          You need <code className="font-mono text-[11px]">user.view</code> to see the staff directory.
+        </div>
+      ) : (
+      <>
       {/* Stats */}
       <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {[
@@ -208,7 +220,7 @@ export function StaffPage() {
                 </div>
               </div>
 
-               {isAdmin && p.id && (
+               {canManageStaff && p.id && (
                 <div className="mt-3 flex gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
                   <button
                     onClick={() => handleResetPassword(p.id!, p.name)}
@@ -242,6 +254,8 @@ export function StaffPage() {
           );
         })}
       </div>
+      </>
+      )}
     </AppShell>
   );
 }

@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useNotifications } from "../context/NotificationsContext";
+import { resolveNotificationDisplay } from "../services/notifications.api";
 import { ClipboardList, AlertTriangle, ArrowRight, ShieldAlert, Check } from "lucide-react";
 
 export function PendingTasksWidget() {
@@ -43,19 +44,16 @@ export function PendingTasksWidget() {
         <div className="space-y-2.5 flex-1 overflow-y-auto max-h-[300px] pr-1 scrollbar-thin">
           {pendingTasks.map((t) => {
             const pStyle = getPriorityStyle(t.priority);
-            
-            // Redirect paths
-            let redirectPath = "/notifications";
+            const display = resolveNotificationDisplay(t);
+
+            let redirectPath = display.linkTo || "/notifications";
             let actionLabel = "View Task";
-            
-            if (t.relatedEntity === "booking") {
-              redirectPath = `/bookings/${t.relatedId}`;
-              actionLabel = "Review Booking";
+
+            if (t.eventType === "booking.technical_allocated" || display.linkTo?.startsWith("/bookings/")) {
+              actionLabel = t.eventType === "booking.technical_allocated" ? "Open to quote" : "Review Booking";
             } else if (t.relatedEntity === "assignment") {
-              redirectPath = `/bookings/${t.relatedId}`;
               actionLabel = "Reassign Crew";
             } else if (t.relatedEntity === "damage_missing_report") {
-              redirectPath = `/damage-report`;
               actionLabel = "Inspect Damage";
             }
 
@@ -67,7 +65,7 @@ export function PendingTasksWidget() {
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <span className="font-bold truncate" style={{ color: "var(--foreground)" }}>{t.title}</span>
+                    <span className="font-bold truncate" style={{ color: "var(--foreground)" }}>{display.title}</span>
                     <span 
                       className="rounded text-[8px] font-bold uppercase px-1.5 py-0.5 tracking-wider shrink-0"
                       style={{ color: pStyle.color, background: pStyle.bg, border: pStyle.border }}

@@ -282,7 +282,7 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
       {isPoolsRestricted && (
         <AccessLockOverlay
           sectionName="Technical Holds Allocation"
-          permissionKey={PERMISSION.BOM_CREATE}
+          permissionKey={PERMISSION.INVENTORY_RESERVE}
         />
       )}
       <div className="space-y-4">

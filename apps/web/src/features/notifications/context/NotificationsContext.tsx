@@ -10,7 +10,8 @@ import {
   getPendingTasksApi, 
   markNotificationReadApi, 
   markAllNotificationsReadApi,
-  connectNotificationsStream, 
+  connectNotificationsStream,
+  resolveNotificationDisplay,
   type Notification 
 } from "../services/notifications.api";
 import { authStorage } from "@/lib/api/client";
@@ -82,8 +83,12 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     
     const details = (n.detail || n.message|| " ").toLowerCase();
     const title = (n.title || "").toLowerCase();
+    const eventType = (n.eventType || "").toLowerCase();
     
-    if (details.includes("confirmed") || title.includes("confirmed") || details.includes("approved")) {
+    if (eventType === "booking.technical_allocated" || title.includes("technical") || title.includes("quote")) {
+      IconComponent = CheckCircle2;
+      iconColor = "var(--color-status-done)";
+    } else if (details.includes("confirmed") || title.includes("confirmed") || details.includes("approved")) {
       IconComponent = CheckCircle2;
       iconColor = "var(--color-status-done)";
     } else if (details.includes("cancelled") || details.includes("canceled") || title.includes("canceled") || title.includes("failed")) {
@@ -103,15 +108,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       iconColor = "var(--destructive)";
     }
 
-    // Dynamic Navigation Routing Map
-    let redirectPath = "/notifications";
-    if (n.relatedEntity === "booking") {
-      redirectPath = `/bookings/${n.relatedId}`;
-    } else if (n.relatedEntity === "assignment") {
-      redirectPath = `/bookings/${n.relatedId}`; // go to booking details where crew assignments are
-    } else if (n.relatedEntity === "damage_missing_report") {
-      redirectPath = `/damage-report`;
-    }
+    const display = resolveNotificationDisplay(n);
+    const redirectPath = display.linkTo || "/notifications";
 
     toast.custom((id) => (
       <div 
@@ -127,7 +125,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
           <IconComponent className="h-4.5 w-4.5" />
         </div>
         <div className="flex-grow min-w-0">
-          <div className="text-[12.5px] font-bold text-foreground">{n.title}</div>
+          <div className="text-[12.5px] font-bold text-foreground">{display.title}</div>
           <div className="text-[11px] mt-0.5 leading-relaxed truncate" style={{ color: "var(--text-2)" }}>{n.detail || n.message}</div>
         </div>
         <button 

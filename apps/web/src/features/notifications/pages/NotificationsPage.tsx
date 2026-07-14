@@ -6,7 +6,12 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useNotifications } from "@/features/notifications/context/NotificationsContext";
-import { type Notification, type NotificationType, type NotificationPriority } from "@/features/notifications/services/notifications.api";
+import {
+  resolveNotificationDisplay,
+  type Notification,
+  type NotificationType,
+  type NotificationPriority,
+} from "@/features/notifications/services/notifications.api";
 
 const _Route = createFileRoute("/notifications")({
   head: () => ({
@@ -123,19 +128,11 @@ export function NotificationsPage() {
                   <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--text-3)" }}>{group}</span>
                 </div>
                 {items.map((n) => {
-                  const Icon = TYPE_ICONS[n.type] || Bell;
+                  const display = resolveNotificationDisplay(n);
+                  const Icon = TYPE_ICONS[display.type] || Bell;
                   const isUnread = !n.readAt;
-                  const pStyle = PRIORITY_STYLES[n.priority];
-
-                  // Redirect mapping
-                  let redirectPath = "/notifications";
-                  if (n.relatedEntity === "booking") {
-                    redirectPath = `/bookings/${n.relatedId}`;
-                  } else if (n.relatedEntity === "assignment") {
-                    redirectPath = `/bookings/${n.relatedId}`;
-                  } else if (n.relatedEntity === "damage_missing_report") {
-                    redirectPath = `/damage-report`;
-                  }
+                  const pStyle = PRIORITY_STYLES[display.priority];
+                  const redirectPath = display.linkTo || "/notifications";
 
                   return (
                     <div
@@ -158,13 +155,13 @@ export function NotificationsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <h2 className="truncate text-[13px] font-semibold">{n.title}</h2>
-                            {n.priority !== "NORMAL" && (
+                            <h2 className="truncate text-[13px] font-semibold">{display.title}</h2>
+                            {display.priority !== "NORMAL" && (
                               <span
                                 className="shrink-0 rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider"
                                 style={{ color: pStyle.color, background: pStyle.bg }}
                               >
-                                {n.priority}
+                                {display.priority}
                               </span>
                             )}
                           </div>
@@ -178,9 +175,9 @@ export function NotificationsPage() {
                             className="rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider"
                             style={{ borderColor: "var(--border)", color: "var(--accent)" }}
                           >
-                            {n.type}
+                            {display.type}
                           </span>
-                          {n.relatedEntity && (
+                          {(n.relatedEntity || display.linkTo) && (
                             <Link
                               to={redirectPath as any}
                               onClick={() => markAsRead(n.id)}
