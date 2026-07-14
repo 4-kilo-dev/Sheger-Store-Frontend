@@ -10,7 +10,8 @@ import {
   getPendingTasksApi, 
   markNotificationReadApi, 
   markAllNotificationsReadApi,
-  connectNotificationsStream, 
+  connectNotificationsStream,
+  resolveNotificationDisplay,
   type Notification 
 } from "../services/notifications.api";
 import { authStorage } from "@/lib/api/client";

@@ -6,6 +6,8 @@ import * as z from "zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createStaffApi, getRolesApi } from "@/features/users/services/staff.api";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,10 +38,12 @@ type AddStaffFormValues = z.infer<typeof addStaffSchema>;
 export function AddStaffModal() {
   const [open, setOpen] = useState(false);
   const [isGenerated, setIsGenerated] = useState(false);
+  const { can } = usePermissions();
 
   const { data: roles = [] } = useQuery({
     queryKey: ["roles"],
     queryFn: getRolesApi,
+    enabled: can(PERMISSION.ROLE_VIEW),
   });
 
   const fallbackRoles = [

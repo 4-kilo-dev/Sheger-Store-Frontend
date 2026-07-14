@@ -5,7 +5,7 @@ import { authStorage } from "@/lib/api/client";
 const EMPTY_PERMISSIONS: string[] = [];
 const EMPTY_ROLES: string[] = [];
 
-/** Exact key match against `/auth/me` permissions (no manage⇒view expansion). */
+/** Exact key match against `/auth/me` (backend already expanded manage⇒view, etc.). */
 export function hasPermission(
   permissions: string[] | undefined | null,
   key: string
