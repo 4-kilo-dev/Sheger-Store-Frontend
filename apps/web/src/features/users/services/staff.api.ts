@@ -7,8 +7,37 @@ export interface Role {
   displayName: string;
 }
 
+export interface Permission {
+  id: string;
+  key: string;
+  description?: string | null;
+}
+
+export interface RoleWithPermissions extends Role {
+  isSystem: boolean;
+  permissions: Permission[];
+}
+
 export async function getRolesApi(): Promise<Role[]> {
   return client.get<Role[]>("/api/roles");
+}
+
+/** Roles including their granted permission objects (from GET /roles). */
+export async function getRolesWithPermissionsApi(): Promise<RoleWithPermissions[]> {
+  return client.get<RoleWithPermissions[]>("/api/roles");
+}
+
+/** Full catalog of permission definitions. */
+export async function getPermissionsApi(): Promise<Permission[]> {
+  return client.get<Permission[]>("/api/permissions");
+}
+
+export async function addRolePermissionApi(roleId: string, permissionId: string): Promise<RoleWithPermissions> {
+  return client.post<RoleWithPermissions>(`/api/roles/${roleId}/permissions`, { permissionId });
+}
+
+export async function removeRolePermissionApi(roleId: string, permissionId: string): Promise<RoleWithPermissions> {
+  return client.delete<RoleWithPermissions>(`/api/roles/${roleId}/permissions/${permissionId}`);
 }
 
 export async function getStaffApi(): Promise<StaffMember[]> {
@@ -53,10 +82,12 @@ export async function createStaffApi(payload: any): Promise<StaffMember> {
   }
 
   // 2. Prepare payload for backend
+  const cleanPhone = (payload.phone || "").replace(/[^0-9]/g, "");
+  const suffix = cleanPhone ? `.${cleanPhone.slice(-6)}` : "";
   const backendPayload = {
     name: payload.name,
     phone: payload.phone,
-    email: payload.email || `${payload.name.toLowerCase().replace(/\s+/g, ".")}@vortexvisual.com`,
+    email: payload.email || `${payload.name.toLowerCase().replace(/\s+/g, ".")}${suffix}@vortexvisual.com`,
     password: payload.password,
     roleId: matchedRole.id,
   };

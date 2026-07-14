@@ -18,7 +18,9 @@ export const PERMISSION = {
   DAMAGE_REPORT: "damage.report",
   EVAL_SUBMIT_INTERNAL: "eval.submit_internal",
   EVAL_VIEW: "eval.view",
+  PAYMENT_MANAGE: "payment.manage",
   USER_MANAGE: "user.manage",
+  ROLE_MANAGE: "role.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSION)[keyof typeof PERMISSION];

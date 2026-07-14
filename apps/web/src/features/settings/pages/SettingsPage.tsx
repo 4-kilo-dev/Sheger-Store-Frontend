@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { BellRing, Building2, Languages, LockKeyhole, Save, Shield, UsersRound, Check, X, ClipboardCheck, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -17,6 +17,16 @@ import {
   createCustomFieldDefinitionApi,
   deleteCustomFieldDefinitionApi,
 } from "@/features/bookings/services/bookings.api";
+import {
+  getRolesWithPermissionsApi,
+  getPermissionsApi,
+  addRolePermissionApi,
+  removeRolePermissionApi,
+  type Permission,
+  type RoleWithPermissions,
+} from "@/features/users/services/staff.api";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 
 const _Route = createFileRoute("/settings")({
   head: () => ({
@@ -29,11 +39,8 @@ const _Route = createFileRoute("/settings")({
 });
 
 const panels = [
-  { icon: Building2, label: "Company" },
   { icon: UsersRound, label: "Roles & permissions" },
-  { icon: BellRing, label: "Notifications" },
   { icon: Languages, label: "Language" },
-  { icon: LockKeyhole, label: "Security" },
   { icon: ClipboardCheck, label: "Performance Metrics" },
   { icon: SlidersHorizontal, label: "Custom Fields" },
 ];
@@ -68,7 +75,7 @@ function Toggle({ on, label }: { on: boolean; label: string }) {
 export function SettingsPage() {
   const { calendarSystem, numeralsSystem, commitSettings } = useCalendarSystem();
   const { formatDate } = useDateFormatter();
-  const [active, setActive] = useState("Company");
+  const [active, setActive] = useState("Roles & permissions");
 
   const [tempCalendarSystem, setTempCalendarSystem] = useState(calendarSystem);
   const [tempNumeralsSystem, setTempNumeralsSystem] = useState(numeralsSystem);
@@ -138,122 +145,13 @@ export function SettingsPage() {
 
         {/* Content */}
         <div className="space-y-5">
-          {active === "Company" && (
-            <>
-              <Section title="Company Information" aside="System defaults">
-                <div className="grid gap-4 md:grid-cols-2">
-                  {[
-                    ["Company name", "Vortex Visual"],
-                    ["Operations email", "operations@vortexvisual.et"],
-                    ["Primary phone", "+251 911 000 040"],
-                    ["Timezone", "Africa/Addis_Ababa"],
-                  ].map(([label, value]) => (
-                    <label key={label} className="text-[12px] font-semibold">
-                      {label}
-                      <input defaultValue={value} className={inputCls} style={{ borderColor: "var(--border)" }} />
-                    </label>
-                  ))}
-                </div>
-              </Section>
-              <Section title="Business Details">
-                <div className="grid gap-4 md:grid-cols-2">
-                  {[
-                    ["Tax ID / TIN", "0012345678"],
-                    ["Business Address", "Bole, Addis Ababa, Ethiopia"],
-                    ["Warehouse Location", "Bole Sub-City, Warehouse Zone"],
-                    ["Default Currency", "ETB — Ethiopian Birr"],
-                  ].map(([label, value]) => (
-                    <label key={label} className="text-[12px] font-semibold">
-                      {label}
-                      <input defaultValue={value} className={inputCls} style={{ borderColor: "var(--border)" }} />
-                    </label>
-                  ))}
-                </div>
-              </Section>
-            </>
-          )}
+
 
           {active === "Roles & permissions" && (
-            <Section title="Role Permissions Matrix" aside="Access control">
-              <div className="overflow-x-auto scrollbar-thin">
-                <table className="w-full text-[11px]">
-                  <thead>
-                    <tr style={{ background: "var(--surface-2)" }}>
-                      <th className="border-b px-3 py-2.5 text-left label-eyebrow" style={{ borderColor: "var(--border)" }}>Permission</th>
-                      {["Admin", "CCR", "Chief Tech", "Technician", "Op. Officer", "Storekeeper"].map((r) => (
-                        <th key={r} className="border-b px-3 py-2.5 text-center label-eyebrow" style={{ borderColor: "var(--border)" }}>{r}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { perm: "Create Bookings", access: [true, true, false, false, false, false] },
-                      { perm: "Confirm & Record Payment", access: [true, true, false, false, false, false] },
-                      { perm: "Assign Technicians", access: [true, false, true, false, false, false] },
-                      { perm: "Accept Tasks", access: [true, false, false, true, false, false] },
-                      { perm: "Prepare BOM", access: [true, false, true, true, false, false] },
-                      { perm: "Dispatch Team", access: [true, false, false, false, true, false] },
-                      { perm: "Check-Out Materials", access: [true, false, false, false, true, true] },
-                      { perm: "Check-In Materials", access: [true, false, false, false, true, true] },
-                      { perm: "Report Damage", access: [true, true, true, true, true, true] },
-                      { perm: "View Reports", access: [true, true, true, false, true, false] },
-                      { perm: "Manage Staff", access: [true, false, false, false, false, false] },
-                      { perm: "System Settings", access: [true, false, false, false, false, false] },
-                    ].map(({ perm, access }) => (
-                      <tr key={perm} className="border-b last:border-0 transition hover:bg-[var(--surface-2)]" style={{ borderColor: "var(--border)" }}>
-                        <td className="px-3 py-2.5 font-medium">{perm}</td>
-                        {access.map((a, i) => (
-                          <td key={i} className="px-3 py-2.5 text-center">
-                            {a ? (
-                              <Check className="mx-auto h-3.5 w-3.5" style={{ color: "var(--color-bom-returned)" }} />
-                            ) : (
-                              <X className="mx-auto h-3.5 w-3.5" style={{ color: "var(--text-3)" }} />
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Section>
+            <RolesPermissionsPanel />
           )}
 
-          {active === "Notifications" && (
-            <Section title="Notification Preferences" aside="Per-role alerts">
-              <div className="space-y-3">
-                <div className="label-eyebrow mb-2">Booking Alerts</div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  <Toggle on={true} label="New booking created" />
-                  <Toggle on={true} label="Booking status changed" />
-                  <Toggle on={true} label="Payment received" />
-                  <Toggle on={false} label="Booking cancelled" />
-                </div>
 
-                <div className="label-eyebrow mb-2 mt-4">Inventory Alerts</div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  <Toggle on={true} label="Low stock warning" />
-                  <Toggle on={true} label="Damage report submitted" />
-                  <Toggle on={true} label="Service due reminder" />
-                  <Toggle on={false} label="Material checked in/out" />
-                </div>
-
-                <div className="label-eyebrow mb-2 mt-4">Schedule Alerts</div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  <Toggle on={true} label="Assembly reminder (24h)" />
-                  <Toggle on={true} label="Event day reminder" />
-                  <Toggle on={false} label="Overtime assignment" />
-                  <Toggle on={false} label="Dismantle reminder" />
-                </div>
-
-                <div className="label-eyebrow mb-2 mt-4">Delivery Method</div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  <Toggle on={true} label="In-app notifications" />
-                  <Toggle on={false} label="SMS notifications" />
-                </div>
-              </div>
-            </Section>
-          )}
 
           {active === "Language" && (
             <Section title="Language & Regional" aside="Localization">
@@ -317,63 +215,7 @@ export function SettingsPage() {
             </Section>
           )}
 
-          {active === "Security" && (
-            <Section title="Security Settings" aside="Access & authentication">
-              <div className="space-y-5">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="text-[12px] font-semibold">
-                    Session timeout (minutes)
-                    <input type="number" defaultValue={30} className={inputCls} style={{ borderColor: "var(--border)" }} />
-                  </label>
-                  <label className="text-[12px] font-semibold">
-                    Max login attempts
-                    <input type="number" defaultValue={5} className={inputCls} style={{ borderColor: "var(--border)" }} />
-                  </label>
-                </div>
 
-                <div className="label-eyebrow mt-2">Authentication</div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  <Toggle on={true} label="Phone OTP verification" />
-                  <Toggle on={false} label="Two-factor authentication (2FA)" />
-                  <Toggle on={true} label="Force password reset on first login" />
-                  <Toggle on={false} label="IP address whitelist" />
-                </div>
-
-                <div className="label-eyebrow mt-2">Password Policy</div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  <Toggle on={true} label="Minimum 8 characters" />
-                  <Toggle on={true} label="Require uppercase letter" />
-                  <Toggle on={false} label="Require special character" />
-                  <Toggle on={true} label="Password expiry (90 days)" />
-                </div>
-
-                <div className="rounded-md border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4" style={{ color: "var(--accent)" }} />
-                    <span className="text-[12px] font-bold">Active Sessions</span>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {[
-                      { device: "MacBook Pro — Chrome", ip: "192.168.1.7", time: "Active now", current: true },
-                      { device: "iPhone 15 — Safari", ip: "192.168.1.12", time: "2 hours ago", current: false },
-                    ].map((s) => (
-                      <div key={s.device} className="flex items-center justify-between rounded-md border px-3 py-2" style={{ borderColor: "var(--border)" }}>
-                        <div>
-                          <div className="text-[12px] font-medium">{s.device}</div>
-                          <div className="text-[10px] font-mono" style={{ color: "var(--text-3)" }}>{s.ip} · {s.time}</div>
-                        </div>
-                        {s.current ? (
-                          <span className="text-[10px] font-bold" style={{ color: "var(--color-bom-returned)" }}>Current</span>
-                        ) : (
-                          <button className="text-[10px] font-semibold" style={{ color: "var(--destructive)" }}>Revoke</button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </Section>
-          )}
 
           {active === "Performance Metrics" && (
             <PerformanceMetricsPanel />
@@ -384,7 +226,7 @@ export function SettingsPage() {
           )}
 
           {/* Save button */}
-          {active !== "Performance Metrics" && active !== "Custom Fields" && (
+          {active === "Language" && (
             <div className="flex justify-end">
               <button
                 onClick={handleSaveChanges}
@@ -411,6 +253,144 @@ function Section({ title, aside, children }: { title: string; aside?: string; ch
       </header>
       <div className="p-4">{children}</div>
     </section>
+  );
+}
+
+function humanizePermissionAction(key: string): string {
+  const action = key.includes(".") ? key.slice(key.indexOf(".") + 1) : key;
+  return action
+    .split(/[._]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function humanizeDomain(domain: string): string {
+  return domain.charAt(0).toUpperCase() + domain.slice(1);
+}
+
+function RolesPermissionsPanel() {
+  const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canManage = can(PERMISSION.ROLE_MANAGE);
+
+  const {
+    data: roles = [],
+    isLoading: rolesLoading,
+    error: rolesError,
+  } = useQuery<RoleWithPermissions[]>({
+    queryKey: ["roles-with-permissions"],
+    queryFn: getRolesWithPermissionsApi,
+  });
+
+  const { data: permissions = [], isLoading: permsLoading } = useQuery<Permission[]>({
+    queryKey: ["permissions-catalog"],
+    queryFn: getPermissionsApi,
+  });
+
+  const { mutate: togglePermission, isPending: toggling } = useMutation({
+    mutationFn: ({ roleId, permissionId, active }: { roleId: string; permissionId: string; active: boolean }) =>
+      active ? addRolePermissionApi(roleId, permissionId) : removeRolePermissionApi(roleId, permissionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["roles-with-permissions"] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || "Failed to update permission");
+    },
+  });
+
+  // Map of roleId -> set of permission keys it holds, for O(1) cell lookups.
+  const rolePermKeys = new Map<string, Set<string>>(
+    roles.map((r) => [r.id, new Set((r.permissions || []).map((p) => p.key))])
+  );
+
+  // Group permissions by domain prefix, preserving first-seen order.
+  const groups: { domain: string; perms: Permission[] }[] = [];
+  for (const p of permissions) {
+    const domain = p.key.includes(".") ? p.key.slice(0, p.key.indexOf(".")) : "other";
+    let group = groups.find((g) => g.domain === domain);
+    if (!group) {
+      group = { domain, perms: [] };
+      groups.push(group);
+    }
+    group.perms.push(p);
+  }
+
+  const loading = rolesLoading || permsLoading;
+
+  return (
+    <Section title="Role Permissions Matrix" aside="Access control">
+      {loading ? (
+        <div className="py-8 text-center text-[12px]" style={{ color: "var(--text-3)" }}>Loading roles and permissions…</div>
+      ) : rolesError ? (
+        <div className="py-8 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
+          Unable to load roles. You may not have permission to manage access control.
+        </div>
+      ) : (
+        <>
+          <p className="mb-3 text-[11px]" style={{ color: "var(--text-3)" }}>
+            {canManage
+              ? "Click a cell to grant or revoke a permission for that role."
+              : "Read-only view. Managing roles requires the role.manage permission."}
+          </p>
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr style={{ background: "var(--surface-2)" }}>
+                  <th className="border-b px-3 py-2.5 text-left label-eyebrow" style={{ borderColor: "var(--border)" }}>Permission</th>
+                  {roles.map((r) => (
+                    <th key={r.id} className="border-b px-3 py-2.5 text-center label-eyebrow" style={{ borderColor: "var(--border)" }}>{r.displayName}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((group) => (
+                  <Fragment key={group.domain}>
+                    <tr style={{ background: "var(--surface-2)" }}>
+                      <td
+                        className="px-3 py-1.5 label-eyebrow"
+                        colSpan={roles.length + 1}
+                        style={{ color: "var(--accent)" }}
+                      >
+                        {humanizeDomain(group.domain)}
+                      </td>
+                    </tr>
+                    {group.perms.map((perm) => (
+                      <tr key={perm.id} className="border-b last:border-0 transition hover:bg-[var(--surface-2)]" style={{ borderColor: "var(--border)" }}>
+                        <td className="px-3 py-2.5 font-medium">
+                          <div>{humanizePermissionAction(perm.key)}</div>
+                          <div className="font-mono text-[9.5px]" style={{ color: "var(--text-3)" }}>{perm.key}</div>
+                        </td>
+                        {roles.map((role) => {
+                          const has = rolePermKeys.get(role.id)?.has(perm.key) ?? false;
+                          return (
+                            <td key={role.id} className="px-3 py-2.5 text-center">
+                              <button
+                                type="button"
+                                disabled={!canManage || toggling}
+                                onClick={() => togglePermission({ roleId: role.id, permissionId: perm.id, active: !has })}
+                                className="mx-auto flex h-6 w-6 items-center justify-center rounded transition enabled:hover:bg-[var(--surface)] disabled:cursor-default"
+                                title={canManage ? (has ? "Click to revoke" : "Click to grant") : undefined}
+                                aria-label={`${has ? "Revoke" : "Grant"} ${perm.key} for ${role.displayName}`}
+                              >
+                                {has ? (
+                                  <Check className="h-3.5 w-3.5" style={{ color: "var(--color-bom-returned)" }} />
+                                ) : (
+                                  <X className="h-3.5 w-3.5" style={{ color: "var(--text-3)" }} />
+                                )}
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Section>
   );
 }
 

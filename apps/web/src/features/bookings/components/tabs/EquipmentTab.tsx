@@ -1,4 +1,4 @@
-import { Package, Trash2 } from "lucide-react";
+import { Package, Trash2, Plus, X } from "lucide-react";
 import { Section } from "@/features/bookings/components/shared/Section";
 import type { Booking } from "@/features/bookings/services/bookings.api";
 import type { BookingCapabilities } from "@/features/bookings/hooks/useBookingCapabilities";
@@ -17,7 +17,7 @@ export function EquipmentTab({
   return (
     <div className="space-y-4">
       {isEditable && (
-        <Section title="BOM Creator - Add Item" icon={Package}>
+        <Section title="BOM Creator - Add Items" icon={Package}>
           <form onSubmit={bom.handleAddItem} className="flex flex-col md:flex-row items-end gap-3">
             <div className="flex-1 w-full">
               <label
@@ -29,15 +29,18 @@ export function EquipmentTab({
               <select
                 value={bom.selectedPoolId}
                 onChange={(e) => bom.setSelectedPoolId(e.target.value)}
+                aria-label="Select equipment pool"
                 className="h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
                 style={{ borderColor: "var(--border)" }}
               >
                 <option value="">-- Choose Equipment --</option>
-                {bom.pools.map((p: any) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.category?.name || "General"})
-                  </option>
-                ))}
+                {bom.pools
+                  .filter((p: any) => !bom.staged.some((s) => s.poolId === p.id))
+                  .map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.category?.name || "General"})
+                    </option>
+                  ))}
               </select>
             </div>
             <div className="w-full md:w-32">
@@ -52,19 +55,71 @@ export function EquipmentTab({
                 min="1"
                 value={bom.addQty}
                 onChange={(e) => bom.setAddQty(Math.max(1, parseInt(e.target.value) || 1))}
+                aria-label="Quantity to stage"
                 className="h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] text-right font-mono"
                 style={{ borderColor: "var(--border)" }}
               />
             </div>
             <button
               type="submit"
-              disabled={bom.addingLine}
-              className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 h-9 flex items-center gap-1.5 shrink-0"
-              style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+              className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 h-9 flex items-center gap-1.5 shrink-0 border"
+              style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
             >
-              Add to BOM
+              <Plus className="h-3.5 w-3.5" /> Stage Item
             </button>
           </form>
+
+          {bom.staged.length > 0 && (
+            <div className="mt-4 rounded-md border" style={{ borderColor: "var(--border)" }}>
+              <div
+                className="flex items-center justify-between border-b px-3 py-2"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <span className="label-eyebrow">Staged Items ({bom.staged.length})</span>
+              </div>
+              <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+                {bom.staged.map((s) => (
+                  <div key={s.poolId} className="flex items-center gap-3 px-3 py-2">
+                    <span className="flex-1 text-[12px] font-medium">{s.name}</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={s.quantity}
+                      onChange={(e) =>
+                        bom.setStagedQty(s.poolId, Math.max(1, parseInt(e.target.value) || 1))
+                      }
+                      aria-label={`Quantity for ${s.name}`}
+                      className="h-8 w-20 rounded border bg-[var(--surface-2)] px-2 text-right font-mono text-[12px]"
+                      style={{ borderColor: "var(--border)" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => bom.removeStaged(s.poolId)}
+                      className="p-1 text-destructive hover:scale-110 transition"
+                      title="Remove from staging"
+                      aria-label={`Remove ${s.name} from staging`}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div
+                className="flex items-center justify-end gap-2 border-t px-3 py-2"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <button
+                  type="button"
+                  onClick={bom.commitStaged}
+                  disabled={bom.addingLines}
+                  className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 flex items-center gap-1.5"
+                  style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+                >
+                  {bom.addingLines ? "Adding..." : `Add all ${bom.staged.length} to BOM`}
+                </button>
+              </div>
+            </div>
+          )}
         </Section>
       )}
 

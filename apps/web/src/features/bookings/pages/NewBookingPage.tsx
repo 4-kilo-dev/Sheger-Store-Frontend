@@ -45,6 +45,65 @@ export function NewBooking() {
     queryFn: getCustomFieldDefinitionsApi,
   });
 
+  const getStepErrors = (stepIndex: number) => {
+    const errors: string[] = [];
+    if (stepIndex === 0) {
+      if (!form.client.trim()) {
+        errors.push("Client / Organization is required");
+      }
+      if (/[a-zA-Z]/.test(form.contactPhone)) {
+        errors.push("Phone number cannot contain letters");
+      }
+    }
+    if (stepIndex === 1) {
+      if (!form.venue.trim()) {
+        errors.push("Venue / Location is required");
+      }
+      if (!form.assemblyDate) {
+        errors.push("Assembly Date & Time is required");
+      } else {
+        const assembly = new Date(form.assemblyDate);
+        const now = new Date();
+        if (assembly.getTime() < now.getTime() - 15 * 60 * 1000) {
+          errors.push("Assembly Date & Time cannot be in the past");
+        }
+      }
+      if (!form.eventDate) {
+        errors.push("Event Date & Time is required");
+      } else if (form.assemblyDate) {
+        const assembly = new Date(form.assemblyDate);
+        const event = new Date(form.eventDate);
+        if (event.getTime() < assembly.getTime()) {
+          errors.push("Event Date & Time cannot be earlier than Assembly Date & Time");
+        }
+      }
+      if (!form.dismantleDate) {
+        errors.push("Dismantle Date & Time is required");
+      } else if (form.assemblyDate) {
+        const assembly = new Date(form.assemblyDate);
+        const dismantle = new Date(form.dismantleDate);
+        if (dismantle.getTime() < assembly.getTime()) {
+          errors.push("Dismantle Date & Time cannot be earlier than Assembly Date & Time");
+        }
+      }
+    }
+    return errors;
+  };
+
+  const getDateTimeParts = (dateTimeStr: string) => {
+    if (!dateTimeStr) return { date: "", time: "12:00" };
+    const parts = dateTimeStr.split("T");
+    return {
+      date: parts[0] || "",
+      time: parts[1] ? parts[1].slice(0, 5) : "12:00"
+    };
+  };
+
+  const mergeDateTime = (date: string, time: string) => {
+    if (!date) return "";
+    return `${date}T${time || "12:00"}`;
+  };
+
   const { mutate: createBooking, isPending } = useMutation({
     mutationFn: createBookingApi,
     onSuccess: (data: any) => {
@@ -152,17 +211,93 @@ export function NewBooking() {
               <Field label="Venue / Location">
                 <input value={form.venue} onChange={(e) => set("venue", e.target.value)} placeholder="e.g. Millennium Hall" className={inputCls} />
               </Field>
-              <div className="grid grid-cols-3 gap-4">
-                <Field label="Assembly Date" icon={Calendar}>
-                  <DatePicker value={form.assemblyDate} onChange={(val) => set("assemblyDate", val)} />
-                </Field>
-                <Field label="Event Date" icon={Calendar}>
-                  <DatePicker value={form.eventDate} onChange={(val) => set("eventDate", val)} />
-                </Field>
-                <Field label="Dismantle Date" icon={Calendar}>
-                  <DatePicker value={form.dismantleDate} onChange={(val) => set("dismantleDate", val)} />
-                </Field>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Assembly */}
+                <div className="space-y-4 rounded-md border p-3.5" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--accent)] flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5" />
+                    Assembly Start
+                  </div>
+                  <div className="space-y-3">
+                    <Field label="Assembly Date">
+                      <DatePicker 
+                        value={getDateTimeParts(form.assemblyDate).date} 
+                        onChange={(d) => set("assemblyDate", mergeDateTime(d, getDateTimeParts(form.assemblyDate).time))} 
+                        minDate={new Date()}
+                      />
+                    </Field>
+                    <Field label="Assembly Time">
+                      <input 
+                        type="time" 
+                        value={getDateTimeParts(form.assemblyDate).time} 
+                        onChange={(e) => set("assemblyDate", mergeDateTime(getDateTimeParts(form.assemblyDate).date, e.target.value))} 
+                        className={inputCls} 
+                      />
+                    </Field>
+                  </div>
+                </div>
+
+                {/* Event */}
+                <div className="space-y-4 rounded-md border p-3.5" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--accent)] flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5" />
+                    Event Start
+                  </div>
+                  <div className="space-y-3">
+                    <Field label="Event Date">
+                      <DatePicker 
+                        value={getDateTimeParts(form.eventDate).date} 
+                        onChange={(d) => set("eventDate", mergeDateTime(d, getDateTimeParts(form.eventDate).time))} 
+                        minDate={form.assemblyDate ? new Date(form.assemblyDate) : new Date()}
+                      />
+                    </Field>
+                    <Field label="Event Time">
+                      <input 
+                        type="time" 
+                        value={getDateTimeParts(form.eventDate).time} 
+                        onChange={(e) => set("eventDate", mergeDateTime(getDateTimeParts(form.eventDate).date, e.target.value))} 
+                        className={inputCls} 
+                      />
+                    </Field>
+                  </div>
+                </div>
+
+                {/* Dismantle */}
+                <div className="space-y-4 rounded-md border p-3.5" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--accent)] flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5" />
+                    Dismantle Start
+                  </div>
+                  <div className="space-y-3">
+                    <Field label="Dismantle Date">
+                      <DatePicker 
+                        value={getDateTimeParts(form.dismantleDate).date} 
+                        onChange={(d) => set("dismantleDate", mergeDateTime(d, getDateTimeParts(form.dismantleDate).time))} 
+                        minDate={form.assemblyDate ? new Date(form.assemblyDate) : new Date()}
+                      />
+                    </Field>
+                    <Field label="Dismantle Time">
+                      <input 
+                        type="time" 
+                        value={getDateTimeParts(form.dismantleDate).time} 
+                        onChange={(e) => set("dismantleDate", mergeDateTime(getDateTimeParts(form.dismantleDate).date, e.target.value))} 
+                        className={inputCls} 
+                      />
+                    </Field>
+                  </div>
+                </div>
               </div>
+
+              {getStepErrors(1).length > 0 && (
+                <div className="mt-2 rounded p-2.5 text-[11px] border" style={{ color: "var(--destructive)", backgroundColor: "color-mix(in oklab, var(--destructive) 8%, transparent)", borderColor: "color-mix(in oklab, var(--destructive) 20%, transparent)" }}>
+                  <div className="font-bold mb-1">Validation Errors:</div>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {getStepErrors(1).map((err, idx) => (
+                      <li key={idx}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </Group>
           )}
 
@@ -301,9 +436,9 @@ export function NewBooking() {
                   ["Client", form.client || "—"],
                   ["Contact", `${form.contactPerson || "—"} · ${form.contactPhone || "—"}`],
                   ["Venue", form.venue || "—"],
-                  ["Assembly Date", form.assemblyDate || "—"],
-                  ["Event Date", form.eventDate || "—"],
-                  ["Dismantle Date", form.dismantleDate || "—"],
+                  ["Assembly Date", form.assemblyDate ? form.assemblyDate.replace("T", " ") : "—"],
+                  ["Event Date", form.eventDate ? form.eventDate.replace("T", " ") : "—"],
+                  ["Dismantle Date", form.dismantleDate ? form.dismantleDate.replace("T", " ") : "—"],
                   ["Required Spec", form.itemServiceSpec || "—"],
 
                   ["Intake Notes", form.notes || "—"],
@@ -339,7 +474,7 @@ export function NewBooking() {
             </button>
             {step < STEPS.length - 1 ? (
               <button
-                disabled={step === 0 && /[a-zA-Z]/.test(form.contactPhone)}
+                disabled={getStepErrors(step).length > 0}
                 onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
                 className="rounded-md px-4 py-2 text-[12px] font-semibold disabled:opacity-40"
                 style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
@@ -370,11 +505,11 @@ export function NewBooking() {
               <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3 text-[11px]" style={{ borderColor: "var(--border)" }}>
                 <div>
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Assembly</div>
-                  <div className="font-mono font-semibold">{form.assemblyDate || "—"}</div>
+                  <div className="font-mono font-semibold">{form.assemblyDate ? form.assemblyDate.replace("T", " ") : "—"}</div>
                 </div>
                 <div>
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Event</div>
-                  <div className="font-mono font-semibold">{form.eventDate || "—"}</div>
+                  <div className="font-mono font-semibold">{form.eventDate ? form.eventDate.replace("T", " ") : "—"}</div>
                 </div>
                 <div className="col-span-2">
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Required Spec</div>

@@ -45,11 +45,12 @@ export function LoginPage() {
         mutationFn: loginApi,
         onSuccess: (data) => {
             toast.success("Successfully signed in!");
-            if (data.user.isFirstLogin || data.user.mustChangePassword) {
-                navigate({ to: "/change-password" });
-            } else {
-                navigate({ to: "/" });
-            }
+            const mustChangePassword = !!(
+                data.mustChangePassword ??
+                data.user?.mustChangePassword ??
+                data.user?.isFirstLogin
+            );
+            navigate({ to: mustChangePassword ? "/change-password" : "/" });
         },
         onError: (error: any) => {
             const errorMessage = "Incorrect password or email";

@@ -11,15 +11,15 @@ export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) 
   const queryClient = useQueryClient();
   const { staffList } = useStaffForBooking(caps.canFetchStaff);
 
-  const [vehicleText, setVehicleText] = useState(b.driver || "");
-  const [vehiclePlate, setVehiclePlate] = useState((b as any).vehiclePlate || "");
-  const [driverUserId, setDriverUserId] = useState((b as any).driverUserId || "");
+  const [vehicleText, setVehicleText] = useState(b.vehicleText || "");
+  const [vehiclePlate, setVehiclePlate] = useState(b.vehiclePlate || "");
+  const [driverUserId, setDriverUserId] = useState(b.driverUserId || "");
   const [isSavingLogistics, setIsSavingLogistics] = useState(false);
 
   useEffect(() => {
-    setVehicleText(b.driver || "");
-    setVehiclePlate((b as any).vehiclePlate || "");
-    setDriverUserId((b as any).driverUserId || "");
+    setVehicleText(b.vehicleText || "");
+    setVehiclePlate(b.vehiclePlate || "");
+    setDriverUserId(b.driverUserId || "");
   }, [b]);
 
   const handleSaveLogistics = async () => {
@@ -54,7 +54,8 @@ export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) 
               value={vehicleText}
               onChange={(e) => setVehicleText(e.target.value)}
               placeholder="e.g. Abebe Kebede"
-              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
+              disabled={!caps.canEditLogistics}
+              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] disabled:opacity-75 disabled:cursor-not-allowed"
               style={{ borderColor: "var(--border)" }}
             />
           </label>
@@ -65,7 +66,8 @@ export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) 
               value={vehiclePlate}
               onChange={(e) => setVehiclePlate(e.target.value)}
               placeholder="e.g. AA 3-A12345"
-              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] font-mono"
+              disabled={!caps.canEditLogistics}
+              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] font-mono disabled:opacity-75 disabled:cursor-not-allowed"
               style={{ borderColor: "var(--border)" }}
             />
           </label>
@@ -77,7 +79,8 @@ export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) 
             <select
               value={driverUserId}
               onChange={(e) => setDriverUserId(e.target.value)}
-              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px] cursor-pointer"
+              disabled={!caps.canEditLogistics}
+              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px] cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
               style={{ borderColor: "var(--border)" }}
             >
               <option value="">— Select driver (optional) —</option>
@@ -89,16 +92,18 @@ export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) 
             </select>
           </label>
         </div>
-        <div className="flex justify-end">
-          <button
-            onClick={handleSaveLogistics}
-            disabled={isSavingLogistics}
-            className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 cursor-pointer"
-            style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
-          >
-            {isSavingLogistics ? "Saving…" : "Save Vehicle & Driver"}
-          </button>
-        </div>
+        {caps.canEditLogistics && (
+          <div className="flex justify-end">
+            <button
+              onClick={handleSaveLogistics}
+              disabled={isSavingLogistics}
+              className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 cursor-pointer"
+              style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+            >
+              {isSavingLogistics ? "Saving…" : "Save Vehicle & Driver"}
+            </button>
+          </div>
+        )}
       </div>
     </Section>
   );

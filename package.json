@@ -6,10 +6,8 @@
   "scripts": {
     "dev": "turbo dev",
     "dev:web": "pnpm --filter @vortex/web dev",
-    "dev:mobile": "pnpm --filter @vortex/mobile start",
     "build": "turbo build",
     "build:web": "pnpm --filter @vortex/web build",
-    "build:mobile": "pnpm --filter @vortex/mobile build",
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
     "format": "prettier --write ."

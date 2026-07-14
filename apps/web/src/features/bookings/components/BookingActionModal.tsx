@@ -2,6 +2,9 @@ import { AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { Booking } from "@/features/bookings/services/bookings.api";
 import type { useBookingActions } from "@/features/bookings/hooks/useBookingActions";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 
 interface BookingActionModalProps {
   booking: Booking;
@@ -9,6 +12,9 @@ interface BookingActionModalProps {
 }
 
 export function BookingActionModal({ booking, actions }: BookingActionModalProps) {
+  const { can } = usePermissions();
+  const authUser = useAuthUser();
+  const canManagePayment = can(PERMISSION.PAYMENT_MANAGE);
   const {
     showActionModal,
     setShowActionModal,
@@ -32,8 +38,6 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
     setCheckoutVehiclePlate,
     checkoutMealBudget,
     setCheckoutMealBudget,
-    checkoutSignature,
-    setCheckoutSignature,
     staff,
     performCheckout,
     isCheckingOut,
@@ -45,6 +49,13 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
   } = actions;
 
   if (!showActionModal || !selectedAction) return null;
+
+  // Payment capture is a finance action — only surfaced to payment.manage holders.
+  const showPaymentCapture =
+    booking.status === "RESERVED" &&
+    selectedAction.id === "booking.confirm" &&
+    booking.payment === "UNPAID" &&
+    canManagePayment;
 
   return (
     <div
@@ -74,9 +85,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
               Permission required: <strong>{selectedAction.permissionKey || selectedAction.id}</strong>
             </p>
 
-            {booking.status === "RESERVED" &&
-              selectedAction.id === "booking.confirm" &&
-              booking.payment === "UNPAID" && (
+            {showPaymentCapture && (
                 <div className="mt-3 grid grid-cols-4 gap-3">
                   <label
                     className="text-[11px] font-semibold"
@@ -140,9 +149,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                 </div>
               )}
               
-            {booking.status === "RESERVED" &&
-              selectedAction.id === "booking.confirm" &&
-              booking.payment === "UNPAID" && (
+            {showPaymentCapture && (
                 <div className="mt-2 text-[10px]" style={{ color: "var(--text-3)" }}>
                   {paymentType === "advance" ? (
                     <span>
@@ -162,18 +169,14 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                   )}
                 </div>
               )}
-            {booking.status === "RESERVED" &&
-              selectedAction.id === "booking.confirm" &&
-              booking.payment === "UNPAID" &&
+            {showPaymentCapture &&
               fullPayment < 1000 && (
                 <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
                   <AlertCircle className="h-3.5 w-3.5" />
                   <span>Minimum payment amount is ETB 1,000.</span>
                 </div>
               )}
-            {booking.status === "RESERVED" &&
-              selectedAction.id === "booking.confirm" &&
-              booking.payment === "UNPAID" &&
+            {showPaymentCapture &&
               paymentType === "advance" &&
               advancePayment > fullPayment && (
                 <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
@@ -181,9 +184,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                   <span>Advance Payment can't be greater than total payment.</span>
                 </div>
               )}
-            {booking.status === "RESERVED" &&
-              selectedAction.id === "booking.confirm" &&
-              booking.payment === "UNPAID" &&
+            {showPaymentCapture &&
               paymentType === "advance" &&
               advancePayment <= 0 && (
                 <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
@@ -295,19 +296,21 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                     style={{ borderColor: "var(--border)" }}
                   />
                 </label>
-                <label
+                <div
                   className="text-[11px] font-semibold col-span-2"
                   style={{ color: "var(--text-2)" }}
                 >
-                  Checkout Signature (Type Full Name)
-                  <input
-                    value={checkoutSignature}
-                    onChange={(e) => setCheckoutSignature(e.target.value)}
-                    placeholder="Type name to sign off checkout..."
-                    className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2.5 text-[12px]"
+                  Checkout Signature
+                  <div
+                    className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2.5 text-[12px] flex items-center font-medium"
                     style={{ borderColor: "var(--border)" }}
-                  />
-                </label>
+                  >
+                    {authUser?.name || "Not signed in"}
+                  </div>
+                  <span className="mt-1 block text-[10px] font-normal" style={{ color: "var(--text-3)" }}>
+                    Signed off automatically as the logged-in user.
+                  </span>
+                </div>
               </div>
             )}
 
@@ -348,12 +351,12 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
         <button
           onClick={() => {
             if (selectedAction.id === "inventory.checkout") {
-              if (!checkoutSignature.trim()) {
-                toast.error("Please sign off checkout by typing your name.");
+              if (!authUser?.name) {
+                toast.error("You must be signed in to sign off checkout.");
                 return;
               }
               performCheckout();
-            } else if (selectedAction.id === "booking.confirm" && booking.payment === "UNPAID") {
+            } else if (showPaymentCapture) {
               if (fullPayment < 1000) {
                 toast.error("Minimum payment amount is ETB 1,000");
                 return;
@@ -393,8 +396,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
             isConfirmingWithPayment ||
             isCheckingOut ||
             (selectedAction.requiresReason && cancellationReason.trim().length < 10) ||
-            (selectedAction.id === "booking.confirm" &&
-              booking.payment === "UNPAID" &&
+            (showPaymentCapture &&
               (fullPayment < 1000 ||
                 (paymentType === "advance" && advancePayment > fullPayment) ||
                 (paymentType === "advance" && advancePayment <= 0)))

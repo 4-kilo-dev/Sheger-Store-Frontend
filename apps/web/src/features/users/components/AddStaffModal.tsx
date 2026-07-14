@@ -25,7 +25,7 @@ import { STAFF_ROLES } from "@/features/checkout/services/operations.api";
 const addStaffSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   phone: z.string().regex(/^\+?[0-9\s\-]+$/, "Phone number can only contain digits, spaces, and hyphens").min(10, "Phone must be at least 10 characters"),
-  email: z.string().email("Please enter a valid email address"),
+  email: z.string().email("Please enter a valid email address").optional().or(z.literal("")),
   role: z.string().min(1, "Please select a role"),
   team: z.string().optional(),
   password: z.string().min(8, "Password must be at least 8 characters"),
@@ -150,9 +150,9 @@ export function AddStaffModal() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email Address</FormLabel>
+                    <FormLabel>Email Address (Optional)</FormLabel>
                     <FormControl>
-                      <Input placeholder="name@vortexvisual.com" {...field} />
+                      <Input placeholder="name@vortexvisual.com (optional)" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

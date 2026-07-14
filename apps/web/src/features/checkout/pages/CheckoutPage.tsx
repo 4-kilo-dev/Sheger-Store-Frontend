@@ -324,7 +324,9 @@ export function CheckoutPage() {
                   <label className="text-[12px] font-semibold">
                     {mode === "checkout" ? "Checked out by" : "Received by"}
                     <input
-                      defaultValue="Selam Worku"
+                      value={authUser?.name || ""}
+                      readOnly
+                      aria-label={mode === "checkout" ? "Checked out by" : "Received by"}
                       className="mt-1.5 h-10 w-full rounded-md border bg-[var(--surface-2)] px-3 text-[12px] outline-none focus:border-[var(--accent)]"
                       style={{ borderColor: "var(--border)" }}
                     />
