@@ -9,6 +9,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/.output/**",
       "**/.vinxi/**",
+      "**/.expo/**",
       "**/.tanstack/**",
       "**/node_modules/**",
     ],
