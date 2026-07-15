@@ -40,6 +40,8 @@ export interface Booking {
   teamLeader: string;
   driver: string;
   driverUserId?: string;
+  vehicleText?: string;
+  vehiclePlate?: string;
   mealBudget: number;
   createdAt: string;
   statusHistory?: StatusHistoryItem[];
@@ -154,9 +156,9 @@ function mapBackendBookingToFrontend(b: any): Booking {
     client: customerName,
     contactPerson: customerName,
     contactPhone: customerPhone,
-    assemblyDate: b.assemblyStart ? b.assemblyStart.slice(0, 10) : "",
-    eventDate: b.eventDate ? b.eventDate.slice(0, 10) : "",
-    dismantleDate: b.disassemblyEnd ? b.disassemblyEnd.slice(0, 10) : "",
+    assemblyDate: b.assemblyStart ? b.assemblyStart.slice(0, 16) : "",
+    eventDate: b.eventDate ? b.eventDate.slice(0, 16) : "",
+    dismantleDate: b.disassemblyEnd ? b.disassemblyEnd.slice(0, 16) : "",
     venue: b.eventLocation || "",
     screenType,
     size,
@@ -165,13 +167,15 @@ function mapBackendBookingToFrontend(b: any): Booking {
     stageHand,
     status: (b.status || "RESERVED") as BookingStatus,
     payment,
-    amount: typeof b.amount === "number" ? b.amount : parseFloat(b.amount || "0"),
+    amount: typeof b.paymentAmount === "number" ? b.paymentAmount : parseFloat(b.paymentAmount || "0"),
     paymentAmount: typeof b.paymentAmount === "number" ? b.paymentAmount : (b.paymentAmount ? parseFloat(b.paymentAmount) : undefined),
     ctoNotes: b.ctoConsultationNotes || "",
     bomItems: bomItems,
     teamLeader: teamLeader,
     driver,
     driverUserId: b.driverUserId || "",
+    vehicleText: b.vehicleText || "",
+    vehiclePlate: b.vehiclePlate || "",
     mealBudget,
     createdAt: b.createdAt ? b.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
     statusHistory,
@@ -200,10 +204,23 @@ export async function createBookingApi(form: any): Promise<any> {
   });
 
   // 2. Prepare event dates
-  const eventDateStr = `${form.eventDate || new Date().toISOString().slice(0, 10)}T18:00:00.000Z`;
-  const assemblyStartStr = `${form.assemblyDate || new Date().toISOString().slice(0, 10)}T12:00:00.000Z`;
-  const assemblyEndStr = `${form.assemblyDate || new Date().toISOString().slice(0, 10)}T15:00:00.000Z`;
-  const dismantleDateStr = form.dismantleDate ? `${form.dismantleDate}T23:59:59.000Z` : `${form.eventDate || new Date().toISOString().slice(0, 10)}T23:59:00.000Z`;
+  const eventDateStr = form.eventDate
+    ? (form.eventDate.includes("T") ? new Date(form.eventDate).toISOString() : `${form.eventDate}T18:00:00.000Z`)
+    : new Date().toISOString();
+
+  const assemblyStartStr = form.assemblyDate
+    ? (form.assemblyDate.includes("T") ? new Date(form.assemblyDate).toISOString() : `${form.assemblyDate}T12:00:00.000Z`)
+    : new Date().toISOString();
+
+  const assemblyEndStr = form.assemblyDate
+    ? (form.assemblyDate.includes("T") ? new Date(new Date(form.assemblyDate).getTime() + 3 * 3600000).toISOString() : `${form.assemblyDate}T15:00:00.000Z`)
+    : new Date().toISOString();
+
+  const dismantleDateStr = form.dismantleDate
+    ? (form.dismantleDate.includes("T") ? new Date(form.dismantleDate).toISOString() : `${form.dismantleDate}T23:59:59.000Z`)
+    : (form.eventDate
+        ? (form.eventDate.includes("T") ? new Date(new Date(form.eventDate).getTime() + 6 * 3600000).toISOString() : `${form.eventDate}T23:59:00.000Z`)
+        : new Date().toISOString());
 
   const bookingPayload = {
     customerId: customer.id,
@@ -277,6 +294,35 @@ export async function recordBookingPaymentApi(bookingId: string, toStatus: strin
     toStatus, // 'advance' or 'fully_paid'
     amount: String(amount),
   });
+}
+
+export interface PaymentSummary {
+  /** Amount recorded against the booking so far. */
+  paid: number;
+  /**
+   * Contract total. `null` when unknown — the backend has no separate
+   * contract-total field and overwrites paymentAmount with the latest payment,
+   * so a true total is only known once fully paid.
+   */
+  total: number | null;
+  /** Remaining balance, or `null` when the total is unknown. */
+  remaining: number | null;
+}
+
+/**
+ * Honest payment figures from the fields the API actually exposes
+ * (`payment` status + `paymentAmount`). No `/2` guessing. A real ledger
+ * (contract vs paid vs balance across multiple payments) needs backend changes.
+ */
+export function getPaymentSummary(b: Booking): PaymentSummary {
+  const recorded = b.paymentAmount ?? b.amount ?? 0;
+  if (b.payment === "PAID") {
+    return { paid: recorded, total: recorded, remaining: 0 };
+  }
+  if (b.payment === "ADVANCE") {
+    return { paid: recorded, total: null, remaining: null };
+  }
+  return { paid: 0, total: null, remaining: null };
 }
 
 export async function updateBookingApi(bookingId: string, payload: any): Promise<any> {

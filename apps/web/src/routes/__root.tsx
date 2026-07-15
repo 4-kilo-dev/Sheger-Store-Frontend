@@ -4,16 +4,24 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
   redirect,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles/styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { authStorage } from "../lib/api/client";
-import { refreshAuthUser } from "@/features/auth/services/auth.api";
+import {
+  isSessionValidated,
+  validateSession,
+  getMustChangePassword,
+} from "@/features/auth/services/auth.api";
+
+const PUBLIC_ROUTES = ["/login", "/otp"];
+const CHANGE_PASSWORD_ROUTE = "/change-password";
 
 function NotFoundComponent() {
   return (
@@ -102,20 +110,35 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     }
 
     const token = authStorage.getToken();
-    const isPublicRoute = ["/login", "/otp"].includes(location.pathname);
+    const pathname = location.pathname;
+    const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
 
     // Treat stringified undefined/null as falsy
     const hasValidToken = !!(token && token !== "undefined" && token !== "null");
 
-    if (!hasValidToken && !isPublicRoute) {
-      throw redirect({
-        to: "/login",
-        search: {
-          redirect: location.href,
-        },
-      });
+    if (!hasValidToken) {
+      if (!isPublicRoute) {
+        throw redirect({
+          to: "/login",
+          search: {
+            redirect: location.href,
+          },
+        });
+      }
+      return;
     }
-    if (hasValidToken && isPublicRoute) {
+
+    // New/staff accounts must set a password before accessing anything else.
+    // The backend blocks every route except change-password with a 403 while
+    // this flag is set, so keep the user on that page until it's done.
+    if (getMustChangePassword()) {
+      if (pathname !== CHANGE_PASSWORD_ROUTE) {
+        throw redirect({ to: CHANGE_PASSWORD_ROUTE });
+      }
+      return;
+    }
+
+    if (isPublicRoute) {
       throw redirect({
         to: "/",
       });
@@ -161,25 +184,76 @@ import { Toaster } from "../components/ui/sonner";
 import { NotificationsProvider } from "@/features/notifications/context/NotificationsContext";
 import { CalendarSystemProvider } from "@/context/CalendarSystemContext";
 
+function AuthLoadingScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div
+        className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground"
+        role="status"
+        aria-label="Verifying session"
+      />
+    </div>
+  );
+}
+
+/**
+ * Verifies the stored token with the backend before rendering protected
+ * content. Until the token is confirmed valid, a neutral loading screen is
+ * shown so the app never flashes the previously cached role/page. If the token
+ * is invalid the API client clears it and redirects to /login.
+ */
+function AuthGate({ children }: { children: ReactNode }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
+
+  // Start "ready" for public routes or an already-validated session; otherwise
+  // start "checking" so SSR and the first client render agree (no hydration
+  // mismatch) and no protected content paints before validation resolves.
+  const [ready, setReady] = useState(() => isPublicRoute || isSessionValidated());
+
+  useEffect(() => {
+    if (isPublicRoute || isSessionValidated()) {
+      setReady(true);
+      return;
+    }
+
+    const token = authStorage.getToken();
+    const hasToken = !!(token && token !== "undefined" && token !== "null");
+    if (!hasToken) {
+      // No token: the route guard redirects to /login. Keep the loader until
+      // the pathname flips to a public route so protected content never shows.
+      setReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    setReady(false);
+    validateSession().then((valid) => {
+      if (cancelled) return;
+      // On invalid tokens the API client already redirected to /login; keep the
+      // loader up meanwhile so nothing protected flashes.
+      if (valid) setReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isPublicRoute, pathname]);
+
+  if (!ready) return <AuthLoadingScreen />;
+  return <>{children}</>;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-
-  // Bootstrap effective permissions once per session load
-  useEffect(() => {
-    const token = authStorage.getToken();
-    const hasValidToken = !!(token && token !== "undefined" && token !== "null");
-    if (!hasValidToken) return;
-    refreshAuthUser().catch(() => {
-      // 401 handled by API client; keep cached user on other errors
-    });
-  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
       <CalendarSystemProvider>
         <NotificationsProvider>
           {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
+          <AuthGate>
+            <Outlet />
+          </AuthGate>
           <Toaster theme="dark" closeButton />
         </NotificationsProvider>
       </CalendarSystemProvider>

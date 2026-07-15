@@ -22,6 +22,16 @@ export function BookingQueuesWidget() {
   // Filters for CTO
   const ctoConfirmed = useMemo(() => bookingsList.filter((b) => b.status === "CONFIRMED"), [bookingsList]);
   const ctoAssigned = useMemo(() => bookingsList.filter((b) => b.status === "ASSIGNED"), [bookingsList]);
+  // Reserved but not yet paid — awaiting CCR payment before they can progress.
+  const ctoWaitingReview = useMemo(
+    () => bookingsList.filter((b) => b.status === "RESERVED" && b.payment === "UNPAID"),
+    [bookingsList]
+  );
+  // Reserved with advance/full payment — ready to be picked up for technician assignment.
+  const ctoReadyForAssignment = useMemo(
+    () => bookingsList.filter((b) => b.status === "RESERVED" && (b.payment === "ADVANCE" || b.payment === "PAID")),
+    [bookingsList]
+  );
 
   // Filters for Technician / Freelancer / Stagehand
   const techAssigned = useMemo(() => {
@@ -82,6 +92,22 @@ export function BookingQueuesWidget() {
   if (role === "chief_tech") {
     return (
       <div className="grid gap-4 xl:grid-cols-2">
+        <QueueSection title="Waiting for tech review" icon={ClipboardCheck} count={ctoWaitingReview.length}>
+          {ctoWaitingReview.map((b) => (
+            <BookingQueueItem key={b.code} booking={b} />
+          ))}
+          {ctoWaitingReview.length === 0 && (
+            <div className="py-6 text-center text-[11px] text-[var(--text-3)]">No reserved bookings awaiting payment</div>
+          )}
+        </QueueSection>
+        <QueueSection title="Bookings ready for technician assignment" icon={DollarSign} count={ctoReadyForAssignment.length}>
+          {ctoReadyForAssignment.map((b) => (
+            <BookingQueueItem key={b.code} booking={b} />
+          ))}
+          {ctoReadyForAssignment.length === 0 && (
+            <div className="py-6 text-center text-[11px] text-[var(--text-3)]">No paid reservations ready yet</div>
+          )}
+        </QueueSection>
         <QueueSection title="Bookings ready for tech review" icon={Wrench} count={ctoConfirmed.length}>
           {ctoConfirmed.map((b) => (
             <BookingQueueItem key={b.code} booking={b} />

@@ -55,7 +55,7 @@ export function ChangePasswordPage() {
     });
 
     const onSubmit = (data: ChangePasswordFormValues) => {
-        changePassword({ password: data.password });
+        changePassword({ newPassword: data.password });
     };
 
     return (

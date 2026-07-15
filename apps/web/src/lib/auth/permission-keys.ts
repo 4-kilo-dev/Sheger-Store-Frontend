@@ -26,13 +26,13 @@ export const PERMISSION = {
   DAMAGE_REPORT: "damage.report",
   EVAL_SUBMIT_INTERNAL: "eval.submit_internal",
   EVAL_VIEW: "eval.view",
+  PAYMENT_MANAGE: "payment.manage",
   /** Read staff list / user detail */
   USER_VIEW: "user.view",
   /** Create/update users, reset password, assign roles */
   USER_MANAGE: "user.manage",
   /** Read roles list, role detail, permission catalog */
   ROLE_VIEW: "role.view",
-  /** Role CRUD / attach-detach permissions */
   ROLE_MANAGE: "role.manage",
 } as const;
 
@@ -46,8 +46,5 @@ export const PERMISSION_LABELS: Record<string, string> = {
   "role.view": "View roles & permission catalog",
   "role.manage": "Manage roles & permissions",
 };
-
-export type PermissionKey = (typeof PERMISSION)[keyof typeof PERMISSION];
-
 
 export type PermissionKey = (typeof PERMISSION)[keyof typeof PERMISSION];

@@ -3,7 +3,7 @@ import { useDateFormatter } from "@/context/CalendarSystemContext";
 import { PaymentBadge } from "@/components/status-badge";
 import { Section } from "@/features/bookings/components/shared/Section";
 import { KV } from "@/features/bookings/components/shared/KV";
-import type { Booking } from "@/features/bookings/services/bookings.api";
+import { getPaymentSummary, type Booking } from "@/features/bookings/services/bookings.api";
 import type { BookingCapabilities } from "@/features/bookings/hooks/useBookingCapabilities";
 
 export function OverviewSidebar({
@@ -23,30 +23,27 @@ export function OverviewSidebar({
         <KV label="Dismantle" value={formatDate(b.dismantleDate)} mono />
       </Section>
 
-      {caps.showOpsSidebar && (
-        <Section title="Financial" icon={DollarSign}>
-          <KV label="Contract" value={`ETB ${b.amount.toLocaleString()}`} mono />
-          <KV
-            label="Paid"
-            value={
-              b.payment === "PAID"
-                ? `ETB ${b.amount.toLocaleString()}`
-                : b.payment === "ADVANCE"
-                  ? `ETB ${(b.amount / 2).toLocaleString()}`
-                  : "ETB 0"
-            }
-            mono
-          />
-          <KV
-            label="Balance"
-            value={b.payment === "PAID" ? "ETB 0" : `ETB ${(b.amount / 2).toLocaleString()}`}
-            mono
-          />
-          <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border)" }}>
-            <KV label="Status" value={<PaymentBadge status={b.payment} />} />
-          </div>
-        </Section>
-      )}
+      {caps.showFinancials && (() => {
+        const summary = getPaymentSummary(b);
+        return (
+          <Section title="Financial" icon={DollarSign}>
+            <KV label="Paid" value={`ETB ${summary.paid.toLocaleString()}`} mono />
+            <KV
+              label="Total"
+              value={summary.total === null ? "—" : `ETB ${summary.total.toLocaleString()}`}
+              mono
+            />
+            <KV
+              label="Balance"
+              value={summary.remaining === null ? "Pending" : `ETB ${summary.remaining.toLocaleString()}`}
+              mono
+            />
+            <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border)" }}>
+              <KV label="Status" value={<PaymentBadge status={b.payment} />} />
+            </div>
+          </Section>
+        );
+      })()}
 
       <Section title="Quick Stats" icon={CheckCircle2}>
         <KV

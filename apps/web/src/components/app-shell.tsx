@@ -1,14 +1,13 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, CalendarRange, Package, Users, BarChart3, Settings,
-  Bell, ChevronsLeft, ChevronsRight, Search, ChevronRight,
+  ChevronsLeft, ChevronsRight, Search, ChevronRight,
   ClipboardCheck, ShieldAlert, LogOut, Sun, Moon, Menu, X, Trello,
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import { useMobile } from "@/hooks/use-mobile";
 import { useActiveProfile, PROFILES } from "@/hooks/use-active-profile";
 import { logoutApi } from "@/features/auth/services/auth.api";
-import { useNotifications } from "@/features/notifications/context/NotificationsContext";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -22,25 +21,7 @@ const NAV = [
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
-const ROLE_SUBLINKS = [
-  { to: "/?role=ccr", label: "Client Relations (CCR)" },
-  { to: "/?role=chief_tech", label: "Chief Technician (CTO)" },
-  { to: "/?role=technician", label: "Technician (TO)" },
-  { to: "/?role=oo", label: "Operations (OO)" },
-  { to: "/?role=storekeeper", label: "Storekeeper (SK)" },
-] as const;
 
-const mapProfileToRoleKey = (profileRole: string): string => {
-  switch (profileRole) {
-    case "CTO": return "chief_tech";
-    case "TO": return "technician";
-    case "OO": return "oo";
-    case "SK": return "storekeeper";
-    case "SH": return "stagehand";
-    case "FL": return "freelancer";
-    default: return profileRole.toLowerCase();
-  }
-};
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   Admin: ["/", "/operations", "/bookings", "/inventory", "/checkout", "/damage-report", "/staff", "/reports", "/settings"],
@@ -98,8 +79,6 @@ function Breadcrumb() {
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const isMobile = useMobile();
-  const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications();
-  const [bellOpen, setBellOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [rolesOpen, setRolesOpen] = useState(true);
@@ -156,82 +135,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })()}
 
-          {/* Role Workspaces / My Workspace */}
-          {activeProfile.role === "Admin" ? (
-            <div className="space-y-0.5">
-              <Link
-                to="/"
-                onClick={() => {
-                  if (isMobile || !collapsed) {
-                    setRolesOpen(!rolesOpen);
-                  }
-                }}
-                className="group relative flex items-center justify-between rounded-md px-3 py-2 text-[13px] font-medium transition"
-                style={{
-                  background: path === "/" && searchRole ? "var(--surface-2)" : "transparent",
-                  color: path === "/" && searchRole ? "var(--foreground)" : "var(--text-2)",
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  {path === "/" && searchRole && (
-                    <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r" style={{ background: "var(--accent)" }} />
-                  )}
-                  <LayoutDashboard className="h-4 w-4 shrink-0" style={{ color: path === "/" && searchRole ? "var(--accent)" : "currentColor" }} />
-                  {(isMobile || !collapsed) && <span>Role Workspaces</span>}
-                </div>
-                {(isMobile || !collapsed) && (
-                  <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${rolesOpen ? "rotate-90" : ""}`} />
-                )}
-              </Link>
 
-              {rolesOpen && (isMobile || !collapsed) && (
-                <div className="pl-6 space-y-0.5 border-l ml-5" style={{ borderColor: "var(--border)" }}>
-                  {ROLE_SUBLINKS.map(({ to, label }) => {
-                    const active = path === "/" && `/?role=${searchRole}` === to;
-                    return (
-                      <Link
-                        key={to}
-                        to={to as any}
-                        className="group relative flex items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-medium transition"
-                        style={{
-                          background: active ? "var(--surface-2)" : "transparent",
-                          color: active ? "var(--foreground)" : "var(--text-2)",
-                        }}
-                      >
-                        {active && (
-                          <span className="absolute inset-y-1 left-0 w-0.5 rounded-r" style={{ background: "var(--accent)" }} />
-                        )}
-                        <span>{label}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ) : (
-            (() => {
-              const myRoleKey = mapProfileToRoleKey(activeProfile.role);
-              const myRoleLabel = activeProfile.role === "CTO" ? "Chief Tech Workspace" : `${activeProfile.role} Workspace`;
-              const myPath = `/?role=${myRoleKey}` as any;
-              const active = path === "/" && searchRole === myRoleKey;
-              return (
-                <Link
-                  to={myPath}
-                  className="group relative flex items-center gap-3 rounded-md px-3 py-2 text-[13px] font-medium transition"
-                  style={{
-                    background: active ? "var(--surface-2)" : "transparent",
-                    color: active ? "var(--foreground)" : "var(--text-2)",
-                  }}
-                >
-                  {active && (
-                    <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r" style={{ background: "var(--accent)" }} />
-                  )}
-                  <LayoutDashboard className="h-4 w-4 shrink-0" style={{ color: active ? "var(--accent)" : "currentColor" }} />
-                  {(isMobile || !collapsed) && <span>{myRoleLabel}</span>}
-                </Link>
-              );
-            })()
-          )}
 
           {/* Other Nav Items */}
           {NAV.slice(1).map(({ to, label, icon: Icon }) => {
@@ -478,122 +382,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {theme === "dark" ? <Sun className="h-4 w-4" style={{ color: "var(--accent)" }} /> : <Moon className="h-4 w-4" style={{ color: "var(--accent)" }} />}
               </span>
             </button>
-            {/* Notification Bell Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setBellOpen(!bellOpen)}
-                aria-label="Open notifications"
-                className="relative flex h-8 w-8 items-center justify-center rounded-md border hover:bg-[var(--surface-2)] transition"
-                style={{ borderColor: "var(--border)" }}
-              >
-                <Bell className="h-4 w-4" style={{ color: "var(--text-2)" }} />
-                {unreadCount > 0 && (
-                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full animate-ping" style={{ background: "var(--accent)" }} />
-                )}
-                {unreadCount > 0 && (
-                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ background: "var(--accent)" }} />
-                )}
-              </button>
 
-              {bellOpen && (
-                <>
-                  {/* Backdrop to close dropdown on clicking outside */}
-                  <div className="fixed inset-0 z-40 bg-transparent cursor-default" onClick={() => setBellOpen(false)} />
-                  
-                  {/* Dropdown panel */}
-                  <div
-                    className={`absolute mt-2 rounded-lg border shadow-xl z-50 p-1 flex flex-col max-h-[420px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 ${isMobile ? 'right-0 left-0 mx-auto w-[calc(100vw-2rem)] -translate-x-1/4' : 'right-0 w-80'}`}
-                    style={{ background: "var(--surface)", borderColor: "var(--border)" }}
-                  >
-                    <div className="flex items-center justify-between border-b px-3.5 py-2.5" style={{ borderColor: "var(--border)" }}>
-                      <span className="text-[13px] font-bold">Notifications</span>
-                      {unreadCount > 0 && (
-                        <button
-                          onClick={() => {
-                            markAllRead();
-                            setBellOpen(false);
-                          }}
-                          className="text-[10px] font-semibold hover:opacity-80 transition"
-                          style={{ color: "var(--accent)" }}
-                        >
-                          Mark all read
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto divide-y scrollbar-thin" style={{ borderColor: "var(--border)" }}>
-                      {notifications.length === 0 ? (
-                        <div className="py-8 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
-                          No notifications yet
-                        </div>
-                      ) : (
-                        notifications.slice(0, 5).map((n) => {
-                          const isUnread = !n.readAt;
-                          
-                          // Redirect mapping
-                          let redirectPath = "/notifications";
-                          if (n.relatedEntity === "booking") {
-                            redirectPath = `/bookings/${n.relatedId}`;
-                          } else if (n.relatedEntity === "assignment") {
-                            redirectPath = `/bookings/${n.relatedId}`;
-                          } else if (n.relatedEntity === "damage_missing_report") {
-                            redirectPath = `/damage-report`;
-                          }
-
-                          return (
-                            <div
-                              key={n.id}
-                              onClick={() => {
-                                navigate({ to: redirectPath as any });
-                                markAsRead(n.id);
-                                setBellOpen(false);
-                              }}
-                              className="group flex gap-2.5 p-3 text-left transition hover:bg-[var(--surface-2)] cursor-pointer"
-                            >
-                              <div className="mt-1 flex h-2 w-2 shrink-0 rounded-full" style={{ background: isUnread ? "var(--accent)" : "transparent" }} />
-                              <div className="flex-grow min-w-0">
-                                <div className="text-[12px] font-bold truncate" style={{ color: isUnread ? "var(--foreground)" : "var(--text-2)" }}>
-                                  {n.title}
-                                </div>
-                                <div className="text-[10.5px] mt-0.5 leading-relaxed truncate" style={{ color: "var(--text-3)" }}>
-                                  {n.detail || n.message}
-                                </div>
-                                <div className="text-[9px] font-mono mt-1" style={{ color: "var(--text-3)" }}>
-                                  {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                              </div>
-                              {isUnread && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    markAsRead(n.id);
-                                  }}
-                                  className="self-center opacity-0 group-hover:opacity-100 transition rounded-md border px-1.5 py-0.5 text-[9px] font-semibold hover:border-[var(--accent)]"
-                                  style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
-                                >
-                                  Mark read
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-
-                    <div className="border-t p-2 text-center" style={{ borderColor: "var(--border)" }}>
-                      <Link
-                        to="/notifications"
-                        onClick={() => setBellOpen(false)}
-                        className="block w-full py-1 text-[11px] font-bold text-center hover:opacity-80 transition"
-                        style={{ color: "var(--accent)" }}
-                      >
-                        View all notifications
-                      </Link>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
           </div>
         </header>
         <main className="flex-1 p-3 md:p-6">{children}</main>

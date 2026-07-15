@@ -320,11 +320,20 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
                     style={{ borderColor: "var(--border)" }}
                   >
                     <option value="">— Select Screen —</option>
-                    {screenPools.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
+                    {screenPools
+                      .filter((p) => {
+                        if (p.id === alloc.poolId) return true;
+                        return !allocations.some((a, i) => {
+                          if (i === idx) return false;
+                          const otherPool = screenPools.find((sp) => sp.id === a.poolId);
+                          return otherPool && (otherPool.id === p.id || otherPool.name === p.name);
+                        });
+                      })
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
                   </select>
                 </label>
 

@@ -72,6 +72,11 @@ export function useBookingActions(
     }
   }, [booking]);
 
+  // The checkout signature is inferred from the logged-in user — no typing.
+  useEffect(() => {
+    if (authUser?.name) setCheckoutSignature(authUser.name);
+  }, [authUser?.name]);
+
   useEffect(() => {
     if (!canFetchStaff) return;
     getStaffApi()

@@ -79,9 +79,14 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     can(PERMISSION.BOOKING_EDIT) ||
     (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned);
 
+  const canEditLogistics = can(PERMISSION.BOOKING_EDIT);
+
   const canReportDamage = can(PERMISSION.DAMAGE_REPORT);
   const canSubmitEval = can(PERMISSION.EVAL_SUBMIT_INTERNAL);
   const canViewEval = can(PERMISSION.EVAL_VIEW) || canSubmitEval;
+
+  /** Finance surfaces (payments, revenue, financial figures) — Admin/CCR only. */
+  const showFinancials = can(PERMISSION.PAYMENT_MANAGE);
 
   const canFetchStaff = canAny([
     PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN,
@@ -159,7 +164,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   );
 
   const visibleTabs: TabName[] = useMemo(() => {
-    const showPayments = can(PERMISSION.BOOKING_CONFIRM);
+    const showPayments = can(PERMISSION.PAYMENT_MANAGE);
     const showOpsTabs = canAny([
       PERMISSION.BOOKING_VIEW_ALL,
       PERMISSION.BOOKING_EDIT,
@@ -195,9 +200,11 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     canAcceptAssignment,
     canDeclineAssignment,
     canEditBooking,
+    canEditLogistics,
     canReportDamage,
     canSubmitEval,
     canViewEval,
+    showFinancials,
     canFetchStaff,
     canAssignTechnician,
     canAssignCrew,
