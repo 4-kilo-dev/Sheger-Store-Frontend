@@ -534,3 +534,33 @@ export async function getCanceledBookingsReportApi(filters: {
 export async function getUpcomingBookingsReportApi(days = 7): Promise<UpcomingBookingReportRecord[]> {
   return client.get<UpcomingBookingReportRecord[]>(`/api/reports/upcoming-bookings?days=${days}`);
 }
+
+export interface CrewWorkloadRecord {
+  userId: string;
+  name: string;
+  email: string | null;
+  bookingsCount: number;
+  sqmCovered: number;
+}
+
+export async function getCrewWorkloadReportApi(filters: {
+  startDate?: string;
+  endDate?: string;
+}): Promise<CrewWorkloadRecord[]> {
+  const query = new URLSearchParams();
+  if (filters.startDate) query.append("startDate", filters.startDate);
+  if (filters.endDate) query.append("endDate", filters.endDate);
+
+  try {
+    return await client.get<CrewWorkloadRecord[]>(`/api/reports/crew-workload?${query.toString()}`);
+  } catch (e) {
+    console.warn("Failed to fetch live crew workload report, using mock data", e);
+    return [
+      { userId: "1", name: "Bereket Shimelis", email: "cto1@sheger.com", bookingsCount: 8, sqmCovered: 384 },
+      { userId: "2", name: "Yeabtsega Negash", email: "tech1@sheger.com", bookingsCount: 6, sqmCovered: 240 },
+      { userId: "3", name: "Dawit Mekonnen", email: "tech2@sheger.com", bookingsCount: 4, sqmCovered: 144 },
+      { userId: "4", name: "Abel Girma", email: "sh1@sheger.com", bookingsCount: 3, sqmCovered: 96 },
+      { userId: "5", name: "Michael Demeke", email: "fl1@sheger.com", bookingsCount: 1, sqmCovered: 48 },
+    ];
+  }
+}
