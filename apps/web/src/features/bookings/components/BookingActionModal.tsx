@@ -2,9 +2,7 @@ import { AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { Booking } from "@/features/bookings/services/bookings.api";
 import type { useBookingActions } from "@/features/bookings/hooks/useBookingActions";
-import { usePermissions } from "@/hooks/use-permissions";
 import { useAuthUser } from "@/hooks/use-auth-user";
-import { PERMISSION } from "@/lib/auth/permission-keys";
 
 interface BookingActionModalProps {
   booking: Booking;
@@ -12,9 +10,7 @@ interface BookingActionModalProps {
 }
 
 export function BookingActionModal({ booking, actions }: BookingActionModalProps) {
-  const { can } = usePermissions();
   const authUser = useAuthUser();
-  const canManagePayment = can(PERMISSION.PAYMENT_MANAGE);
   const {
     showActionModal,
     setShowActionModal,
@@ -50,12 +46,15 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
 
   if (!showActionModal || !selectedAction) return null;
 
-  // Payment capture is a finance action — only surfaced to payment.manage holders.
-  const showPaymentCapture =
+  // Confirming an unpaid booking requires recording advance/full payment first
+  // (backend rejects RESERVED→CONFIRMED without it). Always show the capture form
+  // when this confirm edge is open — don't gate on can() here; allowed-transitions
+  // already decided the user may confirm. Payments tab / financials stay on PAYMENT_MANAGE.
+  const isConfirmUnpaid =
     booking.status === "RESERVED" &&
     selectedAction.id === "booking.confirm" &&
-    booking.payment === "UNPAID" &&
-    canManagePayment;
+    booking.payment === "UNPAID";
+  const showPaymentCapture = isConfirmUnpaid;
 
   return (
     <div
@@ -382,6 +381,9 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                   totalAmount: fullPayment,
                 });
               }
+            } else if (isConfirmUnpaid) {
+              toast.error("Enter advance or full payment before confirming this booking.");
+              return;
             } else {
               transitionStatus({
                 toStatus: selectedAction.targetStatus,
