@@ -16,14 +16,26 @@ import {
   getEvaluationsReportApi, 
   getCanceledBookingsReportApi, 
   getUpcomingBookingsReportApi,
+  getCrewWorkloadReportApi,
   type BookingReportRecord,
   type InventoryReportRecord,
   type RevenuePaymentRecord,
   type CustomerReportRecord,
   type EvaluationReportRecord,
   type CanceledBookingReportRecord,
-  type UpcomingBookingReportRecord
+  type UpcomingBookingReportRecord,
+  type CrewWorkloadRecord
 } from "../services/reports.api";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+} from "recharts";
 import { getStaffApi } from "@/features/users/services/staff.api";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -109,6 +121,11 @@ export function ReportsPage() {
     queryFn: () => getUpcomingBookingsReportApi(7),
   });
 
+  const { data: crewWorkloadReport = [], isLoading: loadingCrewWorkload } = useQuery({
+    queryKey: ["reports-crew-workload", { startDate, endDate }],
+    queryFn: () => getCrewWorkloadReportApi({ startDate, endDate }),
+  });
+
   const { data: staffList = [] } = useQuery({
     queryKey: ["staff"],
     queryFn: getStaffApi,
@@ -149,12 +166,12 @@ export function ReportsPage() {
       case "revenue_bookings": return loadingBookings || loadingRevenue;
       case "inventory_health": return loadingInventory;
       case "client_directory": return loadingCustomers;
-      case "quality_crew": return loadingEvaluations;
+      case "quality_crew": return loadingEvaluations || loadingCrewWorkload;
       case "audit_logs": return loadingCanceled || loadingUpcoming;
       case "staff_work_sheets": return isGeneratingSheet;
       default: return false;
     }
-  }, [activeTab, loadingBookings, loadingRevenue, loadingInventory, loadingCustomers, loadingEvaluations, loadingCanceled, loadingUpcoming, isGeneratingSheet]);
+  }, [activeTab, loadingBookings, loadingRevenue, loadingInventory, loadingCustomers, loadingEvaluations, loadingCrewWorkload, loadingCanceled, loadingUpcoming, isGeneratingSheet]);
 
   // Contextual CSV Exporter
   function handleExportCSV() {
@@ -686,6 +703,97 @@ export function ReportsPage() {
         {/* ========================================================================= */}
         {activeTab === "quality_crew" && (
           <div className="space-y-4">
+            
+            {/* Crew Workload & Screen Coverage Chart (Monday.com Style) */}
+            <div className="rounded-lg border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 border-b pb-2.5 gap-2" style={{ borderColor: "var(--border)" }}>
+                <div>
+                  <h4 className="text-[13px] font-bold text-foreground">Crew Workload & Screen Coverage</h4>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">Assigned bookings workload and total screen square meters managed per team member</p>
+                </div>
+                <div className="flex items-center gap-4 text-[11px]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-3 w-3 rounded bg-[var(--accent)]" />
+                    <span className="text-zinc-400 font-medium">Work Done (Bookings)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-3 w-3 rounded bg-[#10b981]" />
+                    <span className="text-zinc-400 font-medium">Screen Coverage (sqm)</span>
+                  </div>
+                </div>
+              </div>
+
+              {loadingCrewWorkload ? (
+                <div className="h-72 flex items-center justify-center text-zinc-500 text-[11px]">
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                  Loading crew performance metrics...
+                </div>
+              ) : crewWorkloadReport.length === 0 ? (
+                <div className="h-72 flex items-center justify-center text-zinc-500 text-[11px]">
+                  No active crew assignments or bookings found for this period.
+                </div>
+              ) : (
+                <div className="h-80 w-full text-[11px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={crewWorkloadReport}
+                      margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.4} />
+                      <XAxis 
+                        dataKey="name" 
+                        stroke="var(--text-3)" 
+                        tickLine={false} 
+                        axisLine={false}
+                        dy={6}
+                      />
+                      <YAxis 
+                        yAxisId="left" 
+                        orientation="left" 
+                        stroke="var(--accent)" 
+                        tickLine={false} 
+                        axisLine={false}
+                        allowDecimals={false}
+                      />
+                      <YAxis 
+                        yAxisId="right" 
+                        orientation="right" 
+                        stroke="#10b981" 
+                        tickLine={false} 
+                        axisLine={false}
+                        unit="㎡"
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          background: "var(--surface)", 
+                          borderColor: "var(--border)", 
+                          borderRadius: "6px",
+                          color: "var(--foreground)",
+                          fontSize: "11px"
+                        }}
+                      />
+                      <Bar 
+                        yAxisId="left" 
+                        dataKey="bookingsCount" 
+                        name="Bookings" 
+                        fill="var(--accent)" 
+                        radius={[4, 4, 0, 0]} 
+                        maxBarSize={32}
+                      />
+                      <Bar 
+                        yAxisId="right" 
+                        dataKey="sqmCovered" 
+                        name="Square Meters" 
+                        fill="#10b981" 
+                        radius={[4, 4, 0, 0]} 
+                        maxBarSize={32}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+
             {loadingEvaluations ? (
               <div className="text-center py-12 text-zinc-500">Loading performance data...</div>
             ) : !evaluationsReport ? (
