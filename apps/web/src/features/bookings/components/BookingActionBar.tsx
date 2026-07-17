@@ -1,9 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Printer, Share2, Edit3, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, MoreHorizontal } from "lucide-react";
 import type { BookingAction } from "@/features/bookings/constants";
 
 interface BookingActionBarProps {
-  canEditBooking: boolean;
   statusActions: BookingAction[];
   setSelectedAction: (act: BookingAction | null) => void;
   setShowActionModal: (show: boolean) => void;
@@ -11,7 +10,6 @@ interface BookingActionBarProps {
 }
 
 export function BookingActionBar({
-  canEditBooking,
   statusActions,
   setSelectedAction,
   setShowActionModal,
@@ -28,20 +26,6 @@ export function BookingActionBar({
         Back to Bookings
       </Link>
       <div className="flex items-center gap-2">
-        {[
-          { icon: Printer, label: "Print" },
-          { icon: Share2, label: "Share" },
-          ...(canEditBooking ? [{ icon: Edit3, label: "Edit" }] : []),
-        ].map(({ icon: I, label }) => (
-          <button
-            key={label}
-            className="flex h-8 items-center gap-1.5 rounded-md border bg-[var(--surface)] px-2.5 text-[12px] transition hover:border-[var(--accent)]"
-            style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
-          >
-            <I className="h-3.5 w-3.5" />
-            {label}
-          </button>
-        ))}
         {statusActions.map((act) => (
           <button
             key={`${act.id}-${act.targetStatus}`}

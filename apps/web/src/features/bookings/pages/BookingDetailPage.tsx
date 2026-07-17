@@ -105,7 +105,6 @@ export function BookingDetail() {
   return (
     <AppShell>
       <BookingActionBar
-        canEditBooking={caps.canEditBooking}
         statusActions={barActions}
         setSelectedAction={actions.setSelectedAction}
         setShowActionModal={actions.setShowActionModal}
