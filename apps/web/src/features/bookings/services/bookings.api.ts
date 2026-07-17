@@ -25,6 +25,8 @@ export interface Booking {
   assemblyDate: string;
   eventDate: string;
   dismantleDate: string;
+  rentalStart?: string;
+  rentalEnd?: string;
   venue: string;
   screenType: ScreenType;
   size: number;
@@ -165,6 +167,8 @@ function mapBackendBookingToFrontend(b: any): Booking {
     assemblyDate: b.assemblyStart ? b.assemblyStart.slice(0, 16) : "",
     eventDate: b.eventDate ? b.eventDate.slice(0, 16) : "",
     dismantleDate: b.disassemblyEnd ? b.disassemblyEnd.slice(0, 16) : "",
+    rentalStart: b.rentalStart || b.assemblyStart || b.eventDate || "",
+    rentalEnd: b.rentalEnd || b.disassemblyEnd || b.eventDate || "",
     venue: b.eventLocation || "",
     screenType,
     size,

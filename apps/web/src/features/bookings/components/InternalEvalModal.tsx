@@ -162,7 +162,6 @@ export function InternalEvalModal({ booking, evaluations }: InternalEvalModalPro
                 score,
               }));
               submitInternal({
-                assignmentId: `assign-${booking.code}`,
                 clientNameVenue: venueName,
                 eventDate: eventDate ? new Date(eventDate).toISOString() : undefined,
                 teamSize,

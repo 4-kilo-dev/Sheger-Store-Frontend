@@ -201,6 +201,7 @@ export async function getInventoryItemDetailApi(id: string): Promise<InventoryIt
   throw new Error(`Inventory item not found for id ${id}`);
 }
 
-export async function getPoolAvailabilityApi(poolId: string, start: string, end: string): Promise<any> {
-  return client.get<any>(`/api/inventory/pools/${poolId}/availability?start=${start}&end=${end}`);
+export async function getPoolAvailabilityApi(poolId: string, from: string, to: string): Promise<any> {
+  const params = new URLSearchParams({ from, to });
+  return client.get<any>(`/api/inventory/pools/${poolId}/availability?${params.toString()}`);
 }

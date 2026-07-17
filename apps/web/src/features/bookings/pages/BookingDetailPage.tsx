@@ -16,6 +16,7 @@ import { BookingTabBar } from "../components/BookingTabBar";
 import { DeclineAssignmentModal } from "../components/DeclineAssignmentModal";
 import { DamageReportModal } from "../components/DamageReportModal";
 import { InternalEvalModal } from "../components/InternalEvalModal";
+import { BomFulfillmentConflictModal } from "../components/BomFulfillmentConflictModal";
 
 import { OverviewTab } from "../components/tabs/OverviewTab";
 import { ScheduleTab } from "../components/tabs/ScheduleTab";
@@ -60,7 +61,11 @@ export function BookingDetail() {
   const { booking, isLoading, error, checkoutSnapshot } = detail;
 
   const caps = useBookingCapabilities(booking);
-  const actions = useBookingActions(code, booking, { canFetchStaff: caps.canFetchStaff });
+  const actions = useBookingActions(code, booking, {
+    canFetchStaff: caps.canFetchStaff,
+    onGoToEquipmentTab: () => setTab("Equipment"),
+    canOverrideAvailability: caps.canReverseCheckout,
+  });
   const evaluations = useBookingEvaluations(code, booking);
 
   const barActions = caps.statusActions.filter((a) => {
@@ -138,6 +143,13 @@ export function BookingDetail() {
       <DeclineAssignmentModal actions={actions} />
       <DamageReportModal checkoutSnapshot={checkoutSnapshot} actions={actions} />
       <InternalEvalModal booking={booking} evaluations={evaluations} />
+      <BomFulfillmentConflictModal
+        open={actions.showCheckoutConflictModal}
+        lines={actions.checkoutConflicts}
+        onClose={() => actions.setShowCheckoutConflictModal(false)}
+        onGoToEquipment={() => actions.onGoToEquipmentTab?.()}
+        canOverride={actions.canOverrideAvailability}
+      />
     </AppShell>
   );
 }

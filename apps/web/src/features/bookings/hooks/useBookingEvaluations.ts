@@ -13,6 +13,7 @@ import {
   type SubmitClientEvaluationPayload,
 } from "@/features/bookings/services/evaluations.api";
 import { transitionBookingStatusApi, type Booking } from "@/features/bookings/services/bookings.api";
+import { pickEvalAssignmentId } from "@/features/bookings/utils/evalAssignment";
 
 export function useBookingEvaluations(code: string, booking: Booking | undefined) {
   const queryClient = useQueryClient();
@@ -57,7 +58,13 @@ export function useBookingEvaluations(code: string, booking: Booking | undefined
 
   const { mutate: submitInternal, isPending: submittingInternal } = useMutation({
     mutationFn: async (payload: SubmitInternalEvaluationPayload) => {
-      const res = await submitInternalEvaluationApi(booking?.id || code, payload);
+      const { assignmentId: _ignored, ...rest } = payload;
+      const assignmentId = pickEvalAssignmentId(booking?.assignments);
+      const body: SubmitInternalEvaluationPayload = {
+        ...rest,
+        ...(assignmentId ? { assignmentId } : {}),
+      };
+      const res = await submitInternalEvaluationApi(booking?.id || code, body);
       // Eval does not auto-transition — separate status call when permitted
       try {
         await transitionBookingStatusApi(code, "COMPLETED");

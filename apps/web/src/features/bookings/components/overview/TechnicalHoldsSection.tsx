@@ -84,7 +84,8 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
   }, [reservationsRes, b.ctoNotes]);
 
   useEffect(() => {
-    if (!b.assemblyDate || !b.eventDate || screenPools.length === 0) {
+    const windowEnd = b.dismantleDate || b.eventDate;
+    if (!b.assemblyDate || !windowEnd || screenPools.length === 0) {
       setScreenAvailabilities({});
       return;
     }
@@ -94,17 +95,23 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
         const results = await Promise.all(
           screenPools.map(async (p) => {
             try {
-              const res = await getPoolAvailabilityApi(p.id, b.assemblyDate, b.eventDate);
-              return { sku: p.sku || p.name, available: res.available ?? res.total ?? 0 };
+              const res = await getPoolAvailabilityApi(p.id, b.assemblyDate, windowEnd);
+              return {
+                poolId: p.id,
+                available: Number(res.available ?? res.total ?? 0),
+              };
             } catch {
-              return { sku: p.sku || p.name, available: parseInt(p.totalQuantity) || 0 };
+              return {
+                poolId: p.id,
+                available: Number.parseFloat(p.totalQuantity) || 0,
+              };
             }
           })
         );
         if (active) {
           const mapping: Record<string, number> = {};
           results.forEach((r) => {
-            mapping[r.sku] = r.available;
+            mapping[r.poolId] = r.available;
           });
           setScreenAvailabilities(mapping);
         }
@@ -116,7 +123,7 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
     return () => {
       active = false;
     };
-  }, [b.assemblyDate, b.eventDate, screenPools]);
+  }, [b.assemblyDate, b.dismantleDate, b.eventDate, screenPools]);
 
   const handleSaveTechnical = async () => {
     const validAllocations = allocations.filter((a) => a.poolId && a.quantity > 0);
@@ -302,7 +309,7 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
           {allocations.map((alloc, idx) => {
             const selectedPool = screenPools.find((p) => p.id === alloc.poolId);
             const avail = selectedPool
-              ? screenAvailabilities[selectedPool.sku || selectedPool.name] ?? 0
+              ? screenAvailabilities[selectedPool.id] ?? null
               : null;
             return (
               <div

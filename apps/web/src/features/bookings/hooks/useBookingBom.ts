@@ -8,6 +8,8 @@ import {
   type Booking,
 } from "@/features/bookings/services/bookings.api";
 import { getInventoryPoolsApi } from "@/features/inventory/services/inventory.api";
+import { useBookingPoolAvailability } from "@/features/bookings/hooks/useBookingPoolAvailability";
+import { getAvailabilityStatus } from "@/features/bookings/utils/bookingAvailability";
 
 export interface StagedBomItem {
   poolId: string;
@@ -15,12 +17,26 @@ export interface StagedBomItem {
   quantity: number;
 }
 
+function warnIfOverAllocated(
+  items: { poolId: string; name: string; quantity: number }[],
+  availabilityByPoolId: Record<string, { available: number; loading: boolean }>
+) {
+  const over = items.filter((item) => {
+    const avail = availabilityByPoolId[item.poolId];
+    if (!avail || avail.loading) return false;
+    return getAvailabilityStatus(item.quantity, avail.available) === "warn";
+  });
+  if (over.length === 0) return;
+  toast.warning(
+    `${over.length} item${over.length === 1 ? "" : "s"} exceed available stock for this event window. OO can adjust before checkout.`
+  );
+}
+
 /** Shared BOM CRUD for EquipmentTab (and any future BOM surfaces). */
 export function useBookingBom(booking: Booking, enabled: boolean) {
   const queryClient = useQueryClient();
   const [selectedPoolId, setSelectedPoolId] = useState("");
   const [addQty, setAddQty] = useState(1);
-  // Staging list so technicians can queue several pools before committing.
   const [staged, setStaged] = useState<StagedBomItem[]>([]);
 
   const { data: pools = [], isLoading: poolsLoading } = useQuery({
@@ -28,6 +44,18 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
     queryFn: getInventoryPoolsApi,
     enabled,
   });
+
+  const { availabilityByPoolId, isLoading: availabilityLoading } = useBookingPoolAvailability(
+    booking,
+    pools,
+    enabled
+  );
+
+  const selectedAvailability = selectedPoolId ? availabilityByPoolId[selectedPoolId] : undefined;
+  const selectedOverAllocated =
+    selectedAvailability &&
+    !selectedAvailability.loading &&
+    getAvailabilityStatus(addQty, selectedAvailability.available) === "warn";
 
   const { mutate: updateBomLine, isPending: updatingLine } = useMutation({
     mutationFn: ({ lineId, quantity }: { lineId: string; quantity: number }) =>
@@ -52,8 +80,6 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
     },
   });
 
-  // Commit every staged pool. There is no backend batch endpoint, so we fan out
-  // one createBomLineApi call per item and tolerate partial failure.
   const { mutateAsync: addBomLinesAsync, isPending: addingLines } = useMutation({
     mutationFn: async (items: { poolId: string; quantity: number }[]) => {
       const results = await Promise.allSettled(
@@ -74,7 +100,6 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
       } else {
         const failedPoolIds = new Set(failedIdx.map((i) => items[i].poolId));
         toast.error(`${failedIdx.length} of ${items.length} items failed to add. Please retry those.`);
-        // Keep only the failed rows staged so the user can retry.
         setStaged((prev) => prev.filter((s) => failedPoolIds.has(s.poolId)));
       }
     },
@@ -82,6 +107,12 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
       toast.error(err.message || "Failed to add items to BOM");
     },
   });
+
+  const getPoolAvailabilityLabel = (poolId: string) => {
+    const entry = availabilityByPoolId[poolId];
+    if (!entry || entry.loading || availabilityLoading) return null;
+    return entry.available;
+  };
 
   const stageSelected = () => {
     if (!selectedPoolId) {
@@ -97,10 +128,13 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
       return;
     }
     const pool = pools.find((p: any) => p.id === selectedPoolId);
-    setStaged((prev) => [
-      ...prev,
-      { poolId: selectedPoolId, name: pool?.name || "Equipment", quantity: addQty },
-    ]);
+    const nextItem = {
+      poolId: selectedPoolId,
+      name: pool?.name || "Equipment",
+      quantity: addQty,
+    };
+    warnIfOverAllocated([nextItem], availabilityByPoolId);
+    setStaged((prev) => [...prev, nextItem]);
     setSelectedPoolId("");
     setAddQty(1);
   };
@@ -125,6 +159,7 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
       toast.error("Stage at least one item first");
       return;
     }
+    warnIfOverAllocated(staged, availabilityByPoolId);
     addBomLinesAsync(staged.map((s) => ({ poolId: s.poolId, quantity: s.quantity }))).catch(
       () => {
         /* handled in onError */
@@ -132,13 +167,26 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
     );
   };
 
+  const getLineAvailabilityStatus = (poolId: string | undefined, qty: number) => {
+    if (!poolId) return "unknown" as const;
+    const entry = availabilityByPoolId[poolId];
+    if (!entry || entry.loading) return "unknown" as const;
+    return getAvailabilityStatus(qty, entry.available);
+  };
+
   return {
     pools,
     poolsLoading,
+    availabilityByPoolId,
+    availabilityLoading,
     selectedPoolId,
     setSelectedPoolId,
     addQty,
     setAddQty,
+    selectedAvailability,
+    selectedOverAllocated,
+    getPoolAvailabilityLabel,
+    getLineAvailabilityStatus,
     handleAddItem,
     staged,
     stageSelected,

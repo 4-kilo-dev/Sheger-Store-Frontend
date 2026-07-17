@@ -16,16 +16,19 @@ import {
 import { getStaffApi } from "@/features/users/services/staff.api";
 import { checkoutBookingApi } from "@/features/checkout/services/operations.api";
 import type { BookingAction } from "@/features/bookings/constants";
+import type { UnfulfilledBomLine } from "@/features/bookings/components/BomFulfillmentConflictModal";
 
 export function useBookingActions(
   code: string,
   booking: Booking | undefined,
-  options?: { canFetchStaff?: boolean }
+  options?: { canFetchStaff?: boolean; onGoToEquipmentTab?: () => void; canOverrideAvailability?: boolean }
 ) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const authUser = useAuthUser();
   const canFetchStaff = options?.canFetchStaff ?? false;
+  const onGoToEquipmentTab = options?.onGoToEquipmentTab;
+  const canOverrideAvailability = options?.canOverrideAvailability ?? false;
 
   const [showActionModal, setShowActionModal] = useState(false);
   const [selectedAction, setSelectedAction] = useState<BookingAction | null>(null);
@@ -52,6 +55,8 @@ export function useBookingActions(
   const [damageQty, setDamageQty] = useState("1");
 
   const [staff, setStaff] = useState<any[]>([]);
+  const [checkoutConflicts, setCheckoutConflicts] = useState<UnfulfilledBomLine[]>([]);
+  const [showCheckoutConflictModal, setShowCheckoutConflictModal] = useState(false);
 
   useEffect(() => {
     if (booking) {
@@ -183,6 +188,16 @@ export function useBookingActions(
       setSelectedAction(null);
     },
     onError: (err: any) => {
+      const data = err.data;
+      const unfulfilled = (
+        data?.unfulfilledLines ??
+        (typeof data?.message === "object" ? data.message?.unfulfilledLines : undefined)
+      ) as UnfulfilledBomLine[] | undefined;
+      if (err.status === 409 && Array.isArray(unfulfilled) && unfulfilled.length > 0) {
+        setCheckoutConflicts(unfulfilled);
+        setShowCheckoutConflictModal(true);
+        return;
+      }
       toast.error(err.message || "Checkout failed");
     },
   });
@@ -318,5 +333,10 @@ export function useBookingActions(
     isRecordingPayment,
     confirmBookingWithPayment,
     isConfirmingWithPayment,
+    checkoutConflicts,
+    showCheckoutConflictModal,
+    setShowCheckoutConflictModal,
+    onGoToEquipmentTab,
+    canOverrideAvailability,
   };
 }

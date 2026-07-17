@@ -99,7 +99,8 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canReverseCheckout = can(PERMISSION.INVENTORY_CHECKOUT_REVERSE);
   const canEditBom =
     can(PERMISSION.BOM_CREATE) ||
-    (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned && booking?.status === "ACCEPTED");
+    (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned && booking?.status === "ACCEPTED") ||
+    (can(PERMISSION.BOOKING_EDIT) && booking?.status === "PREPARATION");
   /** Soft-hold create/release — inventory.reserve (not warehouse checkout). */
   const canWriteTechnicalHolds = can(PERMISSION.INVENTORY_RESERVE);
   const showOpsSidebar = canAny([
