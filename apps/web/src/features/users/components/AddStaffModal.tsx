@@ -31,6 +31,7 @@ const addStaffSchema = z.object({
   role: z.string().min(1, "Please select a role"),
   team: z.string().optional(),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  isFreelancer: z.boolean(),
 });
 
 type AddStaffFormValues = z.infer<typeof addStaffSchema>;
@@ -64,6 +65,7 @@ export function AddStaffModal() {
       role: "",
       team: "",
       password: "",
+      isFreelancer: false,
     },
   });
 
@@ -196,6 +198,29 @@ export function AddStaffModal() {
                       <Input placeholder="e.g. Alpha Crew" {...field} />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="isFreelancer"
+                render={({ field }) => (
+                  <FormItem className="col-span-2 flex flex-row items-start gap-3 rounded-md border p-3" style={{ borderColor: "var(--border)" }}>
+                    <FormControl>
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 cursor-pointer accent-[var(--accent)]"
+                        checked={field.value}
+                        onChange={(e) => field.onChange(e.target.checked)}
+                      />
+                    </FormControl>
+                    <div className="space-y-1">
+                      <FormLabel className="!mt-0 cursor-pointer">Freelancer (pay by gigs / sqm)</FormLabel>
+                      <p className="text-[11px] text-muted-foreground">
+                        Marks this person for Staff Work Sheets payroll metrics. Independent of their RBAC role.
+                      </p>
+                    </div>
                   </FormItem>
                 )}
               />

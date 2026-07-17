@@ -64,6 +64,7 @@ export async function getStaffApi(): Promise<StaffMember[]> {
       capacity: u.capacity || 30,
       initials: initials || "?",
       joinedDate: u.createdAt ? u.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      isFreelancer: Boolean(u.isFreelancer),
     };
   });
 }
@@ -90,6 +91,7 @@ export async function createStaffApi(payload: any): Promise<StaffMember> {
     email: payload.email || `${payload.name.toLowerCase().replace(/\s+/g, ".")}${suffix}@vortexvisual.com`,
     password: payload.password,
     roleId: matchedRole.id,
+    isFreelancer: Boolean(payload.isFreelancer),
   };
 
   // 3. Post to users
@@ -114,7 +116,12 @@ export async function createStaffApi(payload: any): Promise<StaffMember> {
     capacity: 30,
     initials: initials || "?",
     joinedDate: new Date().toISOString().slice(0, 10),
+    isFreelancer: Boolean(newUser.isFreelancer ?? payload.isFreelancer),
   };
+}
+
+export async function setStaffFreelancerApi(userId: string, isFreelancer: boolean): Promise<void> {
+  await client.patch(`/api/users/${userId}`, { isFreelancer });
 }
 
 export async function resetPasswordApi(userId: string): Promise<{ temporaryPassword: string }> {

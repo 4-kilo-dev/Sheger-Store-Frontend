@@ -5,7 +5,8 @@ import { client } from "@/lib/api/client";
 // ----------------------------------------------------
 
 export interface BookingReportRecord {
-  id: string;
+  id?: string;
+  bookingCode: string;
   status: string;
   eventDate: string;
   eventLocation: string;
@@ -30,6 +31,7 @@ export interface InventoryReportPool {
   damagedQuantity: number;
   missingQuantity: number;
   availableQuantity: number;
+  maintenanceQuantity?: number;
 }
 
 export interface InventoryReportRecord {
@@ -43,7 +45,7 @@ export interface InventoryReportRecord {
 export interface RevenuePaymentRecord {
   id: string;
   bookingId: string;
-  bookingCode?: string;
+  bookingCode: string;
   amount: string;
   createdAt: string;
   toStatus: string;
@@ -78,7 +80,7 @@ export interface EvaluationReportScore {
 export interface EvaluationReportRecord {
   id: string;
   bookingId: string;
-  bookingCode?: string;
+  bookingCode: string;
   clientNameVenue: string;
   eventDate: string;
   teamSize: number;
@@ -100,6 +102,7 @@ export interface EvaluationsReportResponse {
 
 export interface CanceledBookingReportRecord {
   id: string;
+  bookingCode: string;
   eventDate: string;
   eventLocation: string;
   paymentAmount: string;
@@ -111,7 +114,7 @@ export interface CanceledBookingReportRecord {
 
 export interface UpcomingBookingReportRecord {
   id: string;
-  bookingCode?: string;
+  bookingCode: string;
   status: string;
   eventDate: string;
   eventLocation: string;
@@ -135,7 +138,7 @@ const MOCK_BOOKINGS_REPORT: BookingsReportResponse = {
   },
   bookings: [
     {
-      id: "SB021",
+      bookingCode: "SB021",
       status: "RESERVED",
       eventDate: "2026-07-08T10:00:00Z",
       eventLocation: "Golden Ballroom, Hilton Hotel",
@@ -145,7 +148,7 @@ const MOCK_BOOKINGS_REPORT: BookingsReportResponse = {
       customerName: "Hilton Gala"
     },
     {
-      id: "SB020",
+      bookingCode: "SB020",
       status: "CONFIRMED",
       eventDate: "2026-07-05T12:00:00Z",
       eventLocation: "Sheraton Addis Ballroom",
@@ -155,7 +158,7 @@ const MOCK_BOOKINGS_REPORT: BookingsReportResponse = {
       customerName: "Embassy Event"
     },
     {
-      id: "SB019",
+      bookingCode: "SB019",
       status: "PREPARATION",
       eventDate: "2026-06-29T09:00:00Z",
       eventLocation: "Millennium Hall Grand stage",
@@ -165,7 +168,7 @@ const MOCK_BOOKINGS_REPORT: BookingsReportResponse = {
       customerName: "Millennium concert"
     },
     {
-      id: "SB018",
+      bookingCode: "SB018",
       status: "DONE",
       eventDate: "2026-06-20T11:00:00Z",
       eventLocation: "Hyatt Regency Garden",
@@ -268,6 +271,7 @@ const MOCK_REVENUE_REPORT: RevenueReportResponse = {
     {
       id: "pay-1",
       bookingId: "SB020",
+      bookingCode: "SB020",
       amount: "37500.00",
       createdAt: "2026-06-28T10:00:00Z",
       toStatus: "advance",
@@ -277,6 +281,7 @@ const MOCK_REVENUE_REPORT: RevenueReportResponse = {
     {
       id: "pay-2",
       bookingId: "SB019",
+      bookingCode: "SB019",
       amount: "1285000.00",
       createdAt: "2026-06-25T11:30:00Z",
       toStatus: "paid",
@@ -286,6 +291,7 @@ const MOCK_REVENUE_REPORT: RevenueReportResponse = {
     {
       id: "pay-3",
       bookingId: "SB018",
+      bookingCode: "SB018",
       amount: "130000.00",
       createdAt: "2026-06-19T09:00:00Z",
       toStatus: "paid",
@@ -361,6 +367,7 @@ const MOCK_EVALUATIONS_REPORT: EvaluationsReportResponse = {
     {
       id: "eval-1",
       bookingId: "SB018",
+      bookingCode: "SB018",
       clientNameVenue: "Corporate Luncheon - Hyatt Regency",
       eventDate: "2026-06-20T11:00:00.000Z",
       teamSize: 4,
@@ -387,6 +394,7 @@ const MOCK_EVALUATIONS_REPORT: EvaluationsReportResponse = {
     {
       id: "eval-2",
       bookingId: "SB017",
+      bookingCode: "SB017",
       clientNameVenue: "Hilton Wedding Gala",
       eventDate: "2026-06-15T09:00:00.000Z",
       teamSize: 6,
@@ -416,6 +424,7 @@ const MOCK_EVALUATIONS_REPORT: EvaluationsReportResponse = {
 const MOCK_CANCELED_REPORT: CanceledBookingReportRecord[] = [
   {
     id: "cancel-1",
+    bookingCode: "SB016",
     eventDate: "2026-06-25T15:00:00Z",
     eventLocation: "Addis Convention Center",
     paymentAmount: "25000.00",
@@ -426,6 +435,7 @@ const MOCK_CANCELED_REPORT: CanceledBookingReportRecord[] = [
   },
   {
     id: "cancel-2",
+    bookingCode: "SB017",
     eventDate: "2026-06-12T10:00:00Z",
     eventLocation: "Skylight Hall B",
     paymentAmount: "45000.00",
@@ -439,6 +449,7 @@ const MOCK_CANCELED_REPORT: CanceledBookingReportRecord[] = [
 const MOCK_UPCOMING_REPORT: UpcomingBookingReportRecord[] = [
   {
     id: "SB020",
+    bookingCode: "SB020",
     status: "CONFIRMED",
     eventDate: "2026-07-05T12:00:00Z",
     eventLocation: "Sheraton Addis Ballroom",
@@ -448,6 +459,7 @@ const MOCK_UPCOMING_REPORT: UpcomingBookingReportRecord[] = [
   },
   {
     id: "SB021",
+    bookingCode: "SB021",
     status: "CONFIRMED",
     eventDate: "2026-07-08T10:00:00Z",
     eventLocation: "Golden Ballroom, Hilton Hotel",
@@ -457,6 +469,7 @@ const MOCK_UPCOMING_REPORT: UpcomingBookingReportRecord[] = [
   },
   {
     id: "SB022",
+    bookingCode: "SB022",
     status: "RESERVED",
     eventDate: "2026-07-10T09:00:00Z",
     eventLocation: "Millennium Hall Grand stage",
@@ -469,6 +482,45 @@ const MOCK_UPCOMING_REPORT: UpcomingBookingReportRecord[] = [
 // ----------------------------------------------------
 // API Core Query Logic
 // ----------------------------------------------------
+
+/** Report endpoints return booking UUIDs; resolve them to SB booking codes. */
+let bookingCodeMapPromise: Promise<Map<string, string>> | null = null;
+
+async function getBookingCodeMap(): Promise<Map<string, string>> {
+  if (!bookingCodeMapPromise) {
+    bookingCodeMapPromise = client
+      .get<Array<{ id: string; bookingCode?: string | null }>>("/api/bookings")
+      .then((bookings) => {
+        const map = new Map<string, string>();
+        for (const booking of bookings || []) {
+          if (booking.id && booking.bookingCode) {
+            map.set(booking.id, booking.bookingCode);
+          }
+        }
+        return map;
+      })
+      .catch(() => {
+        bookingCodeMapPromise = null;
+        return new Map<string, string>();
+      });
+  }
+  return bookingCodeMapPromise;
+}
+
+function looksLikeUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function resolveBookingCode(
+  codeMap: Map<string, string>,
+  bookingId?: string | null,
+  bookingCode?: string | null,
+): string {
+  if (bookingCode && !looksLikeUuid(bookingCode)) return bookingCode;
+  if (bookingId && codeMap.has(bookingId)) return codeMap.get(bookingId)!;
+  if (bookingCode) return bookingCode;
+  return bookingId || "";
+}
 
 export async function getBookingsReportApi(filters: {
   status?: string;
@@ -486,12 +538,62 @@ export async function getBookingsReportApi(filters: {
   if (filters.location) query.append("location", filters.location);
   if (filters.staffUserId) query.append("staffUserId", filters.staffUserId);
 
-  return client.get<BookingsReportResponse>(`/api/reports/bookings?${query.toString()}`);
+  const [report, codeMap] = await Promise.all([
+    client.get<BookingsReportResponse & { bookings: Array<BookingReportRecord & { id?: string }> }>(
+      `/api/reports/bookings?${query.toString()}`,
+    ),
+    getBookingCodeMap(),
+  ]);
+
+  return {
+    ...report,
+    bookings: (report.bookings || []).map((booking) => ({
+      ...booking,
+      bookingCode: resolveBookingCode(codeMap, booking.id, booking.bookingCode),
+    })),
+  };
 }
 
 export async function getInventoryReportApi(categoryId?: string): Promise<InventoryReportRecord[]> {
   const query = categoryId ? `?categoryId=${categoryId}` : "";
-  return client.get<InventoryReportRecord[]>(`/api/reports/inventory${query}`);
+  const categories = await client.get<Array<{
+    categoryId: string;
+    name: string;
+    trackingType: "bulk" | "serialized";
+    unit: string;
+    pools?: InventoryReportPool[];
+    summary?: {
+      totalQuantity: number;
+      checkedOutQuantity: number;
+      damagedQuantity: number;
+      maintenanceQuantity: number;
+      lostQuantity: number;
+      availableQuantity: number;
+    };
+  }>>(`/api/reports/inventory${query}`);
+
+  return (categories || []).map((category) => {
+    if (Array.isArray(category.pools)) {
+      return { ...category, pools: category.pools };
+    }
+
+    const summary = category.summary;
+    return {
+      ...category,
+      pools: summary
+        ? [{
+            poolId: category.categoryId,
+            name: `${category.name} summary`,
+            totalQuantity: summary.totalQuantity,
+            checkedOutQuantity: summary.checkedOutQuantity,
+            damagedQuantity: summary.damagedQuantity,
+            missingQuantity: summary.lostQuantity,
+            availableQuantity: summary.availableQuantity,
+            maintenanceQuantity: summary.maintenanceQuantity,
+          }]
+        : [],
+    };
+  });
 }
 
 export async function getRevenueReportApi(filters: {
@@ -502,7 +604,18 @@ export async function getRevenueReportApi(filters: {
   if (filters.startDate) query.append("startDate", filters.startDate);
   if (filters.endDate) query.append("endDate", filters.endDate);
 
-  return client.get<RevenueReportResponse>(`/api/reports/revenue?${query.toString()}`);
+  const [report, codeMap] = await Promise.all([
+    client.get<RevenueReportResponse>(`/api/reports/revenue?${query.toString()}`),
+    getBookingCodeMap(),
+  ]);
+
+  return {
+    ...report,
+    payments: (report.payments || []).map((payment) => ({
+      ...payment,
+      bookingCode: resolveBookingCode(codeMap, payment.bookingId, payment.bookingCode),
+    })),
+  };
 }
 
 export async function getCustomersReportApi(): Promise<CustomerReportRecord[]> {
@@ -517,7 +630,18 @@ export async function getEvaluationsReportApi(filters: {
   if (filters.startDate) query.append("startDate", filters.startDate);
   if (filters.endDate) query.append("endDate", filters.endDate);
 
-  return client.get<EvaluationsReportResponse>(`/api/reports/evaluations?${query.toString()}`);
+  const [report, codeMap] = await Promise.all([
+    client.get<EvaluationsReportResponse>(`/api/reports/evaluations?${query.toString()}`),
+    getBookingCodeMap(),
+  ]);
+
+  return {
+    ...report,
+    evaluations: (report.evaluations || []).map((evaluation) => ({
+      ...evaluation,
+      bookingCode: resolveBookingCode(codeMap, evaluation.bookingId, evaluation.bookingCode),
+    })),
+  };
 }
 
 export async function getCanceledBookingsReportApi(filters: {
@@ -528,39 +652,75 @@ export async function getCanceledBookingsReportApi(filters: {
   if (filters.startDate) query.append("startDate", filters.startDate);
   if (filters.endDate) query.append("endDate", filters.endDate);
 
-  return client.get<CanceledBookingReportRecord[]>(`/api/reports/canceled-bookings?${query.toString()}`);
+  const [rows, codeMap] = await Promise.all([
+    client.get<Array<CanceledBookingReportRecord & { bookingCode?: string }>>(
+      `/api/reports/canceled-bookings?${query.toString()}`,
+    ),
+    getBookingCodeMap(),
+  ]);
+
+  return (rows || []).map((row) => ({
+    ...row,
+    bookingCode: resolveBookingCode(codeMap, row.id, row.bookingCode),
+  }));
 }
 
 export async function getUpcomingBookingsReportApi(days = 7): Promise<UpcomingBookingReportRecord[]> {
-  return client.get<UpcomingBookingReportRecord[]>(`/api/reports/upcoming-bookings?days=${days}`);
+  const [rows, codeMap] = await Promise.all([
+    client.get<Array<UpcomingBookingReportRecord & { bookingCode?: string }>>(
+      `/api/reports/upcoming-bookings?days=${days}`,
+    ),
+    getBookingCodeMap(),
+  ]);
+
+  return (rows || []).map((row) => ({
+    ...row,
+    bookingCode: resolveBookingCode(codeMap, row.id, row.bookingCode),
+  }));
 }
 
-export interface CrewWorkloadRecord {
+export interface FreelancerWorkloadRow {
   userId: string;
   name: string;
   email: string | null;
   bookingsCount: number;
+  /** Rounded to 2 decimals by the backend */
   sqmCovered: number;
 }
 
-export async function getCrewWorkloadReportApi(filters: {
+export async function getFreelancerWorkloadReportApi(filters: {
   startDate?: string;
   endDate?: string;
-}): Promise<CrewWorkloadRecord[]> {
+}): Promise<FreelancerWorkloadRow[]> {
   const query = new URLSearchParams();
   if (filters.startDate) query.append("startDate", filters.startDate);
   if (filters.endDate) query.append("endDate", filters.endDate);
+  const qs = query.toString();
+  return client.get<FreelancerWorkloadRow[]>(
+    `/api/reports/freelancer-workload${qs ? `?${qs}` : ""}`,
+  );
+}
 
-  try {
-    return await client.get<CrewWorkloadRecord[]>(`/api/reports/crew-workload?${query.toString()}`);
-  } catch (e) {
-    console.warn("Failed to fetch live crew workload report, using mock data", e);
-    return [
-      { userId: "1", name: "Bereket Shimelis", email: "cto1@sheger.com", bookingsCount: 8, sqmCovered: 384 },
-      { userId: "2", name: "Yeabtsega Negash", email: "tech1@sheger.com", bookingsCount: 6, sqmCovered: 240 },
-      { userId: "3", name: "Dawit Mekonnen", email: "tech2@sheger.com", bookingsCount: 4, sqmCovered: 144 },
-      { userId: "4", name: "Abel Girma", email: "sh1@sheger.com", bookingsCount: 3, sqmCovered: 96 },
-      { userId: "5", name: "Michael Demeke", email: "fl1@sheger.com", bookingsCount: 1, sqmCovered: 48 },
-    ];
-  }
+export interface DriverTripsReportRow {
+  driverUserId: string;
+  name: string;
+  email: string | null;
+  tripsCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+  pendingCount: number;
+  totalDurationMinutes: number;
+}
+
+export async function getDriverTripsReportApi(filters: {
+  startDate?: string;
+  endDate?: string;
+}): Promise<DriverTripsReportRow[]> {
+  const query = new URLSearchParams();
+  if (filters.startDate) query.append("startDate", filters.startDate);
+  if (filters.endDate) query.append("endDate", filters.endDate);
+  const qs = query.toString();
+  return client.get<DriverTripsReportRow[]>(
+    `/api/reports/driver-trips${qs ? `?${qs}` : ""}`,
+  );
 }

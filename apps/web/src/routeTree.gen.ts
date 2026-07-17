@@ -17,6 +17,7 @@ import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InventoryRouteImport } from './routes/inventory'
+import { Route as DriverTripsRouteImport } from './routes/driver-trips'
 import { Route as DamageReportRouteImport } from './routes/damage-report'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as ChangePasswordRouteImport } from './routes/change-password'
@@ -66,6 +67,11 @@ const LoginRoute = LoginRouteImport.update({
 const InventoryRoute = InventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DriverTripsRoute = DriverTripsRouteImport.update({
+  id: '/driver-trips',
+  path: '/driver-trips',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DamageReportRoute = DamageReportRouteImport.update({
@@ -125,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/change-password': typeof ChangePasswordRoute
   '/checkout': typeof CheckoutRoute
   '/damage-report': typeof DamageReportRoute
+  '/driver-trips': typeof DriverTripsRoute
   '/inventory': typeof InventoryRouteWithChildren
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
@@ -144,6 +151,7 @@ export interface FileRoutesByTo {
   '/change-password': typeof ChangePasswordRoute
   '/checkout': typeof CheckoutRoute
   '/damage-report': typeof DamageReportRoute
+  '/driver-trips': typeof DriverTripsRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
   '/operations': typeof OperationsRoute
@@ -164,6 +172,7 @@ export interface FileRoutesById {
   '/change-password': typeof ChangePasswordRoute
   '/checkout': typeof CheckoutRoute
   '/damage-report': typeof DamageReportRoute
+  '/driver-trips': typeof DriverTripsRoute
   '/inventory': typeof InventoryRouteWithChildren
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
@@ -186,6 +195,7 @@ export interface FileRouteTypes {
     | '/change-password'
     | '/checkout'
     | '/damage-report'
+    | '/driver-trips'
     | '/inventory'
     | '/login'
     | '/notifications'
@@ -205,6 +215,7 @@ export interface FileRouteTypes {
     | '/change-password'
     | '/checkout'
     | '/damage-report'
+    | '/driver-trips'
     | '/login'
     | '/notifications'
     | '/operations'
@@ -224,6 +235,7 @@ export interface FileRouteTypes {
     | '/change-password'
     | '/checkout'
     | '/damage-report'
+    | '/driver-trips'
     | '/inventory'
     | '/login'
     | '/notifications'
@@ -245,6 +257,7 @@ export interface RootRouteChildren {
   ChangePasswordRoute: typeof ChangePasswordRoute
   CheckoutRoute: typeof CheckoutRoute
   DamageReportRoute: typeof DamageReportRoute
+  DriverTripsRoute: typeof DriverTripsRoute
   InventoryRoute: typeof InventoryRouteWithChildren
   LoginRoute: typeof LoginRoute
   NotificationsRoute: typeof NotificationsRoute
@@ -311,6 +324,13 @@ declare module '@tanstack/react-router' {
       path: '/inventory'
       fullPath: '/inventory'
       preLoaderRoute: typeof InventoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/driver-trips': {
+      id: '/driver-trips'
+      path: '/driver-trips'
+      fullPath: '/driver-trips'
+      preLoaderRoute: typeof DriverTripsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/damage-report': {
@@ -422,6 +442,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChangePasswordRoute: ChangePasswordRoute,
   CheckoutRoute: CheckoutRoute,
   DamageReportRoute: DamageReportRoute,
+  DriverTripsRoute: DriverTripsRoute,
   InventoryRoute: InventoryRouteWithChildren,
   LoginRoute: LoginRoute,
   NotificationsRoute: NotificationsRoute,

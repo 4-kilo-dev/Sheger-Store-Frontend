@@ -9,6 +9,8 @@ export interface StaffMember {
   capacity: number;
   initials: string;
   joinedDate: string;
+  /** Pay-eligible freelancer flag (independent of RBAC role) */
+  isFreelancer?: boolean;
 }
 
 

@@ -1,10 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { 
   Banknote, CalendarCheck, Download, Gauge, TrendingUp, BarChart3, 
-  Users, Filter, AlertTriangle, Check, ShieldAlert, AlertCircle, RefreshCw, Printer
+  Users, Filter, AlertTriangle, Check, ShieldAlert, AlertCircle, RefreshCw
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -16,15 +15,8 @@ import {
   getEvaluationsReportApi, 
   getCanceledBookingsReportApi, 
   getUpcomingBookingsReportApi,
-  getCrewWorkloadReportApi,
-  type BookingReportRecord,
-  type InventoryReportRecord,
-  type RevenuePaymentRecord,
-  type CustomerReportRecord,
-  type EvaluationReportRecord,
-  type CanceledBookingReportRecord,
-  type UpcomingBookingReportRecord,
-  type CrewWorkloadRecord
+  getFreelancerWorkloadReportApi,
+  getDriverTripsReportApi,
 } from "../services/reports.api";
 import {
   ResponsiveContainer,
@@ -33,10 +25,8 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Legend,
   CartesianGrid,
 } from "recharts";
-import { getStaffApi } from "@/features/users/services/staff.api";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
@@ -62,7 +52,7 @@ const TABS = [
 type TabId = "revenue_bookings" | "inventory_health" | "client_directory" | "quality_crew" | "audit_logs" | "staff_work_sheets";
 
 export function ReportsPage() {
-  const { formatDate, formatDateTime } = useDateFormatter();
+  const { formatDate } = useDateFormatter();
   const authUser = useAuthUser();
   const userRole = authUser?.role?.toLowerCase() || "";
   const isAdminOrSupervisor = userRole === "admin" || userRole === "supervisor";
@@ -121,57 +111,55 @@ export function ReportsPage() {
     queryFn: () => getUpcomingBookingsReportApi(7),
   });
 
-  const { data: crewWorkloadReport = [], isLoading: loadingCrewWorkload } = useQuery({
-    queryKey: ["reports-crew-workload", { startDate, endDate }],
-    queryFn: () => getCrewWorkloadReportApi({ startDate, endDate }),
-  });
-
-  const { data: staffList = [] } = useQuery({
-    queryKey: ["staff"],
-    queryFn: getStaffApi,
-    enabled: isAdminOrSupervisor,
-  });
-
-  // Staff Work Sheets States
-  const [selectedStaffUserId, setSelectedStaffUserId] = useState("");
+  // Staff Work Sheets — freelancer pay metrics (auto-load + refetch on date change)
   const [sheetStartDate, setSheetStartDate] = useState("");
   const [sheetEndDate, setSheetEndDate] = useState("");
-  const [sheetBookings, setSheetBookings] = useState<any[]>([]);
-  const [isGeneratingSheet, setIsGeneratingSheet] = useState(false);
 
-  const handleGenerateSheet = async () => {
-    if (!selectedStaffUserId) {
-      toast.error("Please select a staff member");
-      return;
-    }
-    setIsGeneratingSheet(true);
-    try {
-      const res = await getBookingsReportApi({
-        staffUserId: selectedStaffUserId,
+  const {
+    data: freelancerWorkload = [],
+    isLoading: loadingFreelancerWorkload,
+    isFetching: fetchingFreelancerWorkload,
+  } = useQuery({
+    queryKey: ["reports-freelancer-workload", { startDate: sheetStartDate, endDate: sheetEndDate }],
+    queryFn: () =>
+      getFreelancerWorkloadReportApi({
         startDate: sheetStartDate || undefined,
         endDate: sheetEndDate || undefined,
-        status: "DONE",
-      });
-      setSheetBookings(res.bookings || []);
-      toast.success(`Successfully loaded ${res.bookings?.length || 0} completed bookings.`);
-    } catch (e: any) {
-      toast.error(e.message || "Failed to load bookings");
-    } finally {
-      setIsGeneratingSheet(false);
-    }
-  };
+      }),
+    enabled: isAdminOrSupervisor && activeTab === "staff_work_sheets",
+  });
+
+  const {
+    data: driverTripsReport = [],
+    isLoading: loadingDriverTripsReport,
+    isFetching: fetchingDriverTripsReport,
+  } = useQuery({
+    queryKey: ["reports-driver-trips", { startDate: sheetStartDate, endDate: sheetEndDate }],
+    queryFn: () =>
+      getDriverTripsReportApi({
+        startDate: sheetStartDate || undefined,
+        endDate: sheetEndDate || undefined,
+      }),
+    enabled: isAdminOrSupervisor && activeTab === "staff_work_sheets",
+  });
 
   const isTabLoading = useMemo(() => {
     switch (activeTab) {
       case "revenue_bookings": return loadingBookings || loadingRevenue;
       case "inventory_health": return loadingInventory;
       case "client_directory": return loadingCustomers;
-      case "quality_crew": return loadingEvaluations || loadingCrewWorkload;
+      case "quality_crew": return loadingEvaluations;
       case "audit_logs": return loadingCanceled || loadingUpcoming;
-      case "staff_work_sheets": return isGeneratingSheet;
+      case "staff_work_sheets":
+        return (
+          loadingFreelancerWorkload ||
+          fetchingFreelancerWorkload ||
+          loadingDriverTripsReport ||
+          fetchingDriverTripsReport
+        );
       default: return false;
     }
-  }, [activeTab, loadingBookings, loadingRevenue, loadingInventory, loadingCustomers, loadingEvaluations, loadingCrewWorkload, loadingCanceled, loadingUpcoming, isGeneratingSheet]);
+  }, [activeTab, loadingBookings, loadingRevenue, loadingInventory, loadingCustomers, loadingEvaluations, loadingCanceled, loadingUpcoming, loadingFreelancerWorkload, fetchingFreelancerWorkload, loadingDriverTripsReport, fetchingDriverTripsReport]);
 
   // Contextual CSV Exporter
   function handleExportCSV() {
@@ -182,7 +170,7 @@ export function ReportsPage() {
     if (activeTab === "revenue_bookings") {
       headers = ["Booking Code", "Customer", "Location", "Event Date", "Payment Status", "Payment Amount", "CreatedAt"];
       rows = (bookingsReport?.bookings || []).map((b) => [
-        b.id, b.customerName, b.eventLocation, b.eventDate, b.paymentStatus, b.paymentAmount, b.createdAt
+        b.bookingCode, b.customerName, b.eventLocation, b.eventDate, b.paymentStatus, b.paymentAmount, b.createdAt
       ]);
     } else if (activeTab === "inventory_health") {
       headers = ["Category", "Name", "Total Quantity", "Checked Out", "Damaged", "Missing", "Available", "Unit"];
@@ -202,7 +190,7 @@ export function ReportsPage() {
     } else if (activeTab === "quality_crew") {
       headers = ["Booking Code", "Client Venue", "Event Date", "Team Size", "Evaluator", "Notes", "Scores"];
       rows = (evaluationsReport?.evaluations || []).map((e) => [
-        e.bookingId, e.clientNameVenue, e.eventDate, String(e.teamSize), e.evaluatorName, e.notes,
+        e.bookingCode || e.bookingId, e.clientNameVenue, e.eventDate, String(e.teamSize), e.evaluatorName, e.notes,
         e.scores.map((s) => `${s.metricLabel}:${s.score}`).join(" | ")
       ]);
     } else if (activeTab === "audit_logs") {
@@ -211,29 +199,48 @@ export function ReportsPage() {
       // Merge upcoming forecast and cancellation details into single audit report
       canceledReport.forEach((c) => {
         rows.push([
-          "CANCELLATION", c.id, c.eventDate, c.eventLocation, c.paymentAmount, c.canceledBy, c.canceledAt, c.reason
+          "CANCELLATION", c.bookingCode || c.id, c.eventDate, c.eventLocation, c.paymentAmount, c.canceledBy, c.canceledAt, c.reason
         ]);
       });
       upcomingReport.forEach((u) => {
         rows.push([
-          "UPCOMING", u.id, u.eventDate, u.eventLocation, "-", String(u.assignedCrewCount), u.status, u.hasBom ? "BOM Ready" : "BOM Missing"
+          "UPCOMING", u.bookingCode || u.id, u.eventDate, u.eventLocation, "-", String(u.assignedCrewCount), u.status, u.hasBom ? "BOM Ready" : "BOM Missing"
         ]);
       });
     } else if (activeTab === "staff_work_sheets") {
-      headers = ["Booking Code", "Client / Customer", "Venue Location", "Rental Start", "Rental End", "Duration (Days)"];
-      rows = sheetBookings.map((b) => {
-        const start = new Date(b.rentalStart);
-        const end = new Date(b.rentalEnd);
-        const diffMs = Math.max(0, end.getTime() - start.getTime());
-        const durationDays = Math.max(1, Math.round((diffMs / (1000 * 60 * 60 * 24)) * 10) / 10);
-        return [
-          b.bookingCode || b.id,
-          b.customerName || "",
-          b.eventLocation || "",
-          b.rentalStart,
-          b.rentalEnd,
-          String(durationDays)
-        ];
+      headers = [
+        "Type",
+        "Name",
+        "Email",
+        "Bookings / Trips",
+        "Sqm / Approved",
+        "Rejected",
+        "Pending",
+        "Duration (min)",
+      ];
+      freelancerWorkload.forEach((row) => {
+        rows.push([
+          "FREELANCER",
+          row.name,
+          row.email || "",
+          String(row.bookingsCount),
+          String(row.sqmCovered),
+          "",
+          "",
+          "",
+        ]);
+      });
+      driverTripsReport.forEach((row) => {
+        rows.push([
+          "DRIVER",
+          row.name,
+          row.email || "",
+          String(row.tripsCount),
+          String(row.approvedCount),
+          String(row.rejectedCount),
+          String(row.pendingCount),
+          String(row.totalDurationMinutes),
+        ]);
       });
     }
 
@@ -282,7 +289,7 @@ export function ReportsPage() {
             size="sm"
             className="flex items-center gap-1.5 h-8.5 text-[11px] font-bold cursor-pointer"
           >
-            <Download className="h-3.5 w-3.5" /> Export {TABS.find(t => t.id === activeTab)?.label || "Report"} CSV
+            <Download className="h-3.5 w-3.5" /> Export {renderedTabs.find((t) => t.id === activeTab)?.label || "Report"} CSV
           </Button>
         </div>
       </div>
@@ -584,10 +591,11 @@ export function ReportsPage() {
                     <div className="space-y-4">
                       {c.pools.map((p) => {
                         const total = p.totalQuantity || 1;
+                        const availPct = Math.min(100, Math.round((p.availableQuantity / total) * 100));
                         const outPct = Math.min(100, Math.round((p.checkedOutQuantity / total) * 100));
                         const dmgPct = Math.min(100, Math.round((p.damagedQuantity / total) * 100));
                         const misPct = Math.min(100, Math.round((p.missingQuantity / total) * 100));
-                        const availPct = Math.max(0, 100 - outPct - dmgPct - misPct);
+                        const maintenancePct = Math.min(100, Math.round(((p.maintenanceQuantity || 0) / total) * 100));
 
                         return (
                           <div key={p.poolId} className="text-[12px]">
@@ -608,6 +616,8 @@ export function ReportsPage() {
                               <div style={{ width: `${dmgPct}%`, background: "var(--destructive)" }} title={`Damaged: ${dmgPct}%`} />
                               {/* Missing (Grey) */}
                               <div style={{ width: `${misPct}%`, background: "var(--color-status-onsite)" }} title={`Missing: ${misPct}%`} />
+                              {/* Under maintenance (Amber) */}
+                              <div style={{ width: `${maintenancePct}%`, background: "#d97706" }} title={`Maintenance: ${maintenancePct}%`} />
                             </div>
 
                             {/* Metric details label strip */}
@@ -628,6 +638,12 @@ export function ReportsPage() {
                                 <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--color-status-onsite)" }} />
                                 Missing: {p.missingQuantity}
                               </span>
+                              {(p.maintenanceQuantity || 0) > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
+                                  Maintenance: {p.maintenanceQuantity}
+                                </span>
+                              )}
                             </div>
                           </div>
                         );
@@ -703,97 +719,6 @@ export function ReportsPage() {
         {/* ========================================================================= */}
         {activeTab === "quality_crew" && (
           <div className="space-y-4">
-            
-            {/* Crew Workload & Screen Coverage Chart (Monday.com Style) */}
-            <div className="rounded-lg border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 border-b pb-2.5 gap-2" style={{ borderColor: "var(--border)" }}>
-                <div>
-                  <h4 className="text-[13px] font-bold text-foreground">Crew Workload & Screen Coverage</h4>
-                  <p className="text-[11px] text-zinc-500 mt-0.5">Assigned bookings workload and total screen square meters managed per team member</p>
-                </div>
-                <div className="flex items-center gap-4 text-[11px]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-3 w-3 rounded bg-[var(--accent)]" />
-                    <span className="text-zinc-400 font-medium">Work Done (Bookings)</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-3 w-3 rounded bg-[#10b981]" />
-                    <span className="text-zinc-400 font-medium">Screen Coverage (sqm)</span>
-                  </div>
-                </div>
-              </div>
-
-              {loadingCrewWorkload ? (
-                <div className="h-72 flex items-center justify-center text-zinc-500 text-[11px]">
-                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                  Loading crew performance metrics...
-                </div>
-              ) : crewWorkloadReport.length === 0 ? (
-                <div className="h-72 flex items-center justify-center text-zinc-500 text-[11px]">
-                  No active crew assignments or bookings found for this period.
-                </div>
-              ) : (
-                <div className="h-80 w-full text-[11px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={crewWorkloadReport}
-                      margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.4} />
-                      <XAxis 
-                        dataKey="name" 
-                        stroke="var(--text-3)" 
-                        tickLine={false} 
-                        axisLine={false}
-                        dy={6}
-                      />
-                      <YAxis 
-                        yAxisId="left" 
-                        orientation="left" 
-                        stroke="var(--accent)" 
-                        tickLine={false} 
-                        axisLine={false}
-                        allowDecimals={false}
-                      />
-                      <YAxis 
-                        yAxisId="right" 
-                        orientation="right" 
-                        stroke="#10b981" 
-                        tickLine={false} 
-                        axisLine={false}
-                        unit="㎡"
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          background: "var(--surface)", 
-                          borderColor: "var(--border)", 
-                          borderRadius: "6px",
-                          color: "var(--foreground)",
-                          fontSize: "11px"
-                        }}
-                      />
-                      <Bar 
-                        yAxisId="left" 
-                        dataKey="bookingsCount" 
-                        name="Bookings" 
-                        fill="var(--accent)" 
-                        radius={[4, 4, 0, 0]} 
-                        maxBarSize={32}
-                      />
-                      <Bar 
-                        yAxisId="right" 
-                        dataKey="sqmCovered" 
-                        name="Square Meters" 
-                        fill="#10b981" 
-                        radius={[4, 4, 0, 0]} 
-                        maxBarSize={32}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </div>
-
             {loadingEvaluations ? (
               <div className="text-center py-12 text-zinc-500">Loading performance data...</div>
             ) : !evaluationsReport ? (
@@ -905,7 +830,7 @@ export function ReportsPage() {
                     >
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-[12.5px]" style={{ color: "var(--accent)" }}>{c.id}</span>
+                          <span className="font-bold text-[12.5px]" style={{ color: "var(--accent)" }}>{c.bookingCode || c.id}</span>
                           <span className="text-[10px] text-zinc-500 font-mono">({formatDate(c.eventDate)})</span>
                         </div>
                         <span className="font-bold text-zinc-400 font-mono">ETB {parseFloat(c.paymentAmount).toLocaleString()}</span>
@@ -1013,183 +938,232 @@ export function ReportsPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 6: STAFF WORK SHEETS */}
+        {/* TAB 6: STAFF WORK SHEETS — freelancer pay workload */}
         {/* ========================================================================= */}
         {activeTab === "staff_work_sheets" && (
-          <div className="space-y-4 print-container">
-            {/* Filter Section (no-print) */}
-            <div className="rounded-lg border p-4 space-y-4 no-print" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          <div className="space-y-4">
+            <div className="rounded-lg border p-4 space-y-3 no-print" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4" style={{ color: "var(--accent)" }} />
-                <span className="text-[13px] font-bold">HR Staff Work Sheet Filters</span>
+                <span className="text-[13px] font-bold">Freelancer Workload Period</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                  Select Staff Member
-                  <select
-                    value={selectedStaffUserId}
-                    onChange={(e) => setSelectedStaffUserId(e.target.value)}
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] cursor-pointer"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <option value="">-- Choose User --</option>
-                    {staffList.map((s: any) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.role})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
+              <p className="text-[11px] text-zinc-500">
+                DONE bookings only. Each assigned freelancer receives the full booking square meters. Changing dates reloads automatically.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                 <div className="text-[11px] font-semibold block w-full text-left" style={{ color: "var(--text-2)" }}>
                   Start Date
                   <div className="mt-1">
-                    <DatePicker
-                      value={sheetStartDate}
-                      onChange={setSheetStartDate}
-                    />
+                    <DatePicker value={sheetStartDate} onChange={setSheetStartDate} />
                   </div>
                 </div>
-
                 <div className="text-[11px] font-semibold block w-full text-left" style={{ color: "var(--text-2)" }}>
                   End Date
                   <div className="mt-1">
-                    <DatePicker
-                      value={sheetEndDate}
-                      onChange={setSheetEndDate}
-                    />
+                    <DatePicker value={sheetEndDate} onChange={setSheetEndDate} />
                   </div>
                 </div>
-
                 <Button
-                  onClick={handleGenerateSheet}
-                  disabled={isGeneratingSheet || !selectedStaffUserId}
-                  className="h-9 font-bold text-[12px] tracking-wide"
+                  type="button"
+                  variant="outline"
+                  className="h-9 font-bold text-[12px]"
+                  onClick={() => {
+                    setSheetStartDate("");
+                    setSheetEndDate("");
+                  }}
                 >
-                  {isGeneratingSheet ? "Querying..." : "Generate Sheet"}
+                  Clear Dates
                 </Button>
               </div>
             </div>
 
-            {/* Document Header for Print-only */}
-            {selectedStaffUserId && (
-              <div className="hidden print:block border-b pb-4 mb-4" style={{ borderColor: "#000" }}>
-                <h1 className="text-[22px] font-bold text-black uppercase tracking-tight">Staff Deployment Activity Sheet</h1>
-                <div className="grid grid-cols-2 gap-2 text-[12px] mt-2 text-black">
-                  <div>
-                    <strong>Staff Member:</strong> {staffList.find((s: any) => s.id === selectedStaffUserId)?.name || "—"}
+            <div className="rounded-lg border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 border-b pb-2.5 gap-2" style={{ borderColor: "var(--border)" }}>
+                <div>
+                  <h4 className="text-[13px] font-bold text-foreground">Freelancer Workload & Screen Coverage</h4>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">
+                    Bookings worked and total screen square meters per freelancer
+                    {sheetStartDate || sheetEndDate
+                      ? ` · ${sheetStartDate || "…"} → ${sheetEndDate || "…"}`
+                      : " · all time"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-4 text-[11px]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-3 w-3 rounded bg-[var(--accent)]" />
+                    <span className="text-zinc-400 font-medium">Work Done (Bookings)</span>
                   </div>
-                  <div>
-                    <strong>Role:</strong> {staffList.find((s: any) => s.id === selectedStaffUserId)?.role || "—"}
-                  </div>
-                  <div>
-                    <strong>Audit Period:</strong> {sheetStartDate || "Beginning"} to {sheetEndDate || "Present"}
-                  </div>
-                  <div>
-                    <strong>Printed On:</strong> {new Date().toLocaleString()}
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-3 w-3 rounded bg-[#10b981]" />
+                    <span className="text-zinc-400 font-medium">Screen Coverage (sqm)</span>
                   </div>
                 </div>
               </div>
-            )}
 
-            {/* Work Sheet Detail Table */}
-            {selectedStaffUserId && (
-              <div className="rounded-lg border bg-[var(--surface)] overflow-hidden" style={{ borderColor: "var(--border)" }}>
-                <div className="px-4 py-3 border-b no-print" style={{ borderColor: "var(--border)" }}>
-                  <span className="text-[12px] font-bold uppercase tracking-wider text-[var(--text-3)]">Completed Assignments Gigs</span>
+              {loadingFreelancerWorkload ? (
+                <div className="h-72 flex items-center justify-center text-zinc-500 text-[11px]">
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                  Loading freelancer workload...
+                </div>
+              ) : freelancerWorkload.length === 0 ? (
+                <div className="h-72 flex items-center justify-center text-zinc-500 text-[11px]">
+                  No freelancer DONE assignments found for this period.
+                </div>
+              ) : (
+                <div className="h-80 w-full text-[11px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={freelancerWorkload}
+                      margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.4} />
+                      <XAxis
+                        dataKey="name"
+                        stroke="var(--text-3)"
+                        tickLine={false}
+                        axisLine={false}
+                        dy={6}
+                      />
+                      <YAxis
+                        yAxisId="left"
+                        orientation="left"
+                        stroke="var(--accent)"
+                        tickLine={false}
+                        axisLine={false}
+                        allowDecimals={false}
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        stroke="#10b981"
+                        tickLine={false}
+                        axisLine={false}
+                        unit="㎡"
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--surface)",
+                          borderColor: "var(--border)",
+                          borderRadius: "6px",
+                          color: "var(--foreground)",
+                          fontSize: "11px",
+                        }}
+                      />
+                      <Bar
+                        yAxisId="left"
+                        dataKey="bookingsCount"
+                        name="Bookings"
+                        fill="var(--accent)"
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={32}
+                      />
+                      <Bar
+                        yAxisId="right"
+                        dataKey="sqmCovered"
+                        name="Square Meters"
+                        fill="#10b981"
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={32}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+
+            {freelancerWorkload.length > 0 && (
+              <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+                <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                  <span className="text-[12px] font-bold uppercase tracking-wider text-[var(--text-3)]">
+                    Freelancer totals ({freelancerWorkload.length})
+                  </span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-[12px]">
                     <thead>
                       <tr className="border-b" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
-                        <th className="px-4 py-2.5 label-eyebrow">Booking Code</th>
-                        <th className="px-4 py-2.5 label-eyebrow">Client / Customer</th>
-                        <th className="px-4 py-2.5 label-eyebrow">Venue Location</th>
-                        <th className="px-4 py-2.5 label-eyebrow">Rental Setup Period</th>
-                        <th className="px-4 py-2.5 label-eyebrow text-right w-36">Duration (Days)</th>
+                        <th className="px-4 py-2.5 label-eyebrow">Freelancer</th>
+                        <th className="px-4 py-2.5 label-eyebrow">Email</th>
+                        <th className="px-4 py-2.5 label-eyebrow text-right">Bookings</th>
+                        <th className="px-4 py-2.5 label-eyebrow text-right">Sqm Covered</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {sheetBookings.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="text-center py-8 text-zinc-500">
-                            No completed assignments registered for this user during the selected period.
+                      {freelancerWorkload.map((row) => (
+                        <tr key={row.userId} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+                          <td className="px-4 py-3 font-semibold">{row.name}</td>
+                          <td className="px-4 py-3 text-zinc-400 font-mono text-[11px]">{row.email || "—"}</td>
+                          <td className="px-4 py-3 text-right font-mono font-bold">{row.bookingsCount}</td>
+                          <td className="px-4 py-3 text-right font-mono font-bold" style={{ color: "var(--accent)" }}>
+                            {row.sqmCovered.toLocaleString()} ㎡
                           </td>
                         </tr>
-                      ) : (
-                        sheetBookings.map((b) => {
-                          const start = new Date(b.rentalStart);
-                          const end = new Date(b.rentalEnd);
-                          const diffMs = Math.max(0, end.getTime() - start.getTime());
-                          const durationDays = Math.max(1, Math.round((diffMs / (1000 * 60 * 60 * 24)) * 10) / 10);
-
-                          return (
-                            <tr key={b.id} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
-                              <td className="px-4 py-3 font-semibold">
-                                <Link
-                                  to={`/bookings/${b.bookingCode || b.id}` as any}
-                                  className="font-mono text-zinc-300 hover:text-[var(--accent)] hover:underline print:text-black print:no-underline"
-                                >
-                                  {b.bookingCode || b.id}
-                                </Link>
-                              </td>
-                              <td className="px-4 py-3">{b.customerName || "—"}</td>
-                              <td className="px-4 py-3">{b.eventLocation || "—"}</td>
-                              <td className="px-4 py-3 font-mono text-[11.5px] leading-relaxed">
-                                {formatDateTime(b.rentalStart)} - <br />
-                                {formatDateTime(b.rentalEnd)}
-                              </td>
-                              <td className="px-4 py-3 text-right font-mono font-bold">{durationDays} days</td>
-                            </tr>
-                          );
-                        })
-                      )}
+                      ))}
                     </tbody>
                   </table>
                 </div>
               </div>
             )}
 
-            {/* Summary Footer Card */}
-            {selectedStaffUserId && sheetBookings.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                {/* Print button card */}
-                <div className="rounded-lg border p-4 bg-[var(--surface-2)] flex items-center justify-between no-print" style={{ borderColor: "var(--border)" }}>
-                  <div>
-                    <span className="text-[12px] font-bold block">HR Activity Verification</span>
-                    <span className="text-[11px] text-zinc-400 block mt-0.5">Generate a print preview or PDF of this work sheet for submission.</span>
-                  </div>
-                  <Button
-                    onClick={() => window.print()}
-                    variant="outline"
-                    className="h-9 font-bold text-[12px] flex items-center gap-1.5 shrink-0"
-                  >
-                    <Printer className="h-3.5 w-3.5" /> Export PDF
-                  </Button>
+            <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+              <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                <div className="text-[12px] font-bold uppercase tracking-wider text-[var(--text-3)]">
+                  Driver trips ({driverTripsReport.length})
                 </div>
-
-                <div className="rounded-lg border p-4 flex items-center justify-between ml-auto w-full md:w-auto md:min-w-[320px] print:w-full print:ml-0 print:border-t-2" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">HR Summary</span>
-                    <div className="text-[20px] font-bold text-foreground print:text-black">
-                      {sheetBookings.length} {sheetBookings.length === 1 ? "Gig" : "Gigs"} Completed
-                    </div>
-                  </div>
-                  <div className="text-right space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">Total Days Deployed</span>
-                    <div className="text-[20px] font-bold text-[var(--accent)] font-mono print:text-black">
-                      {sheetBookings.reduce((sum, b) => {
-                        const start = new Date(b.rentalStart);
-                        const end = new Date(b.rentalEnd);
-                        const diffMs = Math.max(0, end.getTime() - start.getTime());
-                        const durationDays = Math.max(1, Math.round((diffMs / (1000 * 60 * 60 * 24)) * 10) / 10);
-                        return sum + durationDays;
-                      }, 0)} Days
-                    </div>
-                  </div>
-                </div>
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  Per-driver trip counts and total duration for the same period
+                </p>
               </div>
-            )}
+              {loadingDriverTripsReport ? (
+                <div className="px-4 py-10 text-center text-zinc-500 text-[11px]">
+                  <RefreshCw className="h-4 w-4 animate-spin inline mr-2" />
+                  Loading driver trips…
+                </div>
+              ) : driverTripsReport.length === 0 ? (
+                <div className="px-4 py-10 text-center text-zinc-500 text-[11px]">
+                  No driver trips found for this period.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-[12px]">
+                    <thead>
+                      <tr className="border-b" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                        <th className="px-4 py-2.5 label-eyebrow">Driver</th>
+                        <th className="px-4 py-2.5 label-eyebrow">Email</th>
+                        <th className="px-4 py-2.5 label-eyebrow text-right">Trips</th>
+                        <th className="px-4 py-2.5 label-eyebrow text-right">Approved</th>
+                        <th className="px-4 py-2.5 label-eyebrow text-right">Rejected</th>
+                        <th className="px-4 py-2.5 label-eyebrow text-right">Pending</th>
+                        <th className="px-4 py-2.5 label-eyebrow text-right">Duration</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {driverTripsReport.map((row) => {
+                        const hours = Math.floor(row.totalDurationMinutes / 60);
+                        const mins = row.totalDurationMinutes % 60;
+                        const duration =
+                          row.totalDurationMinutes < 60
+                            ? `${row.totalDurationMinutes}m`
+                            : mins
+                              ? `${hours}h ${mins}m`
+                              : `${hours}h`;
+                        return (
+                          <tr key={row.driverUserId} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+                            <td className="px-4 py-3 font-semibold">{row.name}</td>
+                            <td className="px-4 py-3 text-zinc-400 font-mono text-[11px]">{row.email || "—"}</td>
+                            <td className="px-4 py-3 text-right font-mono font-bold">{row.tripsCount}</td>
+                            <td className="px-4 py-3 text-right font-mono" style={{ color: "#30A46C" }}>{row.approvedCount}</td>
+                            <td className="px-4 py-3 text-right font-mono" style={{ color: "#E54666" }}>{row.rejectedCount}</td>
+                            <td className="px-4 py-3 text-right font-mono" style={{ color: "#E8A030" }}>{row.pendingCount}</td>
+                            <td className="px-4 py-3 text-right font-mono font-bold">{duration}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -34,6 +34,10 @@ export const PERMISSION = {
   /** Read roles list, role detail, permission catalog */
   ROLE_VIEW: "role.view",
   ROLE_MANAGE: "role.manage",
+  DRIVER_TRIP_CREATE: "driver_trip.create",
+  DRIVER_TRIP_EDIT: "driver_trip.edit",
+  DRIVER_TRIP_VIEW: "driver_trip.view",
+  DRIVER_TRIP_APPROVE: "driver_trip.approve",
 } as const;
 
 /** Human labels for role-editor / permission catalog UI (explicit DB grants). */
@@ -45,6 +49,10 @@ export const PERMISSION_LABELS: Record<string, string> = {
   "user.manage": "Manage staff (write)",
   "role.view": "View roles & permission catalog",
   "role.manage": "Manage roles & permissions",
+  "driver_trip.create": "Create driver trips",
+  "driver_trip.edit": "Edit driver trips",
+  "driver_trip.view": "View driver trips",
+  "driver_trip.approve": "Approve / reject driver trips",
 };
 
 export type PermissionKey = (typeof PERMISSION)[keyof typeof PERMISSION];

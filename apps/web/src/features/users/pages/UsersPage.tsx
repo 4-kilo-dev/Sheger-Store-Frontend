@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { STAFF_ROLES } from "@/features/checkout/services/operations.api";
 import { AddStaffModal } from "../components/AddStaffModal";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getStaffApi, resetPasswordApi, toggleUserActiveApi } from "@/features/users/services/staff.api";
+import { getStaffApi, resetPasswordApi, toggleUserActiveApi, setStaffFreelancerApi } from "@/features/users/services/staff.api";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { toast } from "sonner";
@@ -64,6 +64,18 @@ export function StaffPage() {
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to toggle account status");
+    },
+  });
+
+  const { mutate: toggleFreelancer } = useMutation({
+    mutationFn: ({ userId, isFreelancer }: { userId: string; isFreelancer: boolean }) =>
+      setStaffFreelancerApi(userId, isFreelancer),
+    onSuccess: (_, variables) => {
+      toast.success(variables.isFreelancer ? "Marked as freelancer" : "Freelancer flag removed");
+      queryClient.invalidateQueries({ queryKey: ["staff"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update freelancer flag");
     },
   });
 
@@ -183,7 +195,17 @@ export function StaffPage() {
                   </div>
                   <div>
                     <div className="text-[14px] font-bold">{p.name}</div>
-                    <div className="text-[11px]" style={{ color: "var(--text-2)" }}>{p.role}</div>
+                    <div className="flex items-center gap-1.5 text-[11px]" style={{ color: "var(--text-2)" }}>
+                      <span>{p.role}</span>
+                      {p.isFreelancer && (
+                        <span
+                          className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
+                          style={{ background: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}
+                        >
+                          Freelancer
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <span
@@ -221,13 +243,24 @@ export function StaffPage() {
               </div>
 
                {canManageStaff && p.id && (
-                <div className="mt-3 flex gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                <div className="mt-3 flex flex-wrap gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
                   <button
                     onClick={() => handleResetPassword(p.id!, p.name)}
                     className="rounded bg-[var(--surface-2)] px-2.5 py-1 text-[10px] font-semibold transition hover:bg-border cursor-pointer"
                     style={{ color: "var(--text-2)", border: "1px solid var(--border)" }}
                   >
                     Reset Password
+                  </button>
+                  <button
+                    onClick={() => toggleFreelancer({ userId: p.id!, isFreelancer: !p.isFreelancer })}
+                    className="rounded px-2.5 py-1 text-[10px] font-semibold transition cursor-pointer"
+                    style={{
+                      background: p.isFreelancer ? "rgba(16, 185, 129, 0.12)" : "var(--surface-2)",
+                      color: p.isFreelancer ? "#10b981" : "var(--text-2)",
+                      border: p.isFreelancer ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid var(--border)",
+                    }}
+                  >
+                    {p.isFreelancer ? "Freelancer ✓" : "Mark Freelancer"}
                   </button>
                   <button
                     onClick={() => handleToggleActive(p.id!, p.status !== "OFF DUTY")}
