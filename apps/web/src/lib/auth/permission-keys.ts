@@ -19,6 +19,8 @@ export const PERMISSION = {
   /** Soft/hard holds — create/release reservations */
   INVENTORY_RESERVE: "inventory.reserve",
   INVENTORY_VIEW: "inventory.view",
+  /** Add / edit / retire inventory categories, pools, and items */
+  INVENTORY_MANAGE: "inventory.manage",
   /** Warehouse check-out (PREPARATION → ONSITE) */
   INVENTORY_CHECKOUT: "inventory.checkout",
   INVENTORY_CHECKIN: "inventory.checkin",
@@ -45,6 +47,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   "inventory.reserve": "Reserve / soft-hold",
   "inventory.checkout": "Warehouse checkout",
   "inventory.view": "View inventory & reservations",
+  "inventory.manage": "Manage inventory (add / edit)",
   "user.view": "View staff",
   "user.manage": "Manage staff (write)",
   "role.view": "View roles & permission catalog",

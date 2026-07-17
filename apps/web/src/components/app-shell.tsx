@@ -6,8 +6,10 @@ import {
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import { useMobile } from "@/hooks/use-mobile";
-import { useActiveProfile, PROFILES } from "@/hooks/use-active-profile";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { usePermissions } from "@/hooks/use-permissions";
 import { logoutApi } from "@/features/auth/services/auth.api";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -24,23 +26,45 @@ const NAV = [
 
 
 
-const ROLE_PERMISSIONS: Record<string, string[]> = {
-  Admin: ["/", "/operations", "/driver-trips", "/bookings", "/inventory", "/checkout", "/damage-report", "/staff", "/reports", "/settings"],
-  CCR: ["/", "/bookings", "/reports", "/settings"],
-  CTO: ["/", "/bookings", "/staff", "/settings"],
-  TO: ["/", "/bookings", "/checkout"],
-  OO: ["/", "/operations", "/driver-trips", "/bookings", "/checkout", "/staff", "/reports"],
-  SK: ["/", "/checkout", "/damage-report", "/inventory"],
+/** Nav routes gated by at least one of these permission keys (empty = always visible). */
+const NAV_PERMISSIONS: Record<string, string[]> = {
+  "/operations": [PERMISSION.ASSIGNMENT_ASSIGN_CREW],
+  "/driver-trips": [PERMISSION.DRIVER_TRIP_VIEW],
+  "/bookings": [PERMISSION.BOOKING_VIEW_ALL, PERMISSION.BOOKING_VIEW_ASSIGNED, PERMISSION.BOOKING_CREATE],
+  "/inventory": [PERMISSION.INVENTORY_VIEW, PERMISSION.INVENTORY_MANAGE],
+  "/checkout": [PERMISSION.INVENTORY_CHECKOUT, PERMISSION.INVENTORY_CHECKIN],
+  "/damage-report": [PERMISSION.DAMAGE_REPORT],
+  "/staff": [PERMISSION.USER_VIEW],
+  "/reports": ["report.view", PERMISSION.EVAL_VIEW],
 };
 
-const ROLE_DESCRIPTIONS: Record<string, string> = {
-  Admin: "System control & user management",
-  CCR: "Client reservations & intake",
-  CTO: "Technical validation & screens",
-  TO: "On-site installation & testing",
-  OO: "Operations scheduling & dispatch",
-  SK: "Inventory checkout & damages",
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  supervisor: "Supervisor",
+  ccr: "CCR",
+  chief_tech: "Chief Technician",
+  technician: "Technician",
+  oo: "Operations Officer",
+  storekeeper: "Storekeeper",
+  stagehand: "Stagehand",
+  freelancer: "Freelancer",
 };
+
+function getInitials(name: string): string {
+  return (
+    name
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "U"
+  );
+}
+
+function formatRoleLabel(roleKey?: string): string {
+  if (!roleKey) return "Staff";
+  return ROLE_LABELS[roleKey.toLowerCase()] ?? roleKey.replace(/_/g, " ");
+}
 
 function SidebarLogo({ collapsed }: { collapsed: boolean }) {
   return (
@@ -82,10 +106,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isMobile = useMobile();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [rolesOpen, setRolesOpen] = useState(true);
-  const [showSwitcher, setShowSwitcher] = useState(false);
-  const [activeProfile, setActiveProfile] = useActiveProfile();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const authUser = useAuthUser();
+  const { canAny } = usePermissions();
   const [theme, setTheme] = useState<"light" | "dark">("dark");
+
+  const displayName = authUser?.name ?? "User";
+  const displayRole = formatRoleLabel(authUser?.roles?.[0] ?? authUser?.role);
+  const initials = getInitials(displayName);
 
   useEffect(() => {
     // Sync React state with the actual DOM on mount
@@ -140,8 +168,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {/* Other Nav Items */}
           {NAV.slice(1).map(({ to, label, icon: Icon }) => {
-            // Filter nav links based on active user role permissions
-            const isPermitted = ROLE_PERMISSIONS[activeProfile.role]?.includes(to);
+            const required = NAV_PERMISSIONS[to];
+            const isPermitted = !required || required.length === 0 || canAny(required);
             if (!isPermitted) return null;
 
             const active = path.startsWith(to);
@@ -167,118 +195,64 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {/* Bottom section */}
       <div className="border-t p-2 relative" style={{ borderColor: "var(--border)" }}>
-        {/* Profile Switcher Popover */}
-        {showSwitcher && (isMobile || !collapsed) && (
-            <>
-            {/* Click-outside overlay */}
-            <div 
+        {showUserMenu && (isMobile || !collapsed) && (
+          <>
+            <div
               className="fixed inset-0 z-40"
-              onClick={() => setShowSwitcher(false)}
+              onClick={() => setShowUserMenu(false)}
             />
-            <div 
-              className="profile-popover absolute bottom-[98px] left-2 right-2 z-50 rounded-xl border p-2 shadow-2xl flex flex-col gap-1.5"
-              style={{ 
-                background: theme === "dark" ? "#1b1b1f" : "#ffffff", 
+            <div
+              className="profile-popover absolute bottom-[98px] left-2 right-2 z-50 rounded-xl border p-2 shadow-2xl"
+              style={{
+                background: theme === "dark" ? "#1b1b1f" : "#ffffff",
                 borderColor: theme === "dark" ? "#2a2a30" : "#e4e4e7",
                 boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.3)",
               }}
+            >
+              <button
+                onClick={async () => {
+                  await logoutApi();
+                  navigate({ to: "/login" });
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] font-medium transition hover:bg-destructive/10 hover:text-destructive"
+                style={{ color: "var(--text-3)" }}
               >
-              <div className="px-2.5 py-1.5 flex items-center justify-between border-b pb-2" style={{ borderColor: "var(--border)" }}>
-                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-3)" }}>
-                  Control Workspaces
-                </span>
-                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-[var(--surface-2)] font-data" style={{ color: "var(--text-2)" }}>
-                  {PROFILES.length} Roles
-                </span>
-              </div>
-              <div className="space-y-1 max-h-[280px] overflow-y-auto scrollbar-thin pr-0.5">
-                  {PROFILES.map((p) => {
-                    const isActive = activeProfile.role === p.role;
-                    return (
-                    <button
-                      key={p.role}
-                      onClick={() => {
-                        setActiveProfile(p);
-                        setShowSwitcher(false);
-                        }}
-                        className={`switcher-item ${isActive ? "active" : ""}`}
-                        style={{
-                          background: isActive ? "var(--surface-2)" : "transparent",
-                          borderColor: isActive ? "var(--accent)" : "transparent",
-                        }}
-                      >
-                        <div 
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold transition-all duration-200"
-                          style={{ 
-                            background: isActive ? "var(--accent)" : "var(--surface-2)", 
-                            color: isActive ? "var(--accent-foreground)" : "var(--text-2)",
-                            border: isActive ? "none" : "1px solid var(--border)",
-                            boxShadow: isActive ? "0 0 12px rgba(252, 191, 36, 0.35)" : "none",
-                          }}
-                        >
-                          {p.initials}
-                        </div>
-                        <div className="flex-1 leading-tight min-w-0">
-                          <div className="font-semibold truncate flex items-center gap-1.5 text-[12px]" style={{ color: isActive ? "var(--accent)" : "var(--foreground)" }}>
-                            {p.name}
-                          </div>
-                          <div className="text-[9.5px] mt-0.5 truncate" style={{ color: "var(--text-3)" }}>
-                            {ROLE_DESCRIPTIONS[p.role]}
-                          </div>
-                        </div>
-                        {isActive && (
-                          <div className="h-1.5 w-1.5 rounded-full shrink-0 animate-pulse" style={{ background: "var(--accent)", boxShadow: "0 0 6px var(--accent)" }} />
-                        )}
-                      </button>
-                    );
-                  })}
-              </div>
-              <div className="mt-1 border-t pt-1.5" style={{ borderColor: "var(--border)" }}>
-                <button
-                  onClick={async () => {
-                    await logoutApi();
-                    navigate({ to: "/login" });
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] font-medium transition hover:bg-destructive/10 hover:text-destructive"
-                  style={{ color: "var(--text-3)" }}
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  Sign out
-                </button>
-              </div>
+                <LogOut className="h-3.5 w-3.5" />
+                Sign out
+              </button>
             </div>
           </>
-          )}
+        )}
 
         {(isMobile || !collapsed) ? (
-          <button 
-            onClick={() => setShowSwitcher(!showSwitcher)}
+          <button
+            onClick={() => setShowUserMenu(!showUserMenu)}
             className="mb-2 flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-all duration-150 border"
-            style={{ 
-              borderColor: showSwitcher ? "var(--accent)" : "var(--border)", 
-              background: showSwitcher ? "var(--surface-2)" : "transparent",
+            style={{
+              borderColor: showUserMenu ? "var(--accent)" : "var(--border)",
+              background: showUserMenu ? "var(--surface-2)" : "transparent",
             }}
           >
-            <div 
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-[10px] font-bold shrink-0" 
+            <div
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-[10px] font-bold shrink-0"
               style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
             >
-              {activeProfile.initials}
+              {initials}
             </div>
             <div className="flex-1 leading-tight min-w-0">
-              <div className="text-[11px] font-semibold truncate text-foreground">{activeProfile.name}</div>
-              <div className="text-[9px] font-medium truncate" style={{ color: "var(--text-3)" }}>{activeProfile.role}</div>
+              <div className="text-[11px] font-semibold truncate text-foreground">{displayName}</div>
+              <div className="text-[9px] font-medium truncate" style={{ color: "var(--text-3)" }}>{displayRole}</div>
             </div>
-            <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${showSwitcher ? "rotate-90" : ""}`} style={{ color: "var(--text-3)" }} />
+            <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${showUserMenu ? "rotate-90" : ""}`} style={{ color: "var(--text-3)" }} />
           </button>
         ) : (
-          <button 
+          <button
             onClick={() => setCollapsed(false)}
             className="mb-2 flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-bold mx-auto"
-            style={{ background: activeProfile.color || "var(--accent)", color: "var(--accent-foreground)" }}
-            title={`Active role: ${activeProfile.role}`}
+            style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+            title={displayName}
           >
-            {activeProfile.initials}
+            {initials}
           </button>
         )}
         
