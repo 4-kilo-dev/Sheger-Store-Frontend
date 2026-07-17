@@ -2,7 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, CalendarRange, Package, Users, BarChart3, Settings,
   ChevronsLeft, ChevronsRight, Search, ChevronRight,
-  ClipboardCheck, ShieldAlert, LogOut, Sun, Moon, Menu, X, Trello,
+  ClipboardCheck, ShieldAlert, LogOut, Sun, Moon, Menu, X, Trello, Truck,
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import { useMobile } from "@/hooks/use-mobile";
@@ -12,6 +12,7 @@ import { logoutApi } from "@/features/auth/services/auth.api";
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/operations", label: "Operations Board", icon: Trello },
+  { to: "/driver-trips", label: "Driver Trips", icon: Truck },
   { to: "/bookings", label: "Bookings", icon: CalendarRange },
   { to: "/inventory", label: "Inventory", icon: Package },
   { to: "/checkout", label: "Check-in / out", icon: ClipboardCheck },
@@ -24,11 +25,11 @@ const NAV = [
 
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
-  Admin: ["/", "/operations", "/bookings", "/inventory", "/checkout", "/damage-report", "/staff", "/reports", "/settings"],
+  Admin: ["/", "/operations", "/driver-trips", "/bookings", "/inventory", "/checkout", "/damage-report", "/staff", "/reports", "/settings"],
   CCR: ["/", "/bookings", "/reports", "/settings"],
   CTO: ["/", "/bookings", "/staff", "/settings"],
   TO: ["/", "/bookings", "/checkout"],
-  OO: ["/", "/operations", "/bookings", "/checkout", "/staff", "/reports"],
+  OO: ["/", "/operations", "/driver-trips", "/bookings", "/checkout", "/staff", "/reports"],
   SK: ["/", "/checkout", "/damage-report", "/inventory"],
 };
 

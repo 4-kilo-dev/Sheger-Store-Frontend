@@ -138,7 +138,7 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
         )
       );
 
-      const bookingPayload: Record<string, string> = {
+      const bookingPayload: Record<string, string | number> = {
         ctoConsultationNotes: ctoNotes,
       };
       if (validAllocations.length > 0) {
@@ -148,6 +148,10 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
             return `${a.quantity}sqm of ${p ? p.name : "LED Screen"}`;
           })
           .join(", ");
+        bookingPayload.screenAreaSqm = validAllocations.reduce(
+          (sum, a) => sum + (Number.parseFloat(String(a.quantity)) || 0),
+          0,
+        );
       }
       await updateBookingApi(b.code, bookingPayload);
 

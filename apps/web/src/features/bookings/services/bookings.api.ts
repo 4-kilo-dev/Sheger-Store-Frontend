@@ -138,7 +138,13 @@ function mapBackendBookingToFrontend(b: any): Booking {
   // Parse screen spec fields dynamically from the database itemServiceSpec
   const specParts = b.itemServiceSpec ? b.itemServiceSpec.split(" - ") : [];
   const screenType = (specParts[0] || "P3.91 OUTDOOR") as ScreenType;
-  const size = parseFloat(specParts[1]) || b.rentedDays || 0;
+  const parsedSpecSize = Number.parseFloat(specParts[1] || "");
+  const screenAreaSqm = Number(b.screenAreaSqm);
+  const size = Number.isFinite(screenAreaSqm)
+    ? screenAreaSqm
+    : Number.isFinite(parsedSpecSize)
+      ? parsedSpecSize
+      : b.rentedDays || 0;
   const arrangement = specParts[2] || b.itemServiceSpec || "Standard layout";
 
   const statusHistory = (b.statusHistory || []).map((h: any) => ({
@@ -235,6 +241,7 @@ export async function createBookingApi(form: any): Promise<any> {
     disassemblyStart: dismantleDateStr,
     disassemblyEnd: dismantleDateStr,
     itemServiceSpec: form.itemServiceSpec || `${form.screenType || "P4"} - ${form.size || 0}sqm - ${form.arrangement || "standard"}`,
+    screenAreaSqm: Number(form.size) >= 0 ? Number(form.size) : 0,
     itemServiceType: "Rental",
     notes: form.notes || form.ctoNotes || "",
     customFields: form.customFields || {},
