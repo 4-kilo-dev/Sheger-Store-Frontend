@@ -44,11 +44,13 @@ const EVENT_DISPLAY: Record<
 };
 
 export function getNotificationDisplay(notification: Notification) {
-  const display = EVENT_DISPLAY[notification.eventType] ?? {
-    title: notification.eventType,
-    type: "System" as NotificationType,
-    priority: "NORMAL" as NotificationPriority,
-  };
+  const fromEvent = EVENT_DISPLAY[notification.eventType];
+  const title = fromEvent?.title ?? notification.eventType;
+  // The backend's own type/priority (when present) are authoritative — the
+  // static event map is only a fallback for older events that predate them.
+  const type = notification.type || fromEvent?.type || ("System" as NotificationType);
+  const priority =
+    notification.priority || fromEvent?.priority || ("NORMAL" as NotificationPriority);
   const linkTo =
     notification.relatedEntity === "booking" && notification.relatedId
       ? `/bookings/${notification.relatedId}`
@@ -56,7 +58,7 @@ export function getNotificationDisplay(notification: Notification) {
         ? "/inventory"
         : undefined;
 
-  return { ...display, linkTo, unread: !notification.readAt };
+  return { title, type, priority, linkTo, unread: !notification.readAt };
 }
 
 export function groupByRecency(createdAt: string): "Today" | "Yesterday" | "This Week" {
@@ -78,4 +80,8 @@ export async function getPendingTasksApi(): Promise<Notification[]> {
 
 export async function markNotificationReadApi(id: string): Promise<void> {
   await client.patch(`/notifications/${id}/read`, {});
+}
+
+export async function markAllNotificationsReadApi(): Promise<void> {
+  await client.post(`/api/notifications/read-all`, {});
 }

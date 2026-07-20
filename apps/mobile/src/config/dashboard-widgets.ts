@@ -62,4 +62,18 @@ export const ROLE_LAYOUTS: Record<UserRole, RoleLayoutConfig> = {
     title: "Inventory & Check-ins",
     description: "Verify equipment returns, process check-outs, and flag damage.",
   },
+  SH: {
+    widgets: ["stats-overview", "booking-queues"],
+    eyebrow: "Field operations",
+    title: "Your Assignments & Prep",
+    description:
+      "Accept assigned bookings, prepare the bill of materials, and run your field setups.",
+  },
+  FL: {
+    widgets: ["stats-overview", "booking-queues"],
+    eyebrow: "Field operations",
+    title: "Your Assignments & Prep",
+    description:
+      "Accept assigned bookings, prepare the bill of materials, and run your field setups.",
+  },
 };

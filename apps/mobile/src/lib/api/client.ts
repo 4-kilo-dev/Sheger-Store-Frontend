@@ -42,7 +42,11 @@ export function setUnauthorizedHandler(handler: () => void) {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const url = path.startsWith("http") ? path : `${BASE_URL}${path}`;
+  // The backend has no global "/api" prefix; strip it here so every service
+  // file can use "/api/..." paths for parity with the web client, which does
+  // the same normalization before hitting the real backend.
+  const targetPath = path.startsWith("/api") ? path.replace(/^\/api/, "") : path;
+  const url = targetPath.startsWith("http") ? targetPath : `${BASE_URL}${targetPath}`;
 
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {

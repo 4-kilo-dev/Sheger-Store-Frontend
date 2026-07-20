@@ -8,7 +8,7 @@ export interface Role {
 }
 
 export async function getRolesApi(): Promise<Role[]> {
-  return client.get<Role[]>("/roles");
+  return client.get<Role[]>("/api/roles");
 }
 
 interface RawUser {
@@ -20,6 +20,7 @@ interface RawUser {
   jobs?: number;
   capacity?: number;
   createdAt?: string;
+  isFreelancer?: boolean;
   roles?: { displayName: string }[];
 }
 
@@ -43,11 +44,12 @@ function toStaffMember(u: RawUser, roleName?: string): StaffMember {
     capacity: u.capacity || 30,
     initials,
     joinedDate: u.createdAt ? u.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+    isFreelancer: Boolean(u.isFreelancer),
   };
 }
 
 export async function getStaffApi(): Promise<StaffMember[]> {
-  const users = await client.get<RawUser[]>("/users");
+  const users = await client.get<RawUser[]>("/api/users");
   return users.map((u) => toStaffMember(u));
 }
 
@@ -58,6 +60,7 @@ export async function createStaffApi(payload: {
   password: string;
   role: string;
   team?: string;
+  isFreelancer?: boolean;
 }): Promise<StaffMember> {
   const roles = await getRolesApi().catch(() => []);
   const matchedRole = roles.find(
@@ -69,21 +72,29 @@ export async function createStaffApi(payload: {
     throw new Error(`Role "${payload.role}" not found in backend roles.`);
   }
 
-  const newUser = await client.post<RawUser>("/users", {
+  const newUser = await client.post<RawUser>("/api/users", {
     name: payload.name,
     phone: payload.phone,
     email: payload.email || `${payload.name.toLowerCase().replace(/\s+/g, ".")}@vortexvisual.com`,
     password: payload.password,
     roleId: matchedRole.id,
+    isFreelancer: Boolean(payload.isFreelancer),
   });
 
-  return toStaffMember({ ...newUser, active: true, team: payload.team }, matchedRole.displayName);
+  return toStaffMember(
+    { ...newUser, active: true, team: payload.team, isFreelancer: payload.isFreelancer },
+    matchedRole.displayName,
+  );
 }
 
 export async function resetPasswordApi(userId: string): Promise<{ temporaryPassword: string }> {
-  return client.post<{ temporaryPassword: string }>(`/users/${userId}/reset-password`);
+  return client.post<{ temporaryPassword: string }>(`/api/users/${userId}/reset-password`);
 }
 
 export async function toggleUserActiveApi(userId: string, active: boolean): Promise<void> {
-  await client.patch(`/users/${userId}`, { active });
+  await client.patch(`/api/users/${userId}`, { active });
+}
+
+export async function setStaffFreelancerApi(userId: string, isFreelancer: boolean): Promise<void> {
+  await client.patch(`/api/users/${userId}`, { isFreelancer });
 }

@@ -6,10 +6,11 @@ import {
   Download,
   Gauge,
   PieChart,
+  Truck,
   Users,
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Share, StyleSheet, View } from "react-native";
 import {
   AppText,
   Button,
@@ -21,19 +22,33 @@ import {
   SegmentedTabs,
   StatCard,
 } from "@/components/ui";
-import { useBookings, useInventory, useStaff } from "@/hooks/useOperations";
+import { useBookings, useDriverTrips, useInventory, useStaff } from "@/hooks/useOperations";
+import { useAppContext } from "@/context/AppContext";
 import { colors } from "@/theme/tokens";
 import { STATUS_LABELS, STATUS_ORDER } from "@/types/domain";
 import type { Booking, InventoryItem, StaffMember } from "@/types/domain";
 import { formatCompactCurrency, formatCurrency, pct } from "@/utils/format";
 
-const TABS = [
+const BASE_TABS = [
   "Revenue & Bookings",
   "Inventory Health",
   "Client Directory",
   "Quality & Crew",
+  "Driver Trips",
   "Audit Logs",
 ] as const;
+const STAFF_WORK_SHEETS_TAB = "Staff Work Sheets" as const;
+const TABS = [...BASE_TABS, STAFF_WORK_SHEETS_TAB] as const;
+
+function toCsv(rows: Array<Record<string, string | number>>): string {
+  if (rows.length === 0) return "";
+  const headers = Object.keys(rows[0]);
+  const lines = [headers.join(",")];
+  for (const row of rows) {
+    lines.push(headers.map((h) => JSON.stringify(row[h] ?? "")).join(","));
+  }
+  return lines.join("\n");
+}
 
 function monthsFromBookings(bookings: Booking[]) {
   const now = new Date();
@@ -57,13 +72,25 @@ function monthsFromBookings(bookings: Booking[]) {
 }
 
 export default function ReportsScreen() {
+  const { activeProfile } = useAppContext();
+  const isAdminOrSupervisor = activeProfile.role === "Admin";
+  const visibleTabs = isAdminOrSupervisor ? TABS : BASE_TABS;
   const [tab, setTab] = useState<(typeof TABS)[number]>("Revenue & Bookings");
   const bookingsQuery = useBookings();
   const inventoryQuery = useInventory();
   const staffQuery = useStaff();
+  const driverTripsQuery = useDriverTrips();
 
-  const isLoading = bookingsQuery.isLoading || inventoryQuery.isLoading || staffQuery.isLoading;
-  const isError = bookingsQuery.isError || inventoryQuery.isError || staffQuery.isError;
+  const isLoading =
+    bookingsQuery.isLoading ||
+    inventoryQuery.isLoading ||
+    staffQuery.isLoading ||
+    driverTripsQuery.isLoading;
+  const isError =
+    bookingsQuery.isError ||
+    inventoryQuery.isError ||
+    staffQuery.isError ||
+    driverTripsQuery.isError;
 
   if (isLoading) {
     return (
@@ -82,6 +109,7 @@ export default function ReportsScreen() {
             bookingsQuery.refetch();
             inventoryQuery.refetch();
             staffQuery.refetch();
+            driverTripsQuery.refetch();
           }}
         />
       </Screen>
@@ -101,7 +129,7 @@ export default function ReportsScreen() {
           A consolidated view of booking volume, collections, stock use, and crew output.
         </AppText>
       </View>
-      <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
+      <SegmentedTabs tabs={visibleTabs} value={tab} onChange={setTab} />
 
       {tab === "Revenue & Bookings" ? (
         <RevenueBookingsTab BOOKINGS={BOOKINGS} INVENTORY={INVENTORY} />
@@ -109,8 +137,69 @@ export default function ReportsScreen() {
       {tab === "Inventory Health" ? <InventoryHealthTab INVENTORY={INVENTORY} /> : null}
       {tab === "Client Directory" ? <ClientDirectoryTab BOOKINGS={BOOKINGS} /> : null}
       {tab === "Quality & Crew" ? <QualityCrewTab STAFF={STAFF} /> : null}
+      {tab === "Staff Work Sheets" && isAdminOrSupervisor ? (
+        <StaffWorkSheetsTab STAFF={STAFF} />
+      ) : null}
+      {tab === "Driver Trips" ? <DriverTripsTab /> : null}
       {tab === "Audit Logs" ? <AuditLogsTab BOOKINGS={BOOKINGS} /> : null}
     </Screen>
+  );
+}
+
+function StaffWorkSheetsTab({ STAFF }: { STAFF: StaffMember[] }) {
+  return (
+    <View style={{ gap: 12 }}>
+      <Section title="Crew Workload" icon={Users} aside="This quarter">
+        {STAFF.map((staff) => (
+          <View key={staff.id} style={{ gap: 6 }}>
+            <View style={styles.lineTop}>
+              <View>
+                <AppText style={{ fontWeight: "800" }}>{staff.name}</AppText>
+                <AppText variant="small" color={colors.text2}>
+                  {staff.role} · {staff.team}
+                </AppText>
+              </View>
+              <AppText variant="data">
+                {staff.jobs}/{staff.capacity}
+              </AppText>
+            </View>
+            <ProgressBar value={pct(staff.jobs, staff.capacity)} />
+          </View>
+        ))}
+      </Section>
+    </View>
+  );
+}
+
+function DriverTripsTab() {
+  const { data: trips = [], isLoading, isError, refetch } = useDriverTrips();
+  if (isLoading) return <LoadingState label="Loading driver trips..." />;
+  if (isError)
+    return <ErrorState detail="Could not load driver trips." onRetry={() => refetch()} />;
+  return (
+    <Section title="Driver Trips" icon={Truck} aside={`${trips.length} trips`}>
+      {trips.length === 0 ? (
+        <AppText variant="subtitle">No driver trips recorded.</AppText>
+      ) : (
+        <View style={{ gap: 10 }}>
+          {trips.map((trip) => (
+            <View key={trip.id} style={styles.lineTop}>
+              <View>
+                <AppText style={{ fontWeight: "800" }}>
+                  {trip.driver?.name || "Unknown Driver"}
+                </AppText>
+                <AppText variant="small" color={colors.text2}>
+                  {trip.booking?.eventLocation || trip.reason}
+                </AppText>
+              </View>
+              <AppText variant="data" color={colors.text3}>
+                {trip.leftAt ? new Date(trip.leftAt).toLocaleDateString() : "—"}
+              </AppText>
+            </View>
+          ))}
+        </View>
+      )}
+    </Section>
   );
 }
 
@@ -218,7 +307,23 @@ function RevenueBookingsTab({
         <AppText variant="subtitle">
           Generate a booking, payment, inventory, or team performance report.
         </AppText>
-        <Button variant="outline" icon={Download}>
+        <Button
+          variant="outline"
+          icon={Download}
+          onPress={() => {
+            const csv = toCsv(
+              BOOKINGS.map((b) => ({
+                code: b.code,
+                client: b.client,
+                status: b.status,
+                payment: b.payment,
+                amount: b.amount,
+                eventDate: b.eventDate,
+              })),
+            );
+            Share.share({ message: csv, title: "Revenue & Bookings Report" });
+          }}
+        >
           Export Revenue & Bookings CSV
         </Button>
       </Section>

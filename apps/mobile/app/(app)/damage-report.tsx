@@ -20,7 +20,7 @@ import { useBookings, useCreateDamageReport, useInventory } from "@/hooks/useOpe
 import { colors } from "@/theme/tokens";
 
 export default function DamageReportScreen() {
-  const params = useLocalSearchParams<{ itemId?: string }>();
+  const params = useLocalSearchParams<{ itemId?: string; bookingCode?: string }>();
   const {
     data: INVENTORY = [],
     isLoading: loadingInventory,
@@ -31,7 +31,7 @@ export default function DamageReportScreen() {
 
   const [submitted, setSubmitted] = useState(false);
   const [itemId, setItemId] = useState(params.itemId ?? INVENTORY[0]?.id ?? "");
-  const [bookingCode, setBookingCode] = useState("");
+  const [bookingCode, setBookingCode] = useState(params.bookingCode ?? "");
   const [quantity, setQuantity] = useState("1");
   const [description, setDescription] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -66,7 +66,7 @@ export default function DamageReportScreen() {
     }
     try {
       await createDamageReport.mutateAsync({
-        bookingId: booking.code,
+        bookingId: booking.id,
         poolId: item.poolId,
         itemId: item.itemId,
         reportType: "DAMAGE",

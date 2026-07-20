@@ -26,7 +26,11 @@ import {
   SegmentedTabs,
   StatCard,
 } from "@/components/ui";
-import { useMarkNotificationRead, useNotifications } from "@/hooks/useOperations";
+import {
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+  useNotifications,
+} from "@/hooks/useOperations";
 import { getNotificationDisplay, groupByRecency } from "@/services/notifications-api";
 import { colors } from "@/theme/tokens";
 import type { NotificationType } from "@/types/domain";
@@ -44,6 +48,7 @@ const ICONS: Record<NotificationType, LucideIcon> = {
 export default function NotificationsScreen() {
   const { data: NOTIFICATIONS = [], isLoading, isError, refetch } = useNotifications();
   const markRead = useMarkNotificationRead();
+  const markAllRead = useMarkAllNotificationsRead();
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
 
   const displayItems = useMemo(
@@ -92,17 +97,16 @@ export default function NotificationsScreen() {
       </View>
       {unreadCount > 0 ? <StatCard label="Unread" value={unreadCount} icon={Bell} /> : null}
       <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
-      <Button
-        variant="outline"
-        icon={CheckCheck}
-        onPress={() =>
-          displayItems
-            .filter((entry) => entry.display.unread)
-            .forEach((entry) => markRead.mutate(entry.item.id))
-        }
-      >
-        Mark all read
-      </Button>
+      {unreadCount > 0 ? (
+        <Button
+          variant="outline"
+          icon={CheckCheck}
+          disabled={markAllRead.isPending}
+          onPress={() => markAllRead.mutate()}
+        >
+          {markAllRead.isPending ? "Marking..." : "Mark all read"}
+        </Button>
+      ) : null}
       {filtered.length === 0 ? (
         <EmptyState title="No notifications" detail="You're all caught up." />
       ) : null}

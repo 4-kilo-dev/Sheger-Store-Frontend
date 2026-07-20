@@ -21,5 +21,5 @@ export async function createDamageReportApi(payload: {
   quantity?: string;
   description?: string;
 }): Promise<DamageReport> {
-  return client.post<DamageReport>(`/bookings/${payload.bookingId}/damage-reports`, payload);
+  return client.post<DamageReport>(`/api/bookings/${payload.bookingId}/damage-reports`, payload);
 }

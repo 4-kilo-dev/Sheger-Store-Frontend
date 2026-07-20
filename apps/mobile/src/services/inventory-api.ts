@@ -26,16 +26,74 @@ interface RawSerializedItem {
   purchasedAt?: string;
 }
 
+export interface InventoryCategory {
+  id: string;
+  key: string;
+  name: string;
+  trackingType: "bulk" | "serialized";
+  unit?: string | null;
+  isActive?: boolean;
+}
+
+export interface CreateCategoryPayload {
+  key: string;
+  name: string;
+  trackingType: "bulk" | "serialized";
+  unit?: string;
+  defaultBufferHours?: number;
+}
+
+export interface CreatePoolPayload {
+  categoryId: string;
+  name: string;
+  totalQuantity: string | number;
+  sku?: string;
+  notes?: string;
+}
+
+export interface CreateItemPayload {
+  categoryId: string;
+  name: string;
+  assetTag?: string;
+  serialNumber?: string;
+  condition?: "AVAILABLE" | "DAMAGED" | "UNDER_MAINTENANCE" | "LOST" | "RETIRED";
+  notes?: string;
+  purchasedAt?: string;
+}
+
 async function getCategoriesApi(): Promise<RawCategory[]> {
-  return client.get<RawCategory[]>("/inventory/categories");
+  return client.get<RawCategory[]>("/api/inventory/categories?limit=200&active=true");
 }
 
 async function getPoolsApi(): Promise<RawPool[]> {
-  return client.get<RawPool[]>("/inventory/pools");
+  return client.get<RawPool[]>("/api/inventory/pools?limit=200&active=true");
 }
 
 async function getItemsApi(): Promise<RawSerializedItem[]> {
-  return client.get<RawSerializedItem[]>("/inventory/items");
+  return client.get<RawSerializedItem[]>("/api/inventory/items?limit=200");
+}
+
+export async function getInventoryCategoriesApi(): Promise<InventoryCategory[]> {
+  return client.get<InventoryCategory[]>("/api/inventory/categories?limit=200&active=true");
+}
+
+export async function createInventoryCategoryApi(
+  payload: CreateCategoryPayload,
+): Promise<InventoryCategory> {
+  return client.post<InventoryCategory>("/api/inventory/categories", payload);
+}
+
+export async function createInventoryPoolApi(payload: CreatePoolPayload): Promise<RawPool> {
+  return client.post<RawPool>("/api/inventory/pools", {
+    ...payload,
+    totalQuantity: String(payload.totalQuantity),
+  });
+}
+
+export async function createInventoryItemApi(
+  payload: CreateItemPayload,
+): Promise<RawSerializedItem> {
+  return client.post<RawSerializedItem>("/api/inventory/items", payload);
 }
 
 export async function getInventoryApi(): Promise<InventoryItem[]> {

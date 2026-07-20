@@ -13,14 +13,19 @@ import {
   Settings,
   ShieldAlert,
   Sun,
+  Truck,
   Users,
   X,
+  Gauge,
 } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppContext } from "@/context/AppContext";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useNotifications } from "@/hooks/useOperations";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 import { alpha, colors, radius } from "@/theme/tokens";
 import { AppText, BrandMark, Button, IconButton } from "@/components/ui";
 
@@ -29,12 +34,14 @@ const PRIMARY_NAV = [
   { href: "/bookings", label: "Bookings", icon: CalendarRange },
   { href: "/inventory", label: "Inventory", icon: Package },
   { href: "/checkout", label: "Check-in / out", icon: ClipboardCheck },
+  { href: "/operations", label: "Operations", icon: Gauge },
 ] as const;
 
 const SECONDARY_NAV = [
   { href: "/damage-report", label: "Damage reports", icon: ShieldAlert },
   { href: "/staff", label: "Staff", icon: Users },
   { href: "/reports", label: "Reports", icon: BarChart3 },
+  { href: "/driver-trips", label: "Driver trips", icon: Truck },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
@@ -47,23 +54,24 @@ const ROLE_LINKS = [
   { href: "/dashboards/sk", label: "Storekeeper (SK)" },
 ] as const;
 
-const ROLE_PERMISSIONS: Record<string, string[]> = {
-  Admin: [
-    "/dashboard",
-    "/bookings",
-    "/inventory",
-    "/checkout",
-    "/damage-report",
-    "/staff",
-    "/reports",
-    "/notifications",
-    "/settings",
+/**
+ * Nav routes gated by at least one of these permission keys (absent = always
+ * visible). Mirrors apps/web/src/components/app-shell.tsx NAV_PERMISSIONS —
+ * keep in sync with web, and never gate on role strings.
+ */
+const NAV_PERMISSIONS: Record<string, string[]> = {
+  "/operations": [PERMISSION.ASSIGNMENT_ASSIGN_CREW],
+  "/driver-trips": [PERMISSION.DRIVER_TRIP_VIEW],
+  "/bookings": [
+    PERMISSION.BOOKING_VIEW_ALL,
+    PERMISSION.BOOKING_VIEW_ASSIGNED,
+    PERMISSION.BOOKING_CREATE,
   ],
-  CCR: ["/dashboard", "/bookings", "/reports", "/notifications", "/settings"],
-  CTO: ["/dashboard", "/bookings", "/staff", "/notifications", "/settings"],
-  TO: ["/dashboard", "/bookings", "/checkout", "/notifications"],
-  OO: ["/dashboard", "/bookings", "/checkout", "/staff", "/reports", "/notifications"],
-  SK: ["/dashboard", "/checkout", "/damage-report", "/inventory", "/notifications"],
+  "/inventory": [PERMISSION.INVENTORY_VIEW, PERMISSION.INVENTORY_MANAGE],
+  "/checkout": [PERMISSION.INVENTORY_CHECKOUT, PERMISSION.INVENTORY_CHECKIN],
+  "/damage-report": [PERMISSION.DAMAGE_REPORT],
+  "/staff": [PERMISSION.USER_VIEW],
+  "/reports": ["report.view", PERMISSION.EVAL_VIEW],
 };
 
 const ROLE_WORKSPACE_PATHS = {
@@ -91,22 +99,29 @@ function titleFromPath(pathname: string) {
   return "Vortex Visual";
 }
 
-function canOpen(role: string, href: string) {
-  return ROLE_PERMISSIONS[role]?.some((path) => href === path || href.startsWith(`${path}/`));
+function canOpen(canAny: (keys: string[]) => boolean, href: string) {
+  const required = NAV_PERMISSIONS[href];
+  return !required || required.length === 0 || canAny(required);
 }
 
 export function AppShell() {
   const pathname = usePathname();
   const { activeProfile, profiles, setActiveProfile, theme, toggleTheme, logout } = useAppContext();
+  const { canAny } = usePermissions();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
   const navTitle = titleFromPath(pathname);
-  const unreadHint = true;
+  const { data: notifications = [] } = useNotifications();
+  const unreadHint = notifications.some((n) => !n.readAt);
+  const visiblePrimary = useMemo(
+    () => PRIMARY_NAV.filter((item) => canOpen(canAny, item.href)),
+    [canAny],
+  );
   const visibleSecondary = useMemo(
-    () => SECONDARY_NAV.filter((item) => canOpen(activeProfile.role, item.href)),
-    [activeProfile.role],
+    () => SECONDARY_NAV.filter((item) => canOpen(canAny, item.href)),
+    [canAny],
   );
 
   return (
@@ -139,7 +154,7 @@ export function AppShell() {
 
       <SafeAreaView edges={["bottom"]} style={styles.bottomSafe}>
         <View style={styles.bottomNav}>
-          {PRIMARY_NAV.map((item) => (
+          {visiblePrimary.map((item) => (
             <NavItem
               key={item.href}
               {...item}
@@ -182,7 +197,7 @@ export function AppShell() {
               contentContainerStyle={styles.drawerBody}
             >
               <DrawerGroup title="Navigation">
-                {[...PRIMARY_NAV, ...visibleSecondary].map((item) => (
+                {[...visiblePrimary, ...visibleSecondary].map((item) => (
                   <DrawerLink
                     key={item.href}
                     item={item}

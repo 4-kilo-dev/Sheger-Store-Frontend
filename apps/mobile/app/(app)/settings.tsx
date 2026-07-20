@@ -8,14 +8,17 @@ import {
   Plus,
   Save,
   Shield,
+  SlidersHorizontal,
+  Trash2,
   UsersRound,
   X,
 } from "lucide-react-native";
-import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import {
   AppText,
   Button,
+  EmptyState,
   ErrorState,
   Field,
   Input,
@@ -24,8 +27,20 @@ import {
   Section,
   SegmentedTabs,
 } from "@/components/ui";
-import { usePerformanceMetrics, useToggleMetricActive } from "@/hooks/useOperations";
+import {
+  usePerformanceMetrics,
+  useToggleMetricActive,
+  useRolesWithPermissions,
+  usePermissionsCatalog,
+  useToggleRolePermission,
+  useSettings,
+  useUpdateSettings,
+  useCustomFieldDefinitions,
+  useCreateCustomField,
+  useDeleteCustomField,
+} from "@/hooks/useOperations";
 import { colors, radius } from "@/theme/tokens";
+import type { Permission, RoleWithPermissions, CustomFieldDefinition } from "@/types/domain";
 
 const PANELS = [
   "Company",
@@ -34,13 +49,92 @@ const PANELS = [
   "Language",
   "Security",
   "Performance Metrics",
+  "Custom Fields",
+] as const;
+
+const LANGUAGES = [
+  { label: "English", value: "en" },
+  { label: "Amharic", value: "am" },
+] as const;
+const CALENDARS = [
+  { label: "Gregorian", value: "gregorian" },
+  { label: "Ethiopian", value: "ethiopian" },
+] as const;
+const NUMERALS = [
+  { label: "Latin (1, 2, 3)", value: "latn" },
+  { label: "Ge'ez", value: "ethi" },
 ] as const;
 
 export default function SettingsScreen() {
   const [active, setActive] = useState<(typeof PANELS)[number]>("Company");
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const rolesQuery = useRolesWithPermissions();
+  const permsQuery = usePermissionsCatalog();
+  const togglePermission = useToggleRolePermission();
+  const settingsQuery = useSettings();
+  const updateSettings = useUpdateSettings();
+
+  const [language, setLanguage] = useState("en");
+  const [calendarSystem, setCalendarSystem] = useState("gregorian");
+  const [numerals, setNumerals] = useState("latn");
+
+  useEffect(() => {
+    if (!settingsQuery.data) return;
+    if (settingsQuery.data.language) setLanguage(settingsQuery.data.language);
+    if (settingsQuery.data.calendar) setCalendarSystem(settingsQuery.data.calendar);
+    if (settingsQuery.data.numerals) setNumerals(settingsQuery.data.numerals);
+  }, [settingsQuery.data]);
+
+  const customFieldsQuery = useCustomFieldDefinitions();
+  const deleteCustomField = useDeleteCustomField();
+
+  const roles = rolesQuery.data ?? [];
+  const permissions = permsQuery.data ?? [];
+  const rolesLoading = rolesQuery.isLoading;
+  const customFieldsLoading = customFieldsQuery.isLoading;
+  const customFields = customFieldsQuery.data ?? [];
+
+  const rolePermKeys = new Map<string, Set<string>>(
+    roles.map((r) => [r.id, new Set((r.permissions || []).map((p) => p.key))]),
+  );
+
+  const groups: { domain: string; perms: Permission[] }[] = [];
+  for (const p of permissions) {
+    const domain = p.key.includes(".") ? p.key.slice(0, p.key.indexOf(".")) : "other";
+    let group = groups.find((g) => g.domain === domain);
+    if (!group) {
+      group = { domain, perms: [] };
+      groups.push(group);
+    }
+    group.perms.push(p);
+  }
+
+  const handleSaveChanges = async () => {
+    setSavingSettings(true);
+    try {
+      await updateSettings.mutateAsync({
+        language,
+        currency: "ETB",
+        calendar: calendarSystem,
+        numerals,
+      });
+      Alert.alert("Success", "Settings saved successfully!");
+    } catch (e) {
+      Alert.alert("Error", "Failed to save settings. Please try again.");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   return (
-    <Screen footer={<Button icon={Save}>Save Changes</Button>}>
+    <Screen
+      footer={
+        <Button icon={Save} onPress={handleSaveChanges} disabled={savingSettings}>
+          {savingSettings ? "Saving..." : "Save Changes"}
+        </Button>
+      }
+    >
       <View>
         <AppText variant="eyebrow">Administration</AppText>
         <AppText variant="title">Settings</AppText>
@@ -83,37 +177,67 @@ export default function SettingsScreen() {
         </>
       ) : null}
 
-      {active === "Roles & permissions" ? (
+      {active === "Roles & permissions" && (
         <Section title="Role Permissions Matrix" icon={UsersRound} aside="Access control">
-          {[
-            { perm: "Create Bookings", access: [true, true, false, false, false, false] },
-            { perm: "Confirm & Record Payment", access: [true, true, false, false, false, false] },
-            { perm: "Assign Technicians", access: [true, false, true, false, false, false] },
-            { perm: "Accept Tasks", access: [true, false, false, true, false, false] },
-            { perm: "Prepare BOM", access: [true, false, true, true, false, false] },
-            { perm: "Dispatch Team", access: [true, false, false, false, true, false] },
-            { perm: "Check-Out Materials", access: [true, false, false, false, true, true] },
-            { perm: "Check-In Materials", access: [true, false, false, false, true, true] },
-            { perm: "Report Damage", access: [true, true, true, true, true, true] },
-            { perm: "View Reports", access: [true, true, true, false, true, false] },
-            { perm: "Manage Staff", access: [true, false, false, false, false, false] },
-            { perm: "System Settings", access: [true, false, false, false, false, false] },
-          ].map((row) => (
-            <View key={row.perm} style={styles.permissionRow}>
-              <AppText style={{ flex: 1, fontWeight: "800" }}>{row.perm}</AppText>
-              <View style={styles.permissionIcons}>
-                {row.access.map((enabled, index) =>
-                  enabled ? (
-                    <Check key={index} size={16} color={colors.success} />
-                  ) : (
-                    <X key={index} size={16} color={colors.text3} />
-                  ),
-                )}
-              </View>
+          {rolesLoading ? (
+            <LoadingState label="Loading roles..." />
+          ) : (
+            <View style={{ gap: 10 }}>
+              {groups.map((group) => (
+                <View key={group.domain}>
+                  <AppText variant="eyebrow" style={{ color: colors.accent, marginBottom: 4 }}>
+                    {group.domain.charAt(0).toUpperCase() + group.domain.slice(1)}
+                  </AppText>
+                  {group.perms.map((perm) => {
+                    const has = (r: RoleWithPermissions) =>
+                      rolePermKeys.get(r.id)?.has(perm.key) ?? false;
+                    return (
+                      <View key={perm.id} style={styles.permissionRow}>
+                        <View style={{ flex: 1 }}>
+                          <AppText style={{ fontWeight: "700" }}>
+                            {perm.key
+                              .split(".")
+                              .pop()
+                              ?.replace(/_/g, " ")
+                              .replace(/\b\w/g, (l) => l.toUpperCase())}
+                          </AppText>
+                          <AppText variant="small" color={colors.text3}>
+                            {perm.key}
+                          </AppText>
+                        </View>
+                        {roles.map((role) => (
+                          <Pressable
+                            key={role.id}
+                            onPress={() =>
+                              togglePermission.mutate({
+                                roleId: role.id,
+                                permissionId: perm.id,
+                                active: !has(role),
+                              })
+                            }
+                            style={[
+                              styles.permCell,
+                              has(role)
+                                ? { backgroundColor: "rgba(48,164,108,0.15)" }
+                                : { backgroundColor: colors.surface2 },
+                            ]}
+                          >
+                            {has(role) ? (
+                              <Check size={14} color={colors.success} />
+                            ) : (
+                              <X size={14} color={colors.text3} />
+                            )}
+                          </Pressable>
+                        ))}
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
             </View>
-          ))}
+          )}
         </Section>
-      ) : null}
+      )}
 
       {active === "Notifications" ? (
         <Section title="Notification Preferences" icon={BellRing} aside="Per-role alerts">
@@ -141,23 +265,46 @@ export default function SettingsScreen() {
       {active === "Language" ? (
         <Section title="Language & Regional" icon={Languages} aside="Localization">
           <Field label="Display language">
-            <Input defaultValue="English" />
+            <View style={styles.choiceWrap}>
+              {LANGUAGES.map((opt) => (
+                <ChoiceChip
+                  key={opt.value}
+                  label={opt.label}
+                  active={language === opt.value}
+                  onPress={() => setLanguage(opt.value)}
+                />
+              ))}
+            </View>
           </Field>
-          <Field label="Currency">
-            <Input defaultValue="ETB — Ethiopian Birr" />
+          <Field label="Calendar system">
+            <View style={styles.choiceWrap}>
+              {CALENDARS.map((opt) => (
+                <ChoiceChip
+                  key={opt.value}
+                  label={opt.label}
+                  active={calendarSystem === opt.value}
+                  onPress={() => setCalendarSystem(opt.value)}
+                />
+              ))}
+            </View>
           </Field>
-          <Field label="Date format">
-            <Input defaultValue="YYYY-MM-DD" />
-          </Field>
-          <Field label="Timezone">
-            <Input defaultValue="Africa/Addis_Ababa (EAT +03:00)" />
+          <Field label="Numerals">
+            <View style={styles.choiceWrap}>
+              {NUMERALS.map((opt) => (
+                <ChoiceChip
+                  key={opt.value}
+                  label={opt.label}
+                  active={numerals === opt.value}
+                  onPress={() => setNumerals(opt.value)}
+                />
+              ))}
+            </View>
           </Field>
           <View style={styles.preview}>
             <AppText variant="eyebrow">Preview</AppText>
-            <AppText>Date: 2026-06-14</AppText>
-            <AppText>Currency: ETB 125,000</AppText>
-            <AppText>Time: 11:38 EAT</AppText>
-            <AppText>Language: English</AppText>
+            <AppText>Calendar: {CALENDARS.find((c) => c.value === calendarSystem)?.label}</AppText>
+            <AppText>Numerals: {NUMERALS.find((n) => n.value === numerals)?.label}</AppText>
+            <AppText>Language: {LANGUAGES.find((l) => l.value === language)?.label}</AppText>
           </View>
         </Section>
       ) : null}
@@ -192,6 +339,50 @@ export default function SettingsScreen() {
       ) : null}
 
       {active === "Performance Metrics" ? <PerformanceMetricsPanel /> : null}
+
+      {active === "Custom Fields" ? (
+        <Section title="Booking Custom Fields" icon={SlidersHorizontal} aside="Dynamic inputs">
+          {customFieldsLoading ? (
+            <LoadingState label="Loading custom fields..." />
+          ) : customFields.length === 0 ? (
+            <EmptyState title="No custom fields configured" />
+          ) : (
+            <View style={{ gap: 10 }}>
+              {customFields.map((field) => (
+                <View key={field.id} style={styles.fieldRow}>
+                  <View style={{ flex: 1 }}>
+                    <AppText style={{ fontWeight: "800" }}>{field.name}</AppText>
+                    <AppText variant="small" color={colors.text3}>
+                      {field.key} · {field.type}
+                    </AppText>
+                    {field.options && field.options.length > 0 && (
+                      <AppText variant="small" color={colors.text3}>
+                        {field.options.join(", ")}
+                      </AppText>
+                    )}
+                  </View>
+                  <Button
+                    variant="ghost"
+                    icon={Trash2}
+                    onPress={() => {
+                      Alert.alert("Delete Field", `Delete "${field.name}"?`, [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Delete",
+                          style: "destructive",
+                          onPress: () => deleteCustomField.mutate(field.id),
+                        },
+                      ]);
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </View>
+              ))}
+            </View>
+          )}
+        </Section>
+      ) : null}
     </Screen>
   );
 }
@@ -248,6 +439,28 @@ function PerformanceMetricsPanel() {
   );
 }
 
+function ChoiceChip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={[styles.chip, active ? styles.chipActive : null]}>
+      <AppText
+        variant="data"
+        color={active ? colors.accent : colors.text2}
+        style={{ fontWeight: "800" }}
+      >
+        {label}
+      </AppText>
+    </Pressable>
+  );
+}
+
 function Toggle({ label, on = false }: { label: string; on?: boolean }) {
   const [enabled, setEnabled] = useState(on);
   return (
@@ -291,6 +504,22 @@ function Session({
 }
 
 const styles = StyleSheet.create({
+  choiceWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  chipActive: {
+    borderColor: colors.accent,
+    backgroundColor: "rgba(245,183,49,0.10)",
+  },
   metricRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -312,6 +541,15 @@ const styles = StyleSheet.create({
   permissionIcons: {
     flexDirection: "row",
     gap: 7,
+  },
+  permCell: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   toggleRow: {
     minHeight: 48,
@@ -365,5 +603,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  fieldRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
   },
 });

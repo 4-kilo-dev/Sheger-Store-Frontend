@@ -35,7 +35,7 @@ function QueueSection({
         </AppText>
       ) : (
         <View style={{ gap: 10 }}>
-          {bookings.slice(0, 5).map((booking) => (
+          {bookings.map((booking) => (
             <Pressable
               key={booking.code}
               onPress={() => router.push(to(`/bookings/${booking.code}`))}
@@ -85,19 +85,39 @@ export function BookingQueuesWidget() {
   if (role === "CTO") {
     const confirmed = BOOKINGS.filter((booking) => booking.status === "CONFIRMED");
     const assigned = BOOKINGS.filter((booking) => booking.status === "ASSIGNED");
+    // Reserved but not yet paid — awaiting CCR payment before tech review can start.
+    const waitingReview = BOOKINGS.filter(
+      (booking) => booking.status === "RESERVED" && booking.payment === "UNPAID",
+    );
+    // Reserved with advance/full payment — ready to be picked up for technician assignment.
+    const readyForAssignment = BOOKINGS.filter(
+      (booking) =>
+        booking.status === "RESERVED" &&
+        (booking.payment === "ADVANCE" || booking.payment === "PAID"),
+    );
     return (
       <View style={{ gap: 16 }}>
-        <QueueSection title="Confirmed · needs crew" icon={UserCheck} bookings={confirmed} />
         <QueueSection
-          title="Assigned · awaiting acceptance"
+          title="Waiting for tech review"
           icon={ClipboardCheck}
+          bookings={waitingReview}
+        />
+        <QueueSection
+          title="Ready for technician assignment"
+          icon={DollarSign}
+          bookings={readyForAssignment}
+        />
+        <QueueSection title="Bookings ready for tech review" icon={Wrench} bookings={confirmed} />
+        <QueueSection
+          title="Crew assignments pending acceptance"
+          icon={UserCheck}
           bookings={assigned}
         />
       </View>
     );
   }
 
-  if (role === "TO") {
+  if (role === "TO" || role === "SH" || role === "FL") {
     const assignedToMe = BOOKINGS.filter(
       (booking) =>
         booking.status === "ASSIGNED" &&

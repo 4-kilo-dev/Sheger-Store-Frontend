@@ -26,13 +26,21 @@ import {
   Section,
   TextArea,
 } from "@/components/ui";
-import { useBookings, useCheckinBooking, useCheckoutBooking } from "@/hooks/useOperations";
+import {
+  useBomLines,
+  useBookings,
+  useCheckinBooking,
+  useCheckoutBooking,
+} from "@/hooks/useOperations";
+import { useAppContext } from "@/context/AppContext";
 import { colors, radius } from "@/theme/tokens";
 
 type Mode = "checkout" | "checkin";
 
 export default function CheckoutScreen() {
   const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings();
+  const { activeProfile } = useAppContext();
+  const userRole = activeProfile.role;
   const [mode, setMode] = useState<Mode>("checkout");
   const [selectedCode, setSelectedCode] = useState("");
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
@@ -43,8 +51,8 @@ export default function CheckoutScreen() {
   const eligibleBookings = useMemo(
     () =>
       mode === "checkout"
-        ? BOOKINGS.filter(
-            (booking) => booking.status === "PREPARATION" || booking.status === "ACCEPTED",
+        ? BOOKINGS.filter((booking) =>
+            ["PREPARATION", "ACCEPTED", "RESERVED", "CONFIRMED"].includes(booking.status),
           )
         : BOOKINGS.filter(
             (booking) => booking.status === "COMPLETED" || booking.status === "ONSITE",
@@ -52,6 +60,9 @@ export default function CheckoutScreen() {
     [BOOKINGS, mode],
   );
   const selected = eligibleBookings.find((booking) => booking.code === selectedCode);
+  const { data: backendBomLines = [] } = useBomLines(selected?.id || "");
+  const storekeeperOnsiteHold =
+    mode === "checkin" && selected?.status === "ONSITE" && userRole === "SK";
 
   const toggleItem = (id: string) => {
     setCheckedItems((current) => {
@@ -73,11 +84,33 @@ export default function CheckoutScreen() {
     if (!selected) return;
     setSubmitError(null);
     const items = selected.bomItems.filter((item) => checkedItems.has(item.id));
+    // Cross-reference the live BOM lines so a stale cached bomItems snapshot
+    // never sends the wrong pool/item id — mirrors web's CheckoutPage matching.
+    const matchLine = (item: (typeof items)[number]) =>
+      backendBomLines.find(
+        (line) =>
+          line.id === item.id || line.item?.name === item.name || line.pool?.name === item.name,
+      );
     try {
       if (mode === "checkout") {
-        await checkoutMutation.mutateAsync({ bookingId: selected.code, items });
+        const assets = items.map((item) => {
+          const line = matchLine(item);
+          return line?.itemId
+            ? { itemId: line.itemId }
+            : { poolId: line?.poolId || null, quantity: String(item.qty) };
+        });
+        await checkoutMutation.mutateAsync({ bookingId: selected.code, assets });
       } else {
-        await checkinMutation.mutateAsync({ bookingId: selected.code, items });
+        const returns = items.map((item) => {
+          const line = matchLine(item);
+          return {
+            poolId: line?.poolId || null,
+            itemId: line?.itemId || null,
+            quantityReturned: String(item.qty),
+            condition: "AVAILABLE" as const,
+          };
+        });
+        await checkinMutation.mutateAsync({ bookingId: selected.code, returns });
       }
       setSubmitted(true);
     } catch (error) {
@@ -111,7 +144,10 @@ export default function CheckoutScreen() {
           </AppText>
           <AppText variant="subtitle" style={{ textAlign: "center" }}>
             {checkedItems.size} items {mode === "checkout" ? "checked out" : "checked in"} for
-            booking {selected.code}.
+            booking {selected.code}.{" "}
+            {mode === "checkout"
+              ? "Materials are now marked as 'Out'. The booking status has advanced to ONSITE."
+              : "All items have been verified and returned to warehouse. The booking status has been marked as DONE."}
           </AppText>
           <Button onPress={reset}>Process Another</Button>
           <Button variant="outline" onPress={() => router.push(to(`/bookings/${selected.code}`))}>
@@ -130,7 +166,10 @@ export default function CheckoutScreen() {
             <Button
               icon={mode === "checkout" ? Truck : PackageCheck}
               disabled={
-                checkedItems.size === 0 || checkoutMutation.isPending || checkinMutation.isPending
+                checkedItems.size === 0 ||
+                checkoutMutation.isPending ||
+                checkinMutation.isPending ||
+                storekeeperOnsiteHold
               }
               variant={mode === "checkout" ? "primary" : "success"}
               onPress={handleSubmit}
@@ -286,9 +325,16 @@ export default function CheckoutScreen() {
               tone={mode === "checkout" ? colors.accent : colors.success}
             />
           </Section>
+          {storekeeperOnsiteHold ? (
+            <View style={styles.holdBox}>
+              <AppText variant="small" style={{ fontWeight: "800" }} color={colors.status.ONSITE}>
+                Gear is on-site. Awaiting event completion and warehouse return.
+              </AppText>
+            </View>
+          ) : null}
           <Section title="Responsible Party" icon={ClipboardCheck}>
             <Field label={mode === "checkout" ? "Checked out by" : "Received by"}>
-              <Input defaultValue="Selam Worku" />
+              <Input editable={false} value={activeProfile.name} />
             </Field>
             <Field label="Timestamp">
               <Input defaultValue={new Date().toISOString().slice(0, 16)} />
@@ -422,5 +468,12 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
     alignItems: "center",
     justifyContent: "center",
+  },
+  holdBox: {
+    borderWidth: 1,
+    borderColor: colors.status.ONSITE,
+    backgroundColor: `${colors.status.ONSITE}1a`,
+    borderRadius: radius.md,
+    padding: 12,
   },
 });
