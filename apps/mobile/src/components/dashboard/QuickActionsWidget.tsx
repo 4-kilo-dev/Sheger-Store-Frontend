@@ -5,7 +5,7 @@ import type { LucideIcon } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
 import { AppText } from "@/components/ui";
 import { useAppContext } from "@/context/AppContext";
-import { colors, radius } from "@/theme/tokens";
+import { alpha, colors, radius } from "@/theme/tokens";
 
 export function QuickActionsWidget() {
   const { activeProfile } = useAppContext();
@@ -53,6 +53,8 @@ function QuickAction({
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
       onPress={() => router.push(to(href))}
       style={[styles.quickAction, accent ? styles.quickActionAccent : null]}
     >
@@ -82,7 +84,7 @@ const styles = StyleSheet.create({
   },
   quickActionAccent: {
     borderColor: colors.accent,
-    backgroundColor: "rgba(245,183,49,0.08)",
+    backgroundColor: alpha(colors.accent, 0.08),
   },
   quickIcon: {
     width: 32,

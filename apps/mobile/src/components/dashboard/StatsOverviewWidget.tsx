@@ -19,7 +19,18 @@ export function StatsOverviewWidget() {
       const date = new Date(booking.eventDate);
       return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
     });
+    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonth = BOOKINGS.filter((booking) => {
+      const date = new Date(booking.eventDate);
+      return (
+        date.getMonth() === lastMonthDate.getMonth() &&
+        date.getFullYear() === lastMonthDate.getFullYear()
+      );
+    });
     const revenue = thisMonth.reduce((sum, booking) => sum + booking.amount, 0);
+    const lastMonthRevenue = lastMonth.reduce((sum, booking) => sum + booking.amount, 0);
+    const revenueChangePct =
+      lastMonthRevenue > 0 ? ((revenue - lastMonthRevenue) / lastMonthRevenue) * 100 : null;
     const onsite = BOOKINGS.filter((booking) => booking.status === "ONSITE");
     const upcoming = BOOKINGS.filter((booking) => {
       const date = new Date(booking.assemblyDate);
@@ -43,6 +54,7 @@ export function StatsOverviewWidget() {
     return {
       thisMonth: thisMonth.length,
       revenue,
+      revenueChangePct,
       onsite: onsite.length,
       upcoming: upcoming.length,
       paid,
@@ -138,9 +150,15 @@ export function StatsOverviewWidget() {
       {
         label: "Revenue",
         value: formatCompactCurrency(stats.revenue),
-        note: "+14.2% from last month",
+        note:
+          stats.revenueChangePct === null
+            ? "No prior month data"
+            : `${stats.revenueChangePct >= 0 ? "+" : ""}${stats.revenueChangePct.toFixed(1)}% from last month`,
         icon: TrendingUp,
-        tone: colors.success,
+        tone:
+          stats.revenueChangePct !== null && stats.revenueChangePct < 0
+            ? colors.destructive
+            : colors.success,
       },
       {
         label: "Screens onsite",

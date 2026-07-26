@@ -11,7 +11,7 @@ import {
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { StatusBadge } from "@/components/status";
+import { StatusBadge, ToneBadge } from "@/components/status";
 import {
   AppText,
   Button,
@@ -63,6 +63,13 @@ export default function CheckoutScreen() {
   const { data: backendBomLines = [] } = useBomLines(selected?.id || "");
   const storekeeperOnsiteHold =
     mode === "checkin" && selected?.status === "ONSITE" && userRole === "SK";
+
+  // An item can only move forward one step at a time: checkout requires it still
+  // Reserved, checkin requires it already Checked Out. Prevents double-processing
+  // the same material and makes its current state visible before acting on it.
+  const isEligible = (item: { status: string }) =>
+    mode === "checkout" ? item.status === "Reserved" : item.status === "Checked Out";
+  const eligibleItems = selected?.bomItems.filter(isEligible) ?? [];
 
   const toggleItem = (id: string) => {
     setCheckedItems((current) => {
@@ -282,7 +289,7 @@ export default function CheckoutScreen() {
             action={
               <Button
                 variant="ghost"
-                onPress={() => setCheckedItems(new Set(selected.bomItems.map((item) => item.id)))}
+                onPress={() => setCheckedItems(new Set(eligibleItems.map((item) => item.id)))}
               >
                 Check All
               </Button>
@@ -290,11 +297,17 @@ export default function CheckoutScreen() {
           >
             {selected.bomItems.map((item) => {
               const checked = checkedItems.has(item.id);
+              const eligible = isEligible(item);
               return (
                 <Pressable
                   key={item.id}
+                  disabled={!eligible}
                   onPress={() => toggleItem(item.id)}
-                  style={[styles.bomRow, checked ? styles.bomRowChecked : null]}
+                  style={[
+                    styles.bomRow,
+                    checked ? styles.bomRowChecked : null,
+                    !eligible ? styles.bomRowDisabled : null,
+                  ]}
                 >
                   <View style={[styles.checkbox, checked ? styles.checkboxChecked : null]}>
                     {checked ? (
@@ -310,18 +323,27 @@ export default function CheckoutScreen() {
                     </AppText>
                     <AppText>{item.name}</AppText>
                   </View>
-                  <AppText variant="data" style={{ fontWeight: "900" }}>
-                    {item.qty}
-                  </AppText>
+                  <View style={{ alignItems: "flex-end", gap: 4 }}>
+                    <AppText variant="data" style={{ fontWeight: "900" }}>
+                      {item.qty}
+                    </AppText>
+                    <ToneBadge
+                      label={item.status}
+                      tone={
+                        item.status === "Checked Out"
+                          ? colors.destructive
+                          : item.status === "Returned"
+                            ? colors.success
+                            : colors.text2
+                      }
+                    />
+                  </View>
                 </Pressable>
               );
             })}
-            <KV
-              label="Verified"
-              value={`${checkedItems.size} of ${selected.bomItems.length} items`}
-            />
+            <KV label="Verified" value={`${checkedItems.size} of ${eligibleItems.length} items`} />
             <ProgressBar
-              value={(checkedItems.size / selected.bomItems.length) * 100}
+              value={eligibleItems.length ? (checkedItems.size / eligibleItems.length) * 100 : 0}
               tone={mode === "checkout" ? colors.accent : colors.success}
             />
           </Section>
@@ -436,6 +458,9 @@ const styles = StyleSheet.create({
   },
   bomRowChecked: {
     opacity: 1,
+  },
+  bomRowDisabled: {
+    opacity: 0.4,
   },
   checkbox: {
     width: 28,

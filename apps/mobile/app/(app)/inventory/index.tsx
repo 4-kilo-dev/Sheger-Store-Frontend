@@ -26,7 +26,7 @@ import {
 } from "@/hooks/useOperations";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
-import { colors } from "@/theme/tokens";
+import { alpha, colors } from "@/theme/tokens";
 import type { InventoryCondition, InventoryAvailability } from "@/types/domain";
 
 const CONDITIONS: InventoryCondition[] = ["GOOD", "SERVICE DUE", "DAMAGED"];
@@ -125,25 +125,38 @@ export default function InventoryScreen() {
       </View>
 
       <View style={styles.stats}>
-        <StatCard label="Total Units" value={totals.units} icon={Boxes} tone={colors.foreground} />
-        <StatCard
-          label="Available Now"
-          value={totals.available}
-          icon={PackageCheck}
-          tone={colors.success}
-        />
-        <StatCard
-          label="Currently Onsite"
-          value={totals.onsite}
-          icon={Wrench}
-          tone={colors.status.ACCEPTED}
-        />
-        <StatCard
-          label="Damaged / Hold"
-          value={totals.attention}
-          icon={ShieldAlert}
-          tone={colors.destructive}
-        />
+        <View style={styles.statTile}>
+          <StatCard
+            label="Total Units"
+            value={totals.units}
+            icon={Boxes}
+            tone={colors.foreground}
+          />
+        </View>
+        <View style={styles.statTile}>
+          <StatCard
+            label="Available Now"
+            value={totals.available}
+            icon={PackageCheck}
+            tone={colors.success}
+          />
+        </View>
+        <View style={styles.statTile}>
+          <StatCard
+            label="Currently Onsite"
+            value={totals.onsite}
+            icon={Wrench}
+            tone={colors.status.ACCEPTED}
+          />
+        </View>
+        <View style={styles.statTile}>
+          <StatCard
+            label="Damaged / Hold"
+            value={totals.attention}
+            icon={ShieldAlert}
+            tone={colors.destructive}
+          />
+        </View>
       </View>
 
       <SegmentedTabs tabs={INVENTORY_CATEGORIES} value={category} onChange={setCategory} />
@@ -222,7 +235,13 @@ export default function InventoryScreen() {
 
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[styles.chip, active ? styles.chipActive : null]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={[styles.chip, active ? styles.chipActive : null]}
+    >
       <AppText
         variant="data"
         color={active ? colors.accent : colors.text2}
@@ -411,7 +430,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   stats: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
+  },
+  statTile: {
+    width: "47%",
+    flexGrow: 1,
   },
   filterRow: {
     flexDirection: "row",
@@ -436,6 +461,6 @@ const styles = StyleSheet.create({
   },
   chipActive: {
     borderColor: colors.accent,
-    backgroundColor: "rgba(245,183,49,0.10)",
+    backgroundColor: alpha(colors.accent, 0.1),
   },
 });

@@ -13,8 +13,6 @@ import {
   MessageSquare,
   Package,
   Paperclip,
-  Printer,
-  Share2,
   ShieldAlert,
   Trash2,
   Truck,
@@ -24,7 +22,7 @@ import {
   Wrench,
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { PaymentBadge, StatusBadge, StatusStepper, ToneBadge } from "@/components/status";
 import {
   AppText,
@@ -43,7 +41,7 @@ import {
   SegmentedTabs,
   TextArea,
 } from "@/components/ui";
-import { colors } from "@/theme/tokens";
+import { alpha, colors } from "@/theme/tokens";
 import type { Booking, BookingStatus } from "@/types/domain";
 import { daysUntil, formatCurrency } from "@/utils/format";
 import {
@@ -65,6 +63,7 @@ import {
   useInventory,
   usePerformanceMetrics,
   useSubmitInternalEvaluation,
+  useUpdateBooking,
 } from "@/hooks/useOperations";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
@@ -110,13 +109,15 @@ function describeAction(transition: AllowedTransition) {
 export default function BookingDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const { data: booking, isLoading, isError, refetch } = useBooking(params.id);
-  const b = booking!;
-  const { data: bomLines = [], isLoading: bomLoading } = useBomLines(b.id);
-  const { data: assignments = [], isLoading: assignmentsLoading } = useBookingAssignments(b.id);
-  const { data: internalEval } = useInternalEvaluation(b.id);
-  const { data: clientEval } = useClientEvaluation(b.id);
-  const { data: attachments = [], isLoading: attachmentsLoading } = useBookingAttachments(b.id);
-  const { data: transitionsData } = useAllowedTransitions(b.id);
+  const bookingId = booking?.id ?? "";
+  const { data: bomLines = [], isLoading: bomLoading } = useBomLines(bookingId);
+  const { data: assignments = [], isLoading: assignmentsLoading } =
+    useBookingAssignments(bookingId);
+  const { data: internalEval } = useInternalEvaluation(bookingId);
+  const { data: clientEval } = useClientEvaluation(bookingId);
+  const { data: attachments = [], isLoading: attachmentsLoading } =
+    useBookingAttachments(bookingId);
+  const { data: transitionsData } = useAllowedTransitions(bookingId);
   const { data: staff = [] } = useStaff();
   const { canAny } = usePermissions();
   const createAssignment = useCreateAssignment();
@@ -125,8 +126,13 @@ export default function BookingDetailScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [assigneeId, setAssigneeId] = useState("");
   const [assigneeRole, setAssigneeRole] = useState("CREW");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [teamLeaderInput, setTeamLeaderInput] = useState("");
+  const [driverInput, setDriverInput] = useState("");
+  const [mealBudgetInput, setMealBudgetInput] = useState("");
   const transitionMutation = useTransitionBookingStatus();
   const paymentMutation = useRecordBookingPayment();
+  const updateBookingMutation = useUpdateBooking();
 
   if (isLoading) {
     return (
@@ -159,17 +165,44 @@ export default function BookingDetailScreen() {
   );
   const primaryTransition = permittedTransitions[0];
   const action = primaryTransition ? describeAction(primaryTransition) : null;
-  const isSubmittingAction = transitionMutation.isPending || paymentMutation.isPending;
+  const isSubmittingAction =
+    transitionMutation.isPending || paymentMutation.isPending || updateBookingMutation.isPending;
+
+  const openActionSheet = () => {
+    setActionError(null);
+    if (booking.status === "RESERVED") setPaymentAmount(String(booking.amount));
+    if (booking.status === "PREPARATION") {
+      setTeamLeaderInput(booking.teamLeader);
+      setDriverInput(booking.driver);
+      setMealBudgetInput(String(booking.mealBudget));
+    }
+    setActionOpen(true);
+  };
 
   const handleConfirmAction = async () => {
     if (!action) return;
     setActionError(null);
     try {
       if (booking.status === "RESERVED" && action.nextStatus === "CONFIRMED") {
+        const parsedAmount = Number(paymentAmount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+          setActionError("Enter a valid amount received.");
+          return;
+        }
         await paymentMutation.mutateAsync({
           bookingId: booking.id,
           toStatus: "advance",
-          amount: booking.amount,
+          amount: parsedAmount,
+        });
+      }
+      if (booking.status === "PREPARATION" && action.nextStatus === "ONSITE") {
+        await updateBookingMutation.mutateAsync({
+          bookingId: booking.id,
+          payload: {
+            teamLeader: teamLeaderInput,
+            driver: driverInput,
+            mealBudget: Number(mealBudgetInput) || 0,
+          },
         });
       }
       await transitionMutation.mutateAsync({
@@ -204,23 +237,13 @@ export default function BookingDetailScreen() {
     <Screen
       footer={
         action ? (
-          <Button icon={CheckCircle2} onPress={() => setActionOpen(true)}>
+          <Button icon={CheckCircle2} onPress={openActionSheet}>
             {action.label}
           </Button>
         ) : null
       }
     >
-      <View style={styles.actionRow}>
-        <BackLink label="Back to Bookings" href="/bookings" />
-        <View style={styles.inlineActions}>
-          <Button variant="outline" icon={Printer}>
-            Print
-          </Button>
-          <Button variant="outline" icon={Share2}>
-            Share
-          </Button>
-        </View>
-      </View>
+      <BackLink label="Back to Bookings" href="/bookings" />
 
       <Card style={styles.hero}>
         <View style={styles.heroHeader}>
@@ -258,11 +281,7 @@ export default function BookingDetailScreen() {
       {tab === "Overview" ? <OverviewTab booking={booking} /> : null}
       {tab === "Schedule" ? <ScheduleTab booking={booking} /> : null}
       {tab === "Team" ? (
-        <TeamTab
-          booking={booking}
-          assignments={assignments}
-          onAssignPress={() => setActionOpen(true)}
-        />
+        <TeamTab booking={booking} assignments={assignments} onAssignPress={openActionSheet} />
       ) : null}
       {tab === "Equipment" ? <EquipmentTab booking={booking} bomLines={bomLines} /> : null}
       {tab === "Payments" ? <PaymentsTab booking={booking} /> : null}
@@ -284,35 +303,33 @@ export default function BookingDetailScreen() {
               Responsible role: {action.role}.
             </AppText>
             {booking.status === "RESERVED" ? (
-              <>
-                <Field label="Payment Method">
-                  <Input defaultValue="Bank Transfer" />
-                </Field>
-                <Field label="Amount Received">
-                  <Input defaultValue={String(booking.amount)} keyboardType="numeric" />
-                </Field>
-              </>
+              <Field label="Amount Received (ETB)">
+                <Input
+                  value={paymentAmount}
+                  onChangeText={setPaymentAmount}
+                  keyboardType="numeric"
+                />
+              </Field>
             ) : null}
             {booking.status === "CONFIRMED" ? (
-              <>
-                <Field label="Assign Chief Technician">
-                  <Input defaultValue="Bereket Alemu" />
-                </Field>
-                <Field label="Assign Technician">
-                  <Input defaultValue="Yeabtsega" />
-                </Field>
-              </>
+              <AppText variant="small" color={colors.text2}>
+                Assign the chief technician and technician from the Team tab after confirming.
+              </AppText>
             ) : null}
             {booking.status === "PREPARATION" ? (
               <>
                 <Field label="Team Leader">
-                  <Input defaultValue={booking.teamLeader} />
+                  <Input value={teamLeaderInput} onChangeText={setTeamLeaderInput} />
                 </Field>
                 <Field label="Driver">
-                  <Input defaultValue={booking.driver} />
+                  <Input value={driverInput} onChangeText={setDriverInput} />
                 </Field>
                 <Field label="Meal Budget (ETB)">
-                  <Input defaultValue={String(booking.mealBudget)} keyboardType="numeric" />
+                  <Input
+                    value={mealBudgetInput}
+                    onChangeText={setMealBudgetInput}
+                    keyboardType="numeric"
+                  />
                 </Field>
               </>
             ) : null}
@@ -625,7 +642,7 @@ function EquipmentTab({
                 ),
               )
             }
-            style={{ paddingLeft: 10 }}
+            style={styles.rowIconButton}
           >
             <ShieldAlert size={16} color={colors.text3} />
           </Pressable>
@@ -633,17 +650,28 @@ function EquipmentTab({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Remove equipment line"
-              onPress={() => deleteBomLine.mutate({ bookingId: booking.id, lineId: item.id })}
-              style={{ paddingLeft: 10 }}
+              onPress={() =>
+                Alert.alert(
+                  "Remove equipment line?",
+                  `This removes "${item.name}" from the bill of materials.`,
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Remove",
+                      style: "destructive",
+                      onPress: () =>
+                        deleteBomLine.mutate({ bookingId: booking.id, lineId: item.id }),
+                    },
+                  ],
+                )
+              }
+              style={styles.rowIconButton}
             >
               <Trash2 size={16} color={colors.destructive} />
             </Pressable>
           ) : null}
         </View>
       ))}
-      <Button variant="outline" icon={Printer}>
-        Print Packing Slip
-      </Button>
 
       <BottomSheet visible={addOpen} title="Add Equipment Line" onClose={() => setAddOpen(false)}>
         <Field label="Equipment Pool">
@@ -835,13 +863,24 @@ function FilesTab({
               accessibilityRole="button"
               accessibilityLabel="Download file"
               onPress={() => handleDownload(file.id)}
+              style={styles.rowIconButton}
             >
               <Download size={16} color={colors.text3} />
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Delete file"
-              onPress={() => deleteAttachment.mutate(file.id)}
+              onPress={() =>
+                Alert.alert("Delete file?", `This permanently deletes "${file.n}".`, [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: () => deleteAttachment.mutate(file.id),
+                  },
+                ])
+              }
+              style={styles.rowIconButton}
             >
               <Trash2 size={16} color={colors.destructive} />
             </Pressable>
@@ -1025,7 +1064,13 @@ function Choice({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.choice, active ? styles.choiceActive : null]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={[styles.choice, active ? styles.choiceActive : null]}
+    >
       <AppText
         variant="data"
         color={active ? colors.accent : colors.text2}
@@ -1038,15 +1083,11 @@ function Choice({
 }
 
 const styles = StyleSheet.create({
-  actionRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
+  rowIconButton: {
+    minWidth: 44,
+    minHeight: 44,
     alignItems: "center",
-  },
-  inlineActions: {
-    flexDirection: "row",
-    gap: 8,
+    justifyContent: "center",
   },
   hero: {
     padding: 16,
@@ -1154,6 +1195,6 @@ const styles = StyleSheet.create({
   },
   choiceActive: {
     borderColor: colors.accent,
-    backgroundColor: "rgba(245,183,49,0.10)",
+    backgroundColor: alpha(colors.accent, 0.1),
   },
 });

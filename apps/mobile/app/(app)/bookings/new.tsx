@@ -27,7 +27,7 @@ import {
   SegmentedTabs,
   TextArea,
 } from "@/components/ui";
-import { colors, radius } from "@/theme/tokens";
+import { alpha, colors, radius } from "@/theme/tokens";
 import { formatCurrency } from "@/utils/format";
 import { useCreateBooking, useCustomFieldDefinitions } from "@/hooks/useOperations";
 
@@ -238,23 +238,9 @@ export default function NewBookingScreen() {
               />
             </Field>
           </View>
-          <Field label="Screen Availability (units available)">
-            <View style={styles.optionGrid}>
-              {[
-                ["P2.97", 128],
-                ["P4", 20],
-                ["P3.91 INDOOR", 72],
-                ["P3.91 OUTDOOR", 72],
-                ["P2.97-New", 128],
-                ["P5", 48],
-              ].map(([type, available]) => (
-                <View key={type} style={styles.availabilityCard}>
-                  <Input editable={false} value={`${type}`} />
-                  <Input editable={false} value={`${available} panels`} />
-                </View>
-              ))}
-            </View>
-          </Field>
+          <Button variant="outline" icon={Package} onPress={() => router.push(to("/inventory"))}>
+            Check current screen stock in Inventory
+          </Button>
           <Field label="CTO Arrangement Suggestions" icon={MessageSquare}>
             <TextArea
               value={form.ctoArrangement}
@@ -489,7 +475,13 @@ function Choice({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.choice, active ? styles.choiceActive : null]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={[styles.choice, active ? styles.choiceActive : null]}
+    >
       <AppText
         variant="data"
         color={active ? colors.accent : colors.text2}
@@ -510,19 +502,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.accent,
     borderRadius: radius.md,
-    backgroundColor: "rgba(245,183,49,0.06)",
+    backgroundColor: alpha(colors.accent, 0.06),
     padding: 12,
-    gap: 8,
-  },
-  optionGrid: {
-    gap: 8,
-  },
-  availabilityCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
-    borderRadius: radius.md,
-    padding: 8,
     gap: 8,
   },
   choiceWrap: {
@@ -539,6 +520,6 @@ const styles = StyleSheet.create({
   },
   choiceActive: {
     borderColor: colors.accent,
-    backgroundColor: "rgba(245,183,49,0.10)",
+    backgroundColor: alpha(colors.accent, 0.1),
   },
 });

@@ -13,7 +13,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { ToneBadge } from "@/components/status";
 import {
   AppText,
@@ -64,7 +64,11 @@ export default function NotificationsScreen() {
   }, [displayItems, tab]);
 
   const toggleRead = (id: string, unread: boolean) => {
-    if (unread) markRead.mutate(id);
+    if (unread) {
+      markRead.mutate(id, {
+        onError: () => Alert.alert("Error", "Failed to mark notification as read."),
+      });
+    }
   };
 
   if (isLoading) {
@@ -102,7 +106,11 @@ export default function NotificationsScreen() {
           variant="outline"
           icon={CheckCheck}
           disabled={markAllRead.isPending}
-          onPress={() => markAllRead.mutate()}
+          onPress={() =>
+            markAllRead.mutate(undefined, {
+              onError: () => Alert.alert("Error", "Failed to mark all notifications as read."),
+            })
+          }
         >
           {markAllRead.isPending ? "Marking..." : "Mark all read"}
         </Button>

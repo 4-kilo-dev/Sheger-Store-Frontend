@@ -7,7 +7,6 @@ import {
   LockKeyhole,
   Plus,
   Save,
-  Shield,
   SlidersHorizontal,
   Trash2,
   UsersRound,
@@ -17,6 +16,7 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import {
   AppText,
+  BottomSheet,
   Button,
   EmptyState,
   ErrorState,
@@ -26,10 +26,12 @@ import {
   Screen,
   Section,
   SegmentedTabs,
+  TextArea,
 } from "@/components/ui";
 import {
   usePerformanceMetrics,
   useToggleMetricActive,
+  useCreateMetric,
   useRolesWithPermissions,
   usePermissionsCatalog,
   useToggleRolePermission,
@@ -79,11 +81,50 @@ export default function SettingsScreen() {
   const [calendarSystem, setCalendarSystem] = useState("gregorian");
   const [numerals, setNumerals] = useState("latn");
 
+  const FIELD_DEFAULTS: Record<string, string> = {
+    companyName: "Vortex Visual",
+    operationsEmail: "operations@vortexvisual.et",
+    primaryPhone: "+251 911 000 040",
+    timezone: "Africa/Addis_Ababa",
+    taxId: "0012345678",
+    businessAddress: "Bole, Addis Ababa, Ethiopia",
+    warehouseLocation: "Bole Sub-City, Warehouse Zone",
+    defaultCurrencyLabel: "ETB — Ethiopian Birr",
+    sessionTimeoutMinutes: "30",
+    maxLoginAttempts: "5",
+    notifyOtpVerification: "true",
+    notifyTwoFactorAuth: "false",
+    notifyForcePasswordReset: "true",
+    notifyIpWhitelist: "false",
+    passwordMin8: "true",
+    passwordUppercase: "true",
+    passwordSpecialChar: "false",
+    passwordExpiry90: "true",
+    notifyNewBooking: "true",
+    notifyBookingStatusChanged: "true",
+    notifyPaymentReceived: "true",
+    notifyBookingCancelled: "false",
+    notifyLowStock: "true",
+    notifyDamageReport: "true",
+    notifyServiceDue: "true",
+    notifyMaterialCheckInOut: "false",
+    notifyAssemblyReminder: "true",
+    notifyEventDayReminder: "true",
+    notifyOvertimeAssignment: "false",
+    notifyDismantleReminder: "false",
+    notifyInApp: "true",
+    notifySms: "false",
+  };
+  const [form, setForm] = useState<Record<string, string>>(FIELD_DEFAULTS);
+  const setField = (key: string, value: string) =>
+    setForm((current) => ({ ...current, [key]: value }));
+
   useEffect(() => {
     if (!settingsQuery.data) return;
     if (settingsQuery.data.language) setLanguage(settingsQuery.data.language);
     if (settingsQuery.data.calendar) setCalendarSystem(settingsQuery.data.calendar);
     if (settingsQuery.data.numerals) setNumerals(settingsQuery.data.numerals);
+    setForm((current) => ({ ...current, ...settingsQuery.data }));
   }, [settingsQuery.data]);
 
   const customFieldsQuery = useCustomFieldDefinitions();
@@ -114,6 +155,7 @@ export default function SettingsScreen() {
     setSavingSettings(true);
     try {
       await updateSettings.mutateAsync({
+        ...form,
         language,
         currency: "ETB",
         calendar: calendarSystem,
@@ -148,30 +190,48 @@ export default function SettingsScreen() {
         <>
           <Section title="Company Information" icon={Building2} aside="System defaults">
             <Field label="Company name">
-              <Input defaultValue="Vortex Visual" />
+              <Input value={form.companyName} onChangeText={(v) => setField("companyName", v)} />
             </Field>
             <Field label="Operations email">
-              <Input defaultValue="operations@vortexvisual.et" />
+              <Input
+                value={form.operationsEmail}
+                onChangeText={(v) => setField("operationsEmail", v)}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
             </Field>
             <Field label="Primary phone">
-              <Input defaultValue="+251 911 000 040" />
+              <Input
+                value={form.primaryPhone}
+                onChangeText={(v) => setField("primaryPhone", v)}
+                keyboardType="phone-pad"
+              />
             </Field>
             <Field label="Timezone">
-              <Input defaultValue="Africa/Addis_Ababa" />
+              <Input value={form.timezone} onChangeText={(v) => setField("timezone", v)} />
             </Field>
           </Section>
           <Section title="Business Details">
             <Field label="Tax ID / TIN">
-              <Input defaultValue="0012345678" />
+              <Input value={form.taxId} onChangeText={(v) => setField("taxId", v)} />
             </Field>
             <Field label="Business Address">
-              <Input defaultValue="Bole, Addis Ababa, Ethiopia" />
+              <Input
+                value={form.businessAddress}
+                onChangeText={(v) => setField("businessAddress", v)}
+              />
             </Field>
             <Field label="Warehouse Location">
-              <Input defaultValue="Bole Sub-City, Warehouse Zone" />
+              <Input
+                value={form.warehouseLocation}
+                onChangeText={(v) => setField("warehouseLocation", v)}
+              />
             </Field>
             <Field label="Default Currency">
-              <Input defaultValue="ETB — Ethiopian Birr" />
+              <Input
+                value={form.defaultCurrencyLabel}
+                onChangeText={(v) => setField("defaultCurrencyLabel", v)}
+              />
             </Field>
           </Section>
         </>
@@ -242,23 +302,79 @@ export default function SettingsScreen() {
       {active === "Notifications" ? (
         <Section title="Notification Preferences" icon={BellRing} aside="Per-role alerts">
           <AppText variant="eyebrow">Booking Alerts</AppText>
-          <Toggle label="New booking created" on />
-          <Toggle label="Booking status changed" on />
-          <Toggle label="Payment received" on />
-          <Toggle label="Booking cancelled" />
+          <Toggle
+            label="New booking created"
+            value={form.notifyNewBooking === "true"}
+            onChange={(v) => setField("notifyNewBooking", String(v))}
+          />
+          <Toggle
+            label="Booking status changed"
+            value={form.notifyBookingStatusChanged === "true"}
+            onChange={(v) => setField("notifyBookingStatusChanged", String(v))}
+          />
+          <Toggle
+            label="Payment received"
+            value={form.notifyPaymentReceived === "true"}
+            onChange={(v) => setField("notifyPaymentReceived", String(v))}
+          />
+          <Toggle
+            label="Booking cancelled"
+            value={form.notifyBookingCancelled === "true"}
+            onChange={(v) => setField("notifyBookingCancelled", String(v))}
+          />
           <AppText variant="eyebrow">Inventory Alerts</AppText>
-          <Toggle label="Low stock warning" on />
-          <Toggle label="Damage report submitted" on />
-          <Toggle label="Service due reminder" on />
-          <Toggle label="Material checked in/out" />
+          <Toggle
+            label="Low stock warning"
+            value={form.notifyLowStock === "true"}
+            onChange={(v) => setField("notifyLowStock", String(v))}
+          />
+          <Toggle
+            label="Damage report submitted"
+            value={form.notifyDamageReport === "true"}
+            onChange={(v) => setField("notifyDamageReport", String(v))}
+          />
+          <Toggle
+            label="Service due reminder"
+            value={form.notifyServiceDue === "true"}
+            onChange={(v) => setField("notifyServiceDue", String(v))}
+          />
+          <Toggle
+            label="Material checked in/out"
+            value={form.notifyMaterialCheckInOut === "true"}
+            onChange={(v) => setField("notifyMaterialCheckInOut", String(v))}
+          />
           <AppText variant="eyebrow">Schedule Alerts</AppText>
-          <Toggle label="Assembly reminder (24h)" on />
-          <Toggle label="Event day reminder" on />
-          <Toggle label="Overtime assignment" />
-          <Toggle label="Dismantle reminder" />
+          <Toggle
+            label="Assembly reminder (24h)"
+            value={form.notifyAssemblyReminder === "true"}
+            onChange={(v) => setField("notifyAssemblyReminder", String(v))}
+          />
+          <Toggle
+            label="Event day reminder"
+            value={form.notifyEventDayReminder === "true"}
+            onChange={(v) => setField("notifyEventDayReminder", String(v))}
+          />
+          <Toggle
+            label="Overtime assignment"
+            value={form.notifyOvertimeAssignment === "true"}
+            onChange={(v) => setField("notifyOvertimeAssignment", String(v))}
+          />
+          <Toggle
+            label="Dismantle reminder"
+            value={form.notifyDismantleReminder === "true"}
+            onChange={(v) => setField("notifyDismantleReminder", String(v))}
+          />
           <AppText variant="eyebrow">Delivery Method</AppText>
-          <Toggle label="In-app notifications" on />
-          <Toggle label="SMS notifications" />
+          <Toggle
+            label="In-app notifications"
+            value={form.notifyInApp === "true"}
+            onChange={(v) => setField("notifyInApp", String(v))}
+          />
+          <Toggle
+            label="SMS notifications"
+            value={form.notifySms === "true"}
+            onChange={(v) => setField("notifySms", String(v))}
+          />
         </Section>
       ) : null}
 
@@ -312,29 +428,61 @@ export default function SettingsScreen() {
       {active === "Security" ? (
         <Section title="Security Settings" icon={LockKeyhole} aside="Access & authentication">
           <Field label="Session timeout (minutes)">
-            <Input defaultValue="30" keyboardType="numeric" />
+            <Input
+              value={form.sessionTimeoutMinutes}
+              onChangeText={(v) => setField("sessionTimeoutMinutes", v)}
+              keyboardType="numeric"
+            />
           </Field>
           <Field label="Max login attempts">
-            <Input defaultValue="5" keyboardType="numeric" />
+            <Input
+              value={form.maxLoginAttempts}
+              onChangeText={(v) => setField("maxLoginAttempts", v)}
+              keyboardType="numeric"
+            />
           </Field>
           <AppText variant="eyebrow">Authentication</AppText>
-          <Toggle label="Phone OTP verification" on />
-          <Toggle label="Two-factor authentication (2FA)" />
-          <Toggle label="Force password reset on first login" on />
-          <Toggle label="IP address whitelist" />
+          <Toggle
+            label="Phone OTP verification"
+            value={form.notifyOtpVerification === "true"}
+            onChange={(v) => setField("notifyOtpVerification", String(v))}
+          />
+          <Toggle
+            label="Two-factor authentication (2FA)"
+            value={form.notifyTwoFactorAuth === "true"}
+            onChange={(v) => setField("notifyTwoFactorAuth", String(v))}
+          />
+          <Toggle
+            label="Force password reset on first login"
+            value={form.notifyForcePasswordReset === "true"}
+            onChange={(v) => setField("notifyForcePasswordReset", String(v))}
+          />
+          <Toggle
+            label="IP address whitelist"
+            value={form.notifyIpWhitelist === "true"}
+            onChange={(v) => setField("notifyIpWhitelist", String(v))}
+          />
           <AppText variant="eyebrow">Password Policy</AppText>
-          <Toggle label="Minimum 8 characters" on />
-          <Toggle label="Require uppercase letter" on />
-          <Toggle label="Require special character" />
-          <Toggle label="Password expiry (90 days)" on />
-          <View style={styles.preview}>
-            <View style={styles.sessionTitle}>
-              <Shield size={16} color={colors.accent} />
-              <AppText style={{ fontWeight: "900" }}>Active Sessions</AppText>
-            </View>
-            <Session device="MacBook Pro — Chrome" ip="192.168.1.7" time="Active now" current />
-            <Session device="iPhone 15 — Safari" ip="192.168.1.12" time="2 hours ago" />
-          </View>
+          <Toggle
+            label="Minimum 8 characters"
+            value={form.passwordMin8 === "true"}
+            onChange={(v) => setField("passwordMin8", String(v))}
+          />
+          <Toggle
+            label="Require uppercase letter"
+            value={form.passwordUppercase === "true"}
+            onChange={(v) => setField("passwordUppercase", String(v))}
+          />
+          <Toggle
+            label="Require special character"
+            value={form.passwordSpecialChar === "true"}
+            onChange={(v) => setField("passwordSpecialChar", String(v))}
+          />
+          <Toggle
+            label="Password expiry (90 days)"
+            value={form.passwordExpiry90 === "true"}
+            onChange={(v) => setField("passwordExpiry90", String(v))}
+          />
         </Section>
       ) : null}
 
@@ -387,15 +535,53 @@ export default function SettingsScreen() {
   );
 }
 
+const VALUE_TYPES = ["boolean", "rating_5", "rating_10", "percentage"] as const;
+
 function PerformanceMetricsPanel() {
   const [category, setCategory] = useState<"internal" | "client_feedback">("internal");
   const { data: metrics = [], isLoading, isError, refetch } = usePerformanceMetrics();
   const toggleMetric = useToggleMetricActive();
+  const createMetric = useCreateMetric();
   const categories = ["internal", "client_feedback"] as const;
   const filtered = metrics.filter((metric) => metric.category === category);
 
+  const [addOpen, setAddOpen] = useState(false);
+  const [label, setLabel] = useState("");
+  const [description, setDescription] = useState("");
+  const [valueType, setValueType] = useState<(typeof VALUE_TYPES)[number]>("rating_5");
+  const [addError, setAddError] = useState<string | null>(null);
+
   const toggleActive = (id: string, isActive: boolean) => {
     toggleMetric.mutate({ id, isActive: !isActive });
+  };
+
+  const handleAddMetric = async () => {
+    const trimmed = label.trim();
+    if (!trimmed) {
+      setAddError("Enter a name for this metric.");
+      return;
+    }
+    setAddError(null);
+    try {
+      await createMetric.mutateAsync({
+        key: trimmed
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_|_$/g, ""),
+        label: trimmed,
+        description: description.trim(),
+        category,
+        sortOrder: filtered.length,
+        isActive: true,
+        valueType,
+      });
+      setLabel("");
+      setDescription("");
+      setValueType("rating_5");
+      setAddOpen(false);
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : "Failed to add metric.");
+    }
   };
 
   if (isLoading) return <LoadingState label="Loading performance metrics..." />;
@@ -408,7 +594,7 @@ function PerformanceMetricsPanel() {
       icon={ClipboardCheck}
       aside="Evaluation criteria"
       action={
-        <Button variant="ghost" icon={Plus}>
+        <Button variant="ghost" icon={Plus} onPress={() => setAddOpen(true)}>
           Add
         </Button>
       }
@@ -427,6 +613,9 @@ function PerformanceMetricsPanel() {
               </AppText>
             </View>
             <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{ checked: metric.isActive }}
+              accessibilityLabel={metric.label}
               onPress={() => toggleActive(metric.id, metric.isActive)}
               style={[styles.toggle, metric.isActive ? styles.toggleOn : null]}
             >
@@ -435,6 +624,43 @@ function PerformanceMetricsPanel() {
           </View>
         ))}
       </View>
+
+      <BottomSheet
+        visible={addOpen}
+        title="Add Performance Metric"
+        onClose={() => setAddOpen(false)}
+      >
+        <Field label="Name">
+          <Input value={label} onChangeText={setLabel} placeholder="e.g. Punctuality" />
+        </Field>
+        <Field label="Description">
+          <TextArea
+            value={description}
+            onChangeText={setDescription}
+            placeholder="What does this metric evaluate?"
+          />
+        </Field>
+        <Field label="Scoring type">
+          <View style={styles.choiceWrap}>
+            {VALUE_TYPES.map((type) => (
+              <ChoiceChip
+                key={type}
+                label={type.replace("_", " ")}
+                active={valueType === type}
+                onPress={() => setValueType(type)}
+              />
+            ))}
+          </View>
+        </Field>
+        {addError ? (
+          <AppText variant="small" color={colors.destructive}>
+            {addError}
+          </AppText>
+        ) : null}
+        <Button disabled={createMetric.isPending} onPress={handleAddMetric}>
+          {createMetric.isPending ? "Adding..." : "Add Metric"}
+        </Button>
+      </BottomSheet>
     </Section>
   );
 }
@@ -461,45 +687,28 @@ function ChoiceChip({
   );
 }
 
-function Toggle({ label, on = false }: { label: string; on?: boolean }) {
-  const [enabled, setEnabled] = useState(on);
-  return (
-    <Pressable onPress={() => setEnabled((current) => !current)} style={styles.toggleRow}>
-      <AppText style={{ fontWeight: "700", flex: 1 }}>{label}</AppText>
-      <View style={[styles.toggle, enabled ? styles.toggleOn : null]}>
-        <View style={[styles.knob, enabled ? styles.knobOn : null]} />
-      </View>
-    </Pressable>
-  );
-}
-
-function Session({
-  device,
-  ip,
-  time,
-  current,
+function Toggle({
+  label,
+  value,
+  onChange,
 }: {
-  device: string;
-  ip: string;
-  time: string;
-  current?: boolean;
+  label: string;
+  value: boolean;
+  onChange: (next: boolean) => void;
 }) {
   return (
-    <View style={styles.session}>
-      <View style={{ flex: 1 }}>
-        <AppText style={{ fontWeight: "800" }}>{device}</AppText>
-        <AppText variant="data" color={colors.text3}>
-          {ip} · {time}
-        </AppText>
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value }}
+      accessibilityLabel={label}
+      onPress={() => onChange(!value)}
+      style={styles.toggleRow}
+    >
+      <AppText style={{ fontWeight: "700", flex: 1 }}>{label}</AppText>
+      <View style={[styles.toggle, value ? styles.toggleOn : null]}>
+        <View style={[styles.knob, value ? styles.knobOn : null]} />
       </View>
-      {current ? (
-        <AppText variant="eyebrow" color={colors.success}>
-          Current
-        </AppText>
-      ) : (
-        <Button variant="danger">Revoke</Button>
-      )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -589,20 +798,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: 12,
     gap: 8,
-  },
-  sessionTitle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  session: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
   },
   fieldRow: {
     flexDirection: "row",

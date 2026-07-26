@@ -86,17 +86,19 @@ export default function LoginScreen() {
         <AppText variant="title" style={{ fontSize: 22 }}>
           Sign in to operations
         </AppText>
-        <AppText variant="subtitle">Enter your credentials to sign in.</AppText>
+        <AppText variant="subtitle">Sign in with your email and password.</AppText>
         <Controller
           control={control}
           name="email"
           render={({ field, fieldState }) => (
-            <Field label="Email address">
+            <Field label="Email Address">
               <Input
                 value={field.value}
                 onChangeText={field.onChange}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
                 placeholder="your-email@example.com"
               />
               {fieldState.error ? (
@@ -118,9 +120,13 @@ export default function LoginScreen() {
                   onChangeText={field.onChange}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
+                  autoComplete="password"
+                  textContentType="password"
                   style={styles.passwordInput}
                 />
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
                   onPress={() => setShowPassword((current) => !current)}
                   hitSlop={10}
                   style={styles.passwordToggle}

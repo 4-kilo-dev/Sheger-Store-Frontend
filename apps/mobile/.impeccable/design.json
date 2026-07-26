@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-26T09:40:01Z",
+  "title": "Design System: Vortex Visual Operations",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Signal Amber",
+        "canonical": "#F5B731",
+        "tonalRamp": ["#3D2C09", "#573E0D", "#6B4F0E", "#8F6912", "#B58718", "#D9A322", "#F5B731", "#FBD888"]
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Void",
+        "canonical": "#111113",
+        "tonalRamp": ["#000000", "#0A0A0B", "#111113", "#18181B", "#222225", "#2C2C30", "#4A4A50", "#6E6E76"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "canonical": "#18181B",
+        "tonalRamp": ["#0A0A0B", "#111113", "#18181B", "#222225", "#2C2C30", "#4A4A50", "#6E6E76", "#9898A4"]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Panel Raised",
+        "canonical": "#222225",
+        "tonalRamp": ["#111113", "#18181B", "#222225", "#2C2C30", "#4A4A50", "#6E6E76", "#9898A4", "#C4C4CC"]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Instrument Grey",
+        "canonical": "#9898A4",
+        "tonalRamp": ["#2C2C30", "#4A4A50", "#64646E", "#7C7C86", "#9898A4", "#B4B4BE", "#D0D0D8", "#E8E8EC"]
+      },
+      "text-tertiary": {
+        "role": "neutral",
+        "displayName": "Deep Grey",
+        "canonical": "#64646E",
+        "tonalRamp": ["#2C2C30", "#3E3E44", "#505058", "#64646E", "#7C7C86", "#9898A4", "#B4B4BE", "#D0D0D8"]
+      },
+      "status-reserved": { "role": "tertiary", "displayName": "Status: Reserved", "canonical": "#E8A030" },
+      "status-confirmed": { "role": "tertiary", "displayName": "Status: Confirmed", "canonical": "#46A758" },
+      "status-assigned": { "role": "tertiary", "displayName": "Status: Assigned", "canonical": "#A18072" },
+      "status-accepted": { "role": "tertiary", "displayName": "Status: Accepted", "canonical": "#3E93DE" },
+      "status-preparation": { "role": "tertiary", "displayName": "Status: Preparation", "canonical": "#E54666" },
+      "status-onsite": { "role": "tertiary", "displayName": "Status: Onsite", "canonical": "#8B8B97" },
+      "status-completed": { "role": "tertiary", "displayName": "Status: Completed", "canonical": "#0091B2" },
+      "status-done": { "role": "tertiary", "displayName": "Status: Done", "canonical": "#30A46C" },
+      "status-canceled": { "role": "tertiary", "displayName": "Status: Canceled", "canonical": "#E5484D" },
+      "status-partially-returned": { "role": "tertiary", "displayName": "Status: Partially Returned", "canonical": "#E8A030" },
+      "payment-paid": { "role": "tertiary", "displayName": "Payment: Paid", "canonical": "#6E56CF" },
+      "payment-advance": { "role": "tertiary", "displayName": "Payment: Advance", "canonical": "#E8A030" },
+      "payment-unpaid": { "role": "tertiary", "displayName": "Payment: Unpaid", "canonical": "#E54666" },
+      "destructive": { "role": "tertiary", "displayName": "Destructive Red", "canonical": "#E5484D" },
+      "success": { "role": "tertiary", "displayName": "Success Green", "canonical": "#30A46C" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display (Fraunces)", "purpose": "Screen and section titles only, once per screen." },
+      "title": { "displayName": "Title", "purpose": "Sheet and modal headers." },
+      "body": { "displayName": "Body", "purpose": "Default reading text, list content, field values." },
+      "subtitle": { "displayName": "Subtitle", "purpose": "Secondary descriptive text under a title." },
+      "small": { "displayName": "Small", "purpose": "Captions, helper text, list metadata." },
+      "eyebrow": { "displayName": "Eyebrow", "purpose": "Section kickers, field labels, badge text (structural, not decorative)." },
+      "data": { "displayName": "Data (Menlo)", "purpose": "Codes, IDs, monospaced values." },
+      "stat": { "displayName": "Stat (Menlo)", "purpose": "The single large number on a StatCard." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "pressed-opacity", "value": "opacity: 0.72", "purpose": "Pressable feedback on press, no scale or shadow change." },
+      { "name": "disabled-opacity", "value": "opacity: 0.45", "purpose": "Disabled state for buttons and controls." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The only inverted (dark-on-amber) button; used for the single primary action in a view.",
+      "html": "<button class=\"ds-btn-primary\">Confirm</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 6px; border: 1px solid #F5B731; background: #F5B731; color: #171310; font-family: 'DM Sans', system-ui, sans-serif; font-weight: 700; font-size: 13px; transition: opacity 0.15s ease-out; } .ds-btn-primary:hover { opacity: 0.9; } .ds-btn-primary:focus-visible { outline: 2px solid #F5B731; outline-offset: 2px; } .ds-btn-primary:active { opacity: 0.72; } .ds-btn-primary:disabled { opacity: 0.45; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Default secondary action button.",
+      "html": "<button class=\"ds-btn-outline\">Retry</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 6px; border: 1px solid #2C2C30; background: #18181B; color: #E8E8EC; font-family: 'DM Sans', system-ui, sans-serif; font-weight: 700; font-size: 13px; transition: opacity 0.15s ease-out; } .ds-btn-outline:hover { border-color: #4A4A50; } .ds-btn-outline:focus-visible { outline: 2px solid #F5B731; outline-offset: 2px; } .ds-btn-outline:active { opacity: 0.72; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Bordered pill: tone fill + tone border + dot + Eyebrow label. Never rendered without the label.",
+      "html": "<span class=\"ds-status-badge\"><span class=\"ds-status-dot\"></span>CONFIRMED</span>",
+      "css": ".ds-status-badge { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(70,167,88,0.44); background: rgba(70,167,88,0.14); color: #46A758; font-family: 'DM Sans', system-ui, sans-serif; font-weight: 800; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; } .ds-status-dot { width: 6px; height: 6px; border-radius: 999px; background: #46A758; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The single card treatment used across the app: flat, bordered, tonal — never nested.",
+      "html": "<div class=\"ds-card\"><span class=\"ds-card-eyebrow\">Booking</span><p class=\"ds-card-body\">VX-2481 · Meskel Square</p></div>",
+      "css": ".ds-card { border: 1px solid #2C2C30; background: #18181B; border-radius: 8px; padding: 14px; } .ds-card-eyebrow { display: block; font-family: 'DM Sans', system-ui, sans-serif; font-weight: 800; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #9898A4; margin-bottom: 6px; } .ds-card-body { font-family: 'DM Sans', system-ui, sans-serif; font-weight: 500; font-size: 13px; color: #E8E8EC; margin: 0; }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Text field: Panel Raised background, hairline border, amber selection.",
+      "html": "<input class=\"ds-input\" placeholder=\"Search bookings, clients, codes...\" />",
+      "css": ".ds-input { min-height: 44px; width: 100%; border: 1px solid #2C2C30; background: #222225; border-radius: 6px; padding: 0 12px; color: #E8E8EC; font-family: 'DM Sans', system-ui, sans-serif; font-size: 13px; } .ds-input::placeholder { color: #64646E; } .ds-input:focus-visible { outline: none; border-color: #F5B731; }"
+    },
+    {
+      "name": "Bottom Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Primary navigation item: amber icon + label when active, tertiary grey when inactive.",
+      "html": "<button class=\"ds-nav-item ds-nav-item-active\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#F5B731\" stroke-width=\"2\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"9\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"5\"/><rect x=\"14\" y=\"12\" width=\"7\" height=\"9\"/><rect x=\"3\" y=\"16\" width=\"7\" height=\"5\"/></svg><span>Dashboard</span></button>",
+      "css": ".ds-nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; flex: 1; min-height: 54px; background: transparent; border: none; } .ds-nav-item span { font-family: 'DM Sans', system-ui, sans-serif; font-weight: 800; font-size: 9px; color: #64646E; } .ds-nav-item-active span { color: #E8E8EC; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Control Room",
+    "overview": "Vortex reads like a broadcast operations desk, not a consumer app: a near-black panel (#111113), one amber signal color, and a status vocabulary that has to survive being read at a glance, in a rush, under bad light. Everything is built to state a fact — a booking status, a payment state, a crew assignment — without decorating it. The interface stays out of the way of the job.\n\nThe system explicitly rejects enterprise-ERP dread (no dense grey forms, no cryptic field codes burying the one thing someone needs to confirm), consumer-app playfulness (no mascots, confetti, or gamified streaks — this is a crew with a deadline), and the generic SaaS dashboard (no gradient hero-metric tile, no identical icon-plus-heading card grid). Depth comes from tone and hairline borders, never shadow; motion is a state change, not a performance.",
+    "keyCharacteristics": [
+      "Near-black ground with a three-step tonal surface ramp, no shadows anywhere",
+      "A single amber accent (#F5B731) that only ever means 'this needs you'",
+      "A ten-value status color system that must carry meaning through label + dot, never color alone",
+      "Fraunces serif reserved for section titles only; DM Sans and Menlo carry everything else",
+      "Flat, bordered surfaces; component vocabulary repeats identically across all six role workspaces"
+    ],
+    "rules": [
+      { "name": "The Signal Rule", "body": "Amber means \"this needs you\" — selection, primary action, current step. It never decorates a static element; if amber is on screen, something is asking for input or marking where you are.", "section": "colors" },
+      { "name": "The Color-Is-Never-Alone Rule", "body": "No status may be communicated by hue alone. StatusBadge always pairs color with the status label text and a dot; StatusStepper pairs color with a checkmark or step number.", "section": "colors" },
+      { "name": "The One Serif Rule", "body": "Fraunces appears exactly once per screen context: the screen or section title. Buttons, badges, data, and body copy are never set in Fraunces.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces never lift. A new component signals \"raised\" by moving one step up the tonal ramp and adding a border, never by adding shadow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the accent to Signal Amber only. One accent, used only for primary action, selection, and current-state signals.",
+      "Do pair every status color with a label and a dot or icon.",
+      "Do keep every touch target at 44×44 minimum.",
+      "Do hold body and label text at foreground or text2, reserving text3 for large text or icon-paired hints only.",
+      "Do build new depth with the tonal surface ramp plus a hairline border, never a shadow.",
+      "Do set section and screen titles in Fraunces once per screen; everything else in DM Sans or Menlo."
+    ],
+    "donts": [
+      "Don't add a second accent color or let amber decorate a static, non-actionable element.",
+      "Don't use border-left/border-right as a colored accent stripe on cards or list items.",
+      "Don't introduce card grids of identical icon+heading+text tiles or a gradient hero-metric stat block.",
+      "Don't add mascots, confetti, streaks, or other gamified/playful motifs.",
+      "Don't build dense multi-field forms or cryptic field codes that bury the one thing a user needs to confirm.",
+      "Don't add box-shadow, blur, or glass treatments anywhere.",
+      "Don't set buttons, badges, or data values in Fraunces.",
+      "Don't drop new copy into text3 below 18px/bold-14px without an icon or weight backing it up."
+    ]
+  }
+}

@@ -2,11 +2,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import { to } from "@/utils/routes";
 import {
   CalendarClock,
-  CheckCircle2,
   ClipboardList,
   MapPin,
   Package,
-  RotateCcw,
   ShieldAlert,
   Wrench,
 } from "lucide-react-native";
@@ -29,7 +27,7 @@ import {
 import { useInventoryItem } from "@/hooks/useOperations";
 import { colors } from "@/theme/tokens";
 
-const TABS = ["Units", "Movement", "Maintenance"] as const;
+const TABS = ["Units", "Maintenance"] as const;
 
 export default function InventoryDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
@@ -66,9 +64,6 @@ export default function InventoryDetailScreen() {
     <Screen>
       <View style={styles.actionRow}>
         <BackLink label="Back to Inventory" href="/inventory" />
-        <Button variant="outline" icon={RotateCcw}>
-          Stock Movement
-        </Button>
         <Button
           icon={ShieldAlert}
           onPress={() => router.push(to(`/damage-report?itemId=${item.id}`))}
@@ -129,25 +124,6 @@ export default function InventoryDetailScreen() {
           )}
         </Section>
       ) : null}
-      {tab === "Movement" ? (
-        <Section title="Movement" icon={CheckCircle2}>
-          {[
-            "12 units checked out to SB047",
-            "48 units reserved for SB052",
-            "4 units returned and inspected",
-          ].map((event, index) => (
-            <View key={event} style={styles.eventRow}>
-              <CheckCircle2 size={16} color={colors.accent} />
-              <View>
-                <AppText style={{ fontWeight: "800" }}>{event}</AppText>
-                <AppText variant="data" color={colors.text3}>
-                  2026-06-{String(8 - index).padStart(2, "0")} · Nathan B.
-                </AppText>
-              </View>
-            </View>
-          ))}
-        </Section>
-      ) : null}
       {tab === "Maintenance" ? (
         <Section title="Maintenance" icon={Wrench}>
           <AppText style={{ fontWeight: "800" }}>Next preventive service</AppText>
@@ -159,15 +135,10 @@ export default function InventoryDetailScreen() {
 
       <Section title="Storage" icon={MapPin}>
         <KV label="Location" value={item.location} />
-        <KV label="Warehouse" value="Main warehouse · Bole" />
       </Section>
       <Section title="Service Record" icon={CalendarClock}>
         <KV label="Last service" value={item.lastService} mono />
         <KV label="Next due" value={item.nextService} mono />
-      </Section>
-      <Section title="Custodian" icon={ClipboardList}>
-        <KV label="Name" value="Mekonnen T." />
-        <KV label="Role" value="Storekeeper" />
       </Section>
     </Screen>
   );
@@ -188,9 +159,5 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
     paddingBottom: 12,
-  },
-  eventRow: {
-    flexDirection: "row",
-    gap: 10,
   },
 });

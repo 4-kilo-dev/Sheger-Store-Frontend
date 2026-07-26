@@ -17,6 +17,7 @@ import {
 } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
 import { StatusBadge } from "@/components/status";
+import { ScreenAvailabilityWidget } from "@/components/dashboard/ScreenAvailabilityWidget";
 import {
   AppText,
   Button,
@@ -29,7 +30,7 @@ import {
 import { colors } from "@/theme/tokens";
 import type { Booking } from "@/types/domain";
 import { formatCurrency } from "@/utils/format";
-import { useBookings } from "@/hooks/useOperations";
+import { useBookings, useInventory } from "@/hooks/useOperations";
 
 export default function RoleDashboardScreen() {
   const { role } = useLocalSearchParams<{ role: string }>();
@@ -213,32 +214,7 @@ function CTO({ BOOKINGS }: { BOOKINGS: Booking[] }) {
           <QueueRow key={b.code} booking={b} action="Review & assign" />
         ))}
       </Queue>
-      <Section title="Screen availability" icon={Package}>
-        {["P2.97", "P4", "P3.91 INDOOR"].map((type) => (
-          <View key={type} style={styles.screenLine}>
-            <AppText variant="data" style={{ fontWeight: "900" }}>
-              {type}
-            </AppText>
-            <AppText variant="small" color={colors.text2}>
-              {
-                BOOKINGS.filter(
-                  (b) =>
-                    b.screenType === type &&
-                    [
-                      "RESERVED",
-                      "CONFIRMED",
-                      "ASSIGNED",
-                      "ACCEPTED",
-                      "PREPARATION",
-                      "ONSITE",
-                    ].includes(b.status),
-                ).length
-              }{" "}
-              active bookings
-            </AppText>
-          </View>
-        ))}
-      </Section>
+      <ScreenAvailabilityWidget />
     </Screen>
   );
 }
@@ -318,6 +294,7 @@ function OO({ BOOKINGS }: { BOOKINGS: Booking[] }) {
 }
 
 function SK({ BOOKINGS }: { BOOKINGS: Booking[] }) {
+  const { data: INVENTORY = [] } = useInventory();
   const onsite = BOOKINGS.filter((b) => b.status === "ONSITE");
   const completed = BOOKINGS.filter((b) => b.status === "COMPLETED");
   const checkedOut = BOOKINGS.filter((b) =>
@@ -327,6 +304,7 @@ function SK({ BOOKINGS }: { BOOKINGS: Booking[] }) {
     (sum, booking) => sum + booking.bomItems.filter((item) => item.status === "Reserved").length,
     0,
   );
+  const damagedItems = INVENTORY.filter((item) => item.condition === "DAMAGED").length;
   return (
     <Screen>
       <WorkspaceHeader
@@ -337,7 +315,7 @@ function SK({ BOOKINGS }: { BOOKINGS: Booking[] }) {
       />
       <StatCard label="Materials out" value={onsite.length} />
       <StatCard label="Pending return" value={completed.length} />
-      <StatCard label="Damage queue" value={3} tone={colors.destructive} />
+      <StatCard label="Damage queue" value={damagedItems} tone={colors.destructive} />
       <StatCard label="Reserved items" value={reservedItems} />
       <Queue title="Equipment waiting for check-in" icon={PackageCheck} count={completed.length}>
         {completed.slice(0, 5).map((b) => (
@@ -375,12 +353,5 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
     paddingBottom: 12,
-  },
-  screenLine: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
-    borderRadius: 8,
-    padding: 12,
   },
 });

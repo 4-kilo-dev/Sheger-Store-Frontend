@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import {
   AppText,
   Button,
@@ -30,6 +30,7 @@ export default function DriverTripsScreen() {
   const { data: trips = [], isLoading, isError, refetch } = useDriverTrips();
   const { data: staff = [] } = useStaff();
   const { can } = usePermissions();
+  const canView = can(PERMISSION.DRIVER_TRIP_VIEW);
   const canCreate = can(PERMISSION.DRIVER_TRIP_CREATE);
   const canEdit = can(PERMISSION.DRIVER_TRIP_EDIT);
   const canApprove = can(PERMISSION.DRIVER_TRIP_APPROVE);
@@ -86,7 +87,7 @@ export default function DriverTripsScreen() {
     try {
       await approveTrip.mutateAsync({ id, isApproved });
     } catch (e) {
-      console.error(e);
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to update trip approval.");
     }
   };
 
@@ -94,9 +95,17 @@ export default function DriverTripsScreen() {
     try {
       await updateTrip.mutateAsync({ id, payload: { arrivedAt: new Date().toISOString() } });
     } catch (e) {
-      console.error(e);
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to mark trip arrived.");
     }
   };
+
+  if (!canView) {
+    return (
+      <Screen>
+        <ErrorState detail="You don't have access to driver trips." />
+      </Screen>
+    );
+  }
 
   if (isLoading) {
     return (

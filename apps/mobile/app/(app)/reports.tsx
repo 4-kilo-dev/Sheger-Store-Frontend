@@ -23,7 +23,8 @@ import {
   StatCard,
 } from "@/components/ui";
 import { useBookings, useDriverTrips, useInventory, useStaff } from "@/hooks/useOperations";
-import { useAppContext } from "@/context/AppContext";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 import { colors } from "@/theme/tokens";
 import { STATUS_LABELS, STATUS_ORDER } from "@/types/domain";
 import type { Booking, InventoryItem, StaffMember } from "@/types/domain";
@@ -72,9 +73,9 @@ function monthsFromBookings(bookings: Booking[]) {
 }
 
 export default function ReportsScreen() {
-  const { activeProfile } = useAppContext();
-  const isAdminOrSupervisor = activeProfile.role === "Admin";
-  const visibleTabs = isAdminOrSupervisor ? TABS : BASE_TABS;
+  const { can } = usePermissions();
+  const canViewStaffWorkSheets = can(PERMISSION.USER_VIEW);
+  const visibleTabs = canViewStaffWorkSheets ? TABS : BASE_TABS;
   const [tab, setTab] = useState<(typeof TABS)[number]>("Revenue & Bookings");
   const bookingsQuery = useBookings();
   const inventoryQuery = useInventory();
@@ -137,7 +138,7 @@ export default function ReportsScreen() {
       {tab === "Inventory Health" ? <InventoryHealthTab INVENTORY={INVENTORY} /> : null}
       {tab === "Client Directory" ? <ClientDirectoryTab BOOKINGS={BOOKINGS} /> : null}
       {tab === "Quality & Crew" ? <QualityCrewTab STAFF={STAFF} /> : null}
-      {tab === "Staff Work Sheets" && isAdminOrSupervisor ? (
+      {tab === "Staff Work Sheets" && canViewStaffWorkSheets ? (
         <StaffWorkSheetsTab STAFF={STAFF} />
       ) : null}
       {tab === "Driver Trips" ? <DriverTripsTab /> : null}
@@ -226,6 +227,15 @@ function RevenueBookingsTab({
   }, [BOOKINGS, INVENTORY]);
   const MONTHS = useMemo(() => monthsFromBookings(BOOKINGS), [BOOKINGS]);
   const maxRevenue = Math.max(1, ...MONTHS.map((month) => month.revenue));
+  const trendNote = (thisValue: number, lastValue: number) => {
+    if (!lastValue) return "No prior month data";
+    const change = ((thisValue - lastValue) / lastValue) * 100;
+    return `${change >= 0 ? "+" : ""}${change.toFixed(1)}% vs last month`;
+  };
+  const thisMonth = MONTHS[MONTHS.length - 1];
+  const lastMonth = MONTHS[MONTHS.length - 2];
+  const avgJobValue = (month?: { revenue: number; bookings: number }) =>
+    month?.bookings ? month.revenue / month.bookings : 0;
 
   return (
     <>
@@ -233,7 +243,7 @@ function RevenueBookingsTab({
         <StatCard
           label="Booked Revenue"
           value={formatCompactCurrency(stats.totalRevenue)}
-          note="+14.2% vs last month"
+          note={trendNote(thisMonth.revenue, lastMonth.revenue)}
           icon={Banknote}
         />
         <StatCard
@@ -251,7 +261,7 @@ function RevenueBookingsTab({
         <StatCard
           label="Avg. Job Value"
           value={`${stats.avgJobValue}K`}
-          note="+6.8% this quarter"
+          note={trendNote(avgJobValue(thisMonth), avgJobValue(lastMonth))}
           icon={Banknote}
         />
       </View>

@@ -15,6 +15,7 @@ import {
   recordBookingPaymentApi,
   transitionBookingStatusApi,
   updateBomLineApi,
+  updateBookingApi,
 } from "@/services/bookings-api";
 import {
   checkinBookingApi,
@@ -129,6 +130,15 @@ export function useRecordBookingPayment() {
       toStatus: "advance" | "fully_paid";
       amount: number;
     }) => recordBookingPaymentApi(bookingId, toStatus, amount),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bookings"] }),
+  });
+}
+
+export function useUpdateBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, payload }: { bookingId: string; payload: Record<string, unknown> }) =>
+      updateBookingApi(bookingId, payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bookings"] }),
   });
 }

@@ -46,14 +46,6 @@ const SECONDARY_NAV = [
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
-const ROLE_LINKS = [
-  { href: "/dashboards/ccr", label: "Client Relations (CCR)" },
-  { href: "/dashboards/cto", label: "Chief Technician (CTO)" },
-  { href: "/dashboards/to", label: "Technician (TO)" },
-  { href: "/dashboards/oo", label: "Operations (OO)" },
-  { href: "/dashboards/sk", label: "Storekeeper (SK)" },
-] as const;
-
 /**
  * Nav routes gated by at least one of these permission keys (absent = always
  * visible). Mirrors apps/web/src/components/app-shell.tsx NAV_PERMISSIONS —
@@ -73,14 +65,6 @@ const NAV_PERMISSIONS: Record<string, string[]> = {
   "/staff": [PERMISSION.USER_VIEW],
   "/reports": ["report.view", PERMISSION.EVAL_VIEW],
 };
-
-const ROLE_WORKSPACE_PATHS = {
-  CCR: "/dashboards/ccr",
-  CTO: "/dashboards/cto",
-  TO: "/dashboards/to",
-  OO: "/dashboards/oo",
-  SK: "/dashboards/sk",
-} as const;
 
 function titleFromPath(pathname: string) {
   if (pathname === "/dashboard") return "Dashboard";
@@ -205,52 +189,6 @@ export function AppShell() {
                     onClose={() => setDrawerOpen(false)}
                   />
                 ))}
-              </DrawerGroup>
-
-              <DrawerGroup
-                title={activeProfile.role === "Admin" ? "Role Workspaces" : "My Workspace"}
-              >
-                {activeProfile.role === "Admin" ? (
-                  ROLE_LINKS.map((item) => (
-                    <Pressable
-                      key={item.href}
-                      onPress={() => {
-                        setDrawerOpen(false);
-                        router.push(to(item.href));
-                      }}
-                      style={[
-                        styles.roleLink,
-                        pathname === item.href ? styles.roleLinkActive : null,
-                      ]}
-                    >
-                      <AppText
-                        variant="small"
-                        color={pathname === item.href ? colors.foreground : colors.text2}
-                        style={{ fontWeight: "700" }}
-                      >
-                        {item.label}
-                      </AppText>
-                    </Pressable>
-                  ))
-                ) : (
-                  <Pressable
-                    onPress={() => {
-                      setDrawerOpen(false);
-                      router.push(
-                        to(
-                          ROLE_WORKSPACE_PATHS[
-                            activeProfile.role as keyof typeof ROLE_WORKSPACE_PATHS
-                          ],
-                        ),
-                      );
-                    }}
-                    style={styles.roleLink}
-                  >
-                    <AppText variant="small" style={{ fontWeight: "700" }}>
-                      Open {activeProfile.role} Workspace
-                    </AppText>
-                  </Pressable>
-                )}
               </DrawerGroup>
             </ScrollView>
 
@@ -558,18 +496,6 @@ const styles = StyleSheet.create({
   drawerLinkActive: {
     backgroundColor: colors.surface2,
     borderLeftWidth: 2,
-    borderLeftColor: colors.accent,
-  },
-  roleLink: {
-    minHeight: 40,
-    borderRadius: radius.md,
-    paddingHorizontal: 12,
-    justifyContent: "center",
-    borderLeftWidth: 1,
-    borderLeftColor: colors.border,
-  },
-  roleLinkActive: {
-    backgroundColor: colors.surface2,
     borderLeftColor: colors.accent,
   },
   drawerFooter: {

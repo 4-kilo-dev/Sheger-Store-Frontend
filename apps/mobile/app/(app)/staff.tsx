@@ -1,4 +1,4 @@
-import { AlertTriangle, KeyRound, Radio, Search, UserCheck, Users } from "lucide-react-native";
+import { AlertTriangle, KeyRound, UserCheck, Users } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { StaffCard } from "@/components/cards";
@@ -15,7 +15,6 @@ import {
   SegmentedTabs,
   StatCard,
 } from "@/components/ui";
-import { STAFF_ROLES } from "@/data/mock";
 import {
   useCreateStaff,
   useResetPassword,
@@ -34,11 +33,17 @@ export default function StaffScreen() {
   const canManageStaff = can(PERMISSION.USER_MANAGE);
   const { data: STAFF = [], isLoading, isError, refetch } = useStaff();
   const [query, setQuery] = useState("");
-  const [role, setRole] = useState<(typeof STAFF_ROLES)[number]>("All");
+  const [role, setRole] = useState<string>("All");
   const [addOpen, setAddOpen] = useState(false);
   const resetPassword = useResetPassword();
   const toggleActive = useToggleUserActive();
   const toggleFreelancer = useSetStaffFreelancer();
+  // Derived from the real staff list rather than the hardcoded STAFF_ROLES mock,
+  // so a role that doesn't exactly match the mock taxonomy never becomes invisible.
+  const roleTabs = useMemo(
+    () => ["All", ...Array.from(new Set(STAFF.map((person) => person.role))).sort()],
+    [STAFF],
+  );
   const rows = useMemo(
     () =>
       STAFF.filter(
@@ -53,7 +58,6 @@ export default function StaffScreen() {
   const counts = {
     total: STAFF.length,
     active: STAFF.filter((person) => person.status === "ACTIVE").length,
-    onsite: STAFF.filter((person) => person.status === "ONSITE").length,
   };
 
   const handleResetPassword = async (id: string, name: string) => {
@@ -123,7 +127,7 @@ export default function StaffScreen() {
         <StatCard
           label="Total Staff"
           value={counts.total}
-          note={`Across ${STAFF_ROLES.length - 1} operational roles`}
+          note={`Across ${roleTabs.length - 1} operational roles`}
           icon={Users}
         />
         <StatCard
@@ -132,17 +136,11 @@ export default function StaffScreen() {
           note="Ready for assignment"
           icon={UserCheck}
         />
-        <StatCard
-          label="Currently Onsite"
-          value={counts.onsite}
-          note="Across active jobs"
-          icon={Radio}
-        />
       </View>
-      <SegmentedTabs tabs={STAFF_ROLES} value={role} onChange={setRole} />
-      <Button variant="ghost" icon={Search}>
+      <SegmentedTabs tabs={roleTabs} value={role} onChange={setRole} />
+      <AppText variant="small" color={colors.text3}>
         {rows.length} staff visible
-      </Button>
+      </AppText>
       <NativeList
         data={rows}
         keyExtractor={(item) => item.id}
@@ -155,12 +153,14 @@ export default function StaffScreen() {
                 <Button
                   variant="ghost"
                   icon={KeyRound}
+                  disabled={resetPassword.isPending}
                   onPress={() => handleResetPassword(item.id, item.name)}
                 >
                   Reset PW
                 </Button>
                 <Button
                   variant="ghost"
+                  disabled={toggleFreelancer.isPending}
                   onPress={() => handleToggleFreelancer(item.id, !item.isFreelancer)}
                 >
                   {item.isFreelancer ? "Freelancer ✓" : "Mark Freelancer"}
@@ -168,7 +168,25 @@ export default function StaffScreen() {
                 <Button
                   variant="ghost"
                   icon={item.status !== "OFF DUTY" ? AlertTriangle : UserCheck}
-                  onPress={() => handleToggleActive(item.id, item.status === "OFF DUTY")}
+                  disabled={toggleActive.isPending}
+                  onPress={() => {
+                    if (item.status === "OFF DUTY") {
+                      handleToggleActive(item.id, true);
+                      return;
+                    }
+                    Alert.alert(
+                      "Deactivate this account?",
+                      `${item.name} will immediately lose access to Vortex.`,
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Deactivate",
+                          style: "destructive",
+                          onPress: () => handleToggleActive(item.id, false),
+                        },
+                      ],
+                    );
+                  }}
                 >
                   {item.status !== "OFF DUTY" ? "Deactivate" : "Activate"}
                 </Button>
@@ -202,8 +220,20 @@ function AddStaffSheet({ visible, onClose }: { visible: boolean; onClose: () => 
 
   const handleSubmit = async () => {
     setError(null);
+    if (!form.name.trim()) {
+      setError("Enter the staff member's full name.");
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) {
+      setError("Enter a valid email address.");
+      return;
+    }
     if (!form.role) {
       setError("Select a role.");
+      return;
+    }
+    if (form.password.length < 8) {
+      setError("Temporary password must be at least 8 characters.");
       return;
     }
     try {

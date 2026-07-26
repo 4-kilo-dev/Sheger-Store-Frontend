@@ -7,7 +7,15 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Vortex needs access to your photos to attach damage report images."
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     }

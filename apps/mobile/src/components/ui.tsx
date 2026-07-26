@@ -4,7 +4,9 @@ import type { LucideIcon } from "lucide-react-native";
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -34,17 +36,23 @@ export function Screen({
   );
   return (
     <SafeAreaView style={styles.screen} edges={["left", "right"]}>
-      {scroll ? (
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {content}
-        </ScrollView>
-      ) : (
-        content
-      )}
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.screenContentFlex}
+      >
+        {scroll ? (
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {content}
+          </ScrollView>
+        ) : (
+          content
+        )}
+        {footer ? <View style={styles.footer}>{footer}</View> : null}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -228,6 +236,7 @@ export function SegmentedTabs<T extends string>({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={styles.tabsScroll}
       contentContainerStyle={styles.tabs}
     >
       {tabs.map((tab) => {
@@ -398,6 +407,7 @@ export function NativeList<T>({
 >) {
   return (
     <FlashList
+      style={{ flex: 1 }}
       data={data}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
@@ -421,16 +431,27 @@ export function BottomSheet({
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose} />
-      <View style={styles.sheet}>
-        <View style={styles.sheetHandle} />
-        <View style={styles.sheetHeader}>
-          <AppText style={styles.sheetTitle}>{title}</AppText>
-          <Button variant="ghost" onPress={onClose}>
-            Close
-          </Button>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.sheetKeyboardWrap}
+      >
+        <View style={styles.sheet}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeader}>
+            <AppText style={styles.sheetTitle}>{title}</AppText>
+            <Button variant="ghost" onPress={onClose}>
+              Close
+            </Button>
+          </View>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.sheetScrollContent}
+          >
+            {children}
+          </ScrollView>
         </View>
-        {children}
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -562,6 +583,10 @@ export const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
+  tabsScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   tabs: {
     gap: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -648,11 +673,13 @@ export const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.55)",
   },
-  sheet: {
+  sheetKeyboardWrap: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  sheet: {
     maxHeight: "82%",
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
@@ -660,6 +687,9 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: 16,
+    gap: 12,
+  },
+  sheetScrollContent: {
     gap: 12,
   },
   sheetHandle: {

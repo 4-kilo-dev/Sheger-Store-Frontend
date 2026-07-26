@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { to } from "@/utils/routes";
-import { AlertTriangle, Camera, CheckCircle2, ShieldAlert } from "lucide-react-native";
+import * as ImagePicker from "expo-image-picker";
+import { AlertTriangle, Camera, CheckCircle2, ShieldAlert, X } from "lucide-react-native";
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import {
   AppText,
   BackLink,
@@ -17,7 +18,7 @@ import {
   TextArea,
 } from "@/components/ui";
 import { useBookings, useCreateDamageReport, useInventory } from "@/hooks/useOperations";
-import { colors } from "@/theme/tokens";
+import { alpha, colors, radius } from "@/theme/tokens";
 
 export default function DamageReportScreen() {
   const params = useLocalSearchParams<{ itemId?: string; bookingCode?: string }>();
@@ -35,6 +36,30 @@ export default function DamageReportScreen() {
   const [quantity, setQuantity] = useState("1");
   const [description, setDescription] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<ImagePicker.ImagePickerAsset[]>([]);
+
+  const handlePickPhotos = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setSubmitError("Photo library access is needed to attach damage photos.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+    if (result.canceled) return;
+    setAttachments((current) => {
+      const existingUris = new Set(current.map((asset) => asset.uri));
+      const additions = result.assets.filter((asset) => !existingUris.has(asset.uri));
+      return [...current, ...additions];
+    });
+  };
+
+  const removeAttachment = (uri: string) => {
+    setAttachments((current) => current.filter((asset) => asset.uri !== uri));
+  };
 
   if (loadingInventory || loadingBookings) {
     return (
@@ -98,6 +123,10 @@ export default function DamageReportScreen() {
   }
 
   const selectedItem = INVENTORY.find((i) => i.id === itemId);
+  const matchedBooking = BOOKINGS.find(
+    (b) => b.code.trim().toUpperCase() === bookingCode.trim().toUpperCase(),
+  );
+  const canSubmit = !!matchedBooking && !!selectedItem;
 
   return (
     <Screen
@@ -108,7 +137,11 @@ export default function DamageReportScreen() {
               {submitError}
             </AppText>
           ) : null}
-          <Button icon={ShieldAlert} disabled={createDamageReport.isPending} onPress={handleSubmit}>
+          <Button
+            icon={ShieldAlert}
+            disabled={createDamageReport.isPending || !canSubmit}
+            onPress={handleSubmit}
+          >
             {createDamageReport.isPending ? "Submitting..." : "Submit Damage Report"}
           </Button>
         </View>
@@ -127,9 +160,31 @@ export default function DamageReportScreen() {
             placeholder="e.g. SB047"
             autoCapitalize="characters"
           />
+          {bookingCode.trim() ? (
+            matchedBooking ? (
+              <AppText variant="small" color={colors.success} style={{ marginTop: 6 }}>
+                Linked to {matchedBooking.code} · {matchedBooking.client} · {matchedBooking.venue}
+              </AppText>
+            ) : (
+              <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
+                No booking found with this code.
+              </AppText>
+            )
+          ) : null}
         </Field>
         <Field label="Inventory item">
           <Input value={itemId} onChangeText={setItemId} placeholder="Item ID / SKU" />
+          {itemId.trim() ? (
+            selectedItem ? (
+              <AppText variant="small" color={colors.success} style={{ marginTop: 6 }}>
+                {selectedItem.name} · {selectedItem.model}
+              </AppText>
+            ) : (
+              <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
+                No inventory item found with this ID.
+              </AppText>
+            )
+          ) : null}
         </Field>
         {selectedItem?.poolId ? (
           <Field label="Affected quantity">
@@ -156,9 +211,34 @@ export default function DamageReportScreen() {
         <Camera size={28} color={colors.text3} />
         <AppText style={{ fontWeight: "900" }}>Attach damage photos</AppText>
         <AppText variant="small" color={colors.text3}>
-          JPG or PNG · up to 10 MB each
+          Select as many photos as you need, one at a time or all together.
         </AppText>
-        <Button variant="outline">Choose Files</Button>
+        <Button variant="outline" onPress={handlePickPhotos}>
+          {attachments.length > 0 ? "Add More Photos" : "Choose Photos"}
+        </Button>
+        {attachments.length > 0 ? (
+          <View style={styles.attachmentGrid}>
+            {attachments.map((asset) => (
+              <View key={asset.uri} style={styles.attachmentTile}>
+                <Image source={{ uri: asset.uri }} style={styles.attachmentImage} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove photo"
+                  onPress={() => removeAttachment(asset.uri)}
+                  style={styles.attachmentRemove}
+                >
+                  <X size={13} color={colors.white} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {attachments.length > 0 ? (
+          <AppText variant="small" color={colors.payment.ADVANCE}>
+            {attachments.length} photo{attachments.length === 1 ? "" : "s"} attached locally. Photo
+            upload isn't wired to the server yet — keep a backup until it is.
+          </AppText>
+        ) : null}
       </Card>
       <Section title="Submission impact" icon={AlertTriangle}>
         {[
@@ -185,6 +265,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 24,
     gap: 8,
+  },
+  attachmentGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4,
+  },
+  attachmentTile: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.md,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  attachmentImage: {
+    width: "100%",
+    height: "100%",
+  },
+  attachmentRemove: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: radius.round,
+    backgroundColor: alpha(colors.black, 0.6),
+    alignItems: "center",
+    justifyContent: "center",
   },
   successCard: {
     padding: 24,

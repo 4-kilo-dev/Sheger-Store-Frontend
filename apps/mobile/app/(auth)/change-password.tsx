@@ -26,16 +26,22 @@ type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
 export default function ChangePasswordScreen() {
   const { changePassword } = useAppContext();
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const { control, handleSubmit } = useForm<ChangePasswordForm>({
     defaultValues: { password: "", confirmPassword: "" },
     resolver: zodResolver(changePasswordSchema),
   });
 
   const onSubmit = async (values: ChangePasswordForm) => {
+    setFormError(null);
     setSubmitting(true);
     try {
       await changePassword(values.password);
       router.replace(to("/dashboard"));
+    } catch (error) {
+      setFormError(
+        error instanceof Error ? error.message : "Couldn't change your password. Try again.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -61,7 +67,13 @@ export default function ChangePasswordScreen() {
           name="password"
           render={({ field, fieldState }) => (
             <Field label="New Password">
-              <Input value={field.value} onChangeText={field.onChange} secureTextEntry />
+              <Input
+                value={field.value}
+                onChangeText={field.onChange}
+                secureTextEntry
+                autoComplete="new-password"
+                textContentType="newPassword"
+              />
               {fieldState.error ? (
                 <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
                   {fieldState.error.message}
@@ -75,7 +87,13 @@ export default function ChangePasswordScreen() {
           name="confirmPassword"
           render={({ field, fieldState }) => (
             <Field label="Confirm New Password">
-              <Input value={field.value} onChangeText={field.onChange} secureTextEntry />
+              <Input
+                value={field.value}
+                onChangeText={field.onChange}
+                secureTextEntry
+                autoComplete="new-password"
+                textContentType="newPassword"
+              />
               {fieldState.error ? (
                 <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
                   {fieldState.error.message}
@@ -84,6 +102,11 @@ export default function ChangePasswordScreen() {
             </Field>
           )}
         />
+        {formError ? (
+          <AppText variant="small" color={colors.destructive}>
+            {formError}
+          </AppText>
+        ) : null}
         <Button icon={ArrowRight} disabled={submitting} onPress={handleSubmit(onSubmit)}>
           {submitting ? "Saving..." : "Save & Continue"}
         </Button>

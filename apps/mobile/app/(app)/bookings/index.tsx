@@ -17,7 +17,7 @@ import {
   Screen,
   SegmentedTabs,
 } from "@/components/ui";
-import { colors } from "@/theme/tokens";
+import { alpha, colors } from "@/theme/tokens";
 import type { Booking, BookingStatus, PaymentStatus, ScreenType } from "@/types/domain";
 import { STATUS_ORDER } from "@/types/domain";
 import { useBookings, useStaff } from "@/hooks/useOperations";
@@ -148,9 +148,9 @@ export default function BookingsScreen() {
 
       {selected.size > 0 ? (
         <View style={styles.bulkBar}>
-          <Button variant="outline">{selected.size} selected</Button>
-          <Button variant="outline">Change Status</Button>
-          <Button variant="danger">Cancel Selected</Button>
+          <AppText variant="small" color={colors.accent} style={{ fontWeight: "800" }}>
+            {selected.size} selected
+          </AppText>
         </View>
       ) : null}
 
@@ -252,7 +252,13 @@ function FilterChip({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.chip, active ? styles.chipActive : null]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={[styles.chip, active ? styles.chipActive : null]}
+    >
       <AppText
         variant="data"
         color={active ? colors.accent : colors.text2}
@@ -276,7 +282,7 @@ const styles = StyleSheet.create({
   bulkBar: {
     borderWidth: 1,
     borderColor: colors.accent,
-    backgroundColor: "rgba(245,183,49,0.08)",
+    backgroundColor: alpha(colors.accent, 0.08),
     borderRadius: 8,
     padding: 10,
     gap: 8,
@@ -299,6 +305,6 @@ const styles = StyleSheet.create({
   },
   chipActive: {
     borderColor: colors.accent,
-    backgroundColor: "rgba(245,183,49,0.10)",
+    backgroundColor: alpha(colors.accent, 0.1),
   },
 });

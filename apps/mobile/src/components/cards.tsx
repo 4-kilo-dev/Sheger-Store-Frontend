@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { Calendar, MapPin, Package, Users } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
-import { colors, radius } from "@/theme/tokens";
+import { alpha, colors, radius } from "@/theme/tokens";
 import type { Booking, InventoryItem, StaffMember } from "@/types/domain";
 import { formatCurrency, pct } from "@/utils/format";
 import { AppText, Card, KV, ProgressBar } from "@/components/ui";
@@ -22,6 +22,8 @@ export function BookingCard({
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${booking.code}, ${booking.client}, status ${booking.status}`}
       onPress={() => push(`/bookings/${booking.code}`)}
       style={[styles.cardPress, selected ? styles.selectedCard : null]}
     >
@@ -50,6 +52,8 @@ export function BookingCard({
       </View>
       {selectable ? (
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={selected ? `Deselect ${booking.code}` : `Select ${booking.code}`}
           onPress={onToggle}
           style={[styles.selectButton, selected ? styles.selectButtonActive : null]}
         >
@@ -75,7 +79,12 @@ export function InventoryCard({ item }: { item: InventoryItem }) {
         ? colors.payment.ADVANCE
         : colors.success;
   return (
-    <Pressable onPress={() => push(`/inventory/${item.id}`)} style={styles.cardPress}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name}, ${item.id}, condition ${item.condition}`}
+      onPress={() => push(`/inventory/${item.id}`)}
+      style={styles.cardPress}
+    >
       <View style={styles.cardHeader}>
         <View style={{ flex: 1 }}>
           <AppText style={styles.cardTitle}>{item.name}</AppText>
@@ -192,7 +201,7 @@ const styles = StyleSheet.create({
   },
   selectedCard: {
     borderColor: colors.accent,
-    backgroundColor: "rgba(245, 183, 49, 0.05)",
+    backgroundColor: alpha(colors.accent, 0.05),
   },
   cardHeader: {
     flexDirection: "row",
@@ -224,7 +233,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   selectButton: {
-    minHeight: 36,
+    minHeight: 44,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
