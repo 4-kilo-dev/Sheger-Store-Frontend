@@ -5,6 +5,11 @@ import { Section } from "@/features/bookings/components/shared/Section";
 import { KV } from "@/features/bookings/components/shared/KV";
 import type { OverviewSectionProps } from "./types";
 
+function displayValue(value: unknown): string {
+  if (value === undefined || value === null || value === "") return "—";
+  return String(value);
+}
+
 export function VenueSetupSection({ b }: OverviewSectionProps) {
   const { data: customFieldDefs = [] } = useQuery({
     queryKey: ["custom-field-definitions"],
@@ -14,10 +19,13 @@ export function VenueSetupSection({ b }: OverviewSectionProps) {
   return (
     <Section title="Venue & Setup" icon={MapPin}>
       <div className="grid grid-cols-2 gap-x-6">
-        <KV label="Venue" value={b.venue} />
-        <KV label="Arrangement" value={b.arrangement} mono />
-        <KV label="Screen Type" value={b.screenType} mono />
-        <KV label="Size (sqm)" value={b.size} mono />
+        <KV label="Venue" value={displayValue(b.venue)} />
+        <KV label="Requested Size (sqm)" value={b.size > 0 ? b.size : "—"} mono />
+        <div className="col-span-2">
+          <KV label="Intake Specification" value={displayValue(b.itemServiceSpec)} />
+        </div>
+        <KV label="Screen Type" value={displayValue(b.screenType)} mono />
+        <KV label="Arrangement" value={displayValue(b.arrangement)} mono />
         {customFieldDefs
           .filter((def) => def.key !== "technician_notes")
           .map((def) => {

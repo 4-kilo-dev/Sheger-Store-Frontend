@@ -12,24 +12,36 @@ import {
 import {
   getInventoryCategoriesApi,
   getInventoryPoolsApi,
-  getPoolAvailabilityApi,
 } from "@/features/inventory/services/inventory.api";
+import { useBookingPoolAvailability } from "@/features/bookings/hooks/useBookingPoolAvailability";
+import { getBookingRentalWindow } from "@/features/bookings/utils/bookingAvailability";
 import { Section } from "@/features/bookings/components/shared/Section";
 import { AccessLockOverlay } from "@/features/bookings/components/shared/AccessLockOverlay";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import type { OverviewSectionProps } from "./types";
 
 export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
-  const { formatDate } = useDateFormatter();
+  const { formatDateTime } = useDateFormatter();
   const queryClient = useQueryClient();
   const canWrite = caps.canWriteTechnicalHolds;
 
   const [screenPools, setScreenPools] = useState<any[]>([]);
-  const [screenAvailabilities, setScreenAvailabilities] = useState<Record<string, number>>({});
   const [allocations, setAllocations] = useState<any[]>([{ poolId: "", quantity: 0 }]);
   const [ctoNotes, setCtoNotes] = useState(b.ctoNotes || "");
   const [isSavingTechnical, setIsSavingTechnical] = useState(false);
   const [isPoolsRestricted, setIsPoolsRestricted] = useState(false);
+
+  const holdBooking = {
+    ...b,
+    rentalStart: b.assemblyDate || b.rentalStart,
+    rentalEnd: b.dismantleDate || b.rentalEnd,
+  };
+  const rentalWindow = getBookingRentalWindow(holdBooking);
+  const { availabilityByPoolId, isLoading: availabilityLoading } = useBookingPoolAvailability(
+    holdBooking,
+    screenPools,
+    screenPools.length > 0 && !!rentalWindow,
+  );
 
   useEffect(() => {
     setCtoNotes(b.ctoNotes || "");
@@ -83,47 +95,12 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
     }
   }, [reservationsRes, b.ctoNotes]);
 
-  useEffect(() => {
-    const windowEnd = b.dismantleDate || b.eventDate;
-    if (!b.assemblyDate || !windowEnd || screenPools.length === 0) {
-      setScreenAvailabilities({});
-      return;
-    }
-    let active = true;
-    const fetchAvailabilities = async () => {
-      try {
-        const results = await Promise.all(
-          screenPools.map(async (p) => {
-            try {
-              const res = await getPoolAvailabilityApi(p.id, b.assemblyDate, windowEnd);
-              return {
-                poolId: p.id,
-                available: Number(res.available ?? res.total ?? 0),
-              };
-            } catch {
-              return {
-                poolId: p.id,
-                available: Number.parseFloat(p.totalQuantity) || 0,
-              };
-            }
-          })
-        );
-        if (active) {
-          const mapping: Record<string, number> = {};
-          results.forEach((r) => {
-            mapping[r.poolId] = r.available;
-          });
-          setScreenAvailabilities(mapping);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    fetchAvailabilities();
-    return () => {
-      active = false;
-    };
-  }, [b.assemblyDate, b.dismantleDate, b.eventDate, screenPools]);
+  const dateRangeLabel =
+    b.assemblyDate && b.dismantleDate
+      ? `${formatDateTime(b.assemblyDate)} to ${formatDateTime(b.dismantleDate)}`
+      : rentalWindow
+        ? `${formatDateTime(rentalWindow.from)} to ${formatDateTime(rentalWindow.to)}`
+        : "—";
 
   const handleSaveTechnical = async () => {
     const validAllocations = allocations.filter((a) => a.poolId && a.quantity > 0);
@@ -299,18 +276,13 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
       <div className="space-y-4">
         <p className="text-[12px]" style={{ color: "var(--text-2)" }}>
           Specify screen type holds and check live warehouse availability for this event. Dates:{" "}
-          <strong className="font-mono text-xs">
-            {formatDate(b.assemblyDate)} to {formatDate(b.dismantleDate)}
-          </strong>
-          .
+          <strong className="font-mono text-xs">{dateRangeLabel}</strong>.
         </p>
 
         <div className="space-y-3">
           {allocations.map((alloc, idx) => {
             const selectedPool = screenPools.find((p) => p.id === alloc.poolId);
-            const avail = selectedPool
-              ? screenAvailabilities[selectedPool.id] ?? null
-              : null;
+            const availEntry = selectedPool ? availabilityByPoolId[selectedPool.id] : undefined;
             return (
               <div
                 key={idx}
@@ -371,12 +343,14 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
                     <strong
                       style={{
                         color:
-                          avail && avail > 10
+                          availEntry && !availEntry.loading && availEntry.available > 10
                             ? "var(--color-bom-returned)"
                             : "var(--color-pay-advance)",
                       }}
                     >
-                      {avail !== null ? `${avail} sqm` : "Checking..."}
+                      {availEntry?.loading || availabilityLoading
+                        ? "Checking..."
+                        : `${availEntry?.available ?? 0} sqm`}
                     </strong>
                   </div>
                 )}

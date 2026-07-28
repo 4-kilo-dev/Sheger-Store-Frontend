@@ -3,7 +3,6 @@ import { TechnicianAcceptedWorkspace } from "./TechnicianAcceptedWorkspace";
 import { BookingSpecificationsEditor } from "./BookingSpecificationsEditor";
 import { OnsiteDashboard } from "./OnsiteDashboard";
 import { TechnicalHoldsSection } from "./TechnicalHoldsSection";
-import { CtoTechnicianAssignmentSection } from "./CtoTechnicianAssignmentSection";
 import { OoCrewAssignmentSection } from "./OoCrewAssignmentSection";
 import { OoVehicleDriverSection } from "./OoVehicleDriverSection";
 import { ClientContactSection } from "./ClientContactSection";
@@ -39,11 +38,6 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
     id: "technical-holds",
     Component: TechnicalHoldsSection,
     when: (_caps, b) => b.status === "RESERVED",
-  },
-  {
-    id: "cto-technician-assignment",
-    Component: CtoTechnicianAssignmentSection,
-    when: (caps, b) => b.status === "CONFIRMED" && caps.canAssignTechnician,
   },
   {
     id: "oo-crew-assignment",

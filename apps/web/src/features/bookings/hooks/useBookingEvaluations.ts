@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
+import { isAssignedTechnicianOnBooking } from "@/features/bookings/utils/assignmentHelpers";
 import {
   listPerformanceMetricsApi,
   getInternalEvaluationApi,
@@ -17,10 +19,17 @@ import { pickEvalAssignmentId } from "@/features/bookings/utils/evalAssignment";
 
 export function useBookingEvaluations(code: string, booking: Booking | undefined) {
   const queryClient = useQueryClient();
+  const authUser = useAuthUser();
   const { can } = usePermissions();
 
   const canViewEval = can(PERMISSION.EVAL_VIEW) || can(PERMISSION.EVAL_SUBMIT_INTERNAL);
-  const canSubmitEval = can(PERMISSION.EVAL_SUBMIT_INTERNAL);
+  const hasSubmitPermission = can(PERMISSION.EVAL_SUBMIT_INTERNAL);
+  const canSubmitEval = useMemo(
+    () =>
+      hasSubmitPermission &&
+      isAssignedTechnicianOnBooking(booking?.assignments, authUser?.id),
+    [hasSubmitPermission, booking?.assignments, authUser?.id]
+  );
 
   const [showInternalModal, setShowInternalModal] = useState(false);
   const [venueName, setVenueName] = useState("");

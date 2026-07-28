@@ -34,7 +34,8 @@ export function NewBooking() {
   const [form, setForm] = useState({
     client: "", contactPerson: "", contactPhone: "",
     venue: "", assemblyDate: "", eventDate: "", dismantleDate: "",
-    itemServiceSpec: "", notes: "",
+    itemServiceSpec: "", size: "",
+    notes: "",
     amount: 0, paymentTerms: "UNPAID",
     customFields: {} as Record<string, any>,
   });
@@ -304,14 +305,27 @@ export function NewBooking() {
           {/* Step 2: Intake Requirements */}
           {step === 2 && (
             <Group title="Intake Requirements" icon={Wrench}>
-              <Field label="Screen Specification (Text Description)">
-                <input
-                  value={form.itemServiceSpec}
-                  onChange={(e) => set("itemServiceSpec", e.target.value)}
-                  placeholder="e.g. 48sqm of P3.9 Outdoor LED panel"
-                  className={inputCls}
-                />
-              </Field>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="Screen Size (sqm)">
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={form.size}
+                    onChange={(e) => set("size", e.target.value)}
+                    placeholder="e.g. 48"
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="Screen Specification (Text Description)">
+                  <input
+                    value={form.itemServiceSpec}
+                    onChange={(e) => set("itemServiceSpec", e.target.value)}
+                    placeholder="e.g. P3.9 Outdoor LED panel"
+                    className={inputCls}
+                  />
+                </Field>
+              </div>
 
 
 
@@ -439,6 +453,7 @@ export function NewBooking() {
                   ["Assembly Date", form.assemblyDate ? form.assemblyDate.replace("T", " ") : "—"],
                   ["Event Date", form.eventDate ? form.eventDate.replace("T", " ") : "—"],
                   ["Dismantle Date", form.dismantleDate ? form.dismantleDate.replace("T", " ") : "—"],
+                  ["Screen Size (sqm)", form.size ? `${form.size} sqm` : "—"],
                   ["Required Spec", form.itemServiceSpec || "—"],
 
                   ["Intake Notes", form.notes || "—"],
@@ -510,6 +525,10 @@ export function NewBooking() {
                 <div>
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Event</div>
                   <div className="font-mono font-semibold">{form.eventDate ? form.eventDate.replace("T", " ") : "—"}</div>
+                </div>
+                <div className="col-span-2">
+                  <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Screen Size</div>
+                  <div className="font-semibold">{form.size ? `${form.size} sqm` : "—"}</div>
                 </div>
                 <div className="col-span-2">
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Required Spec</div>

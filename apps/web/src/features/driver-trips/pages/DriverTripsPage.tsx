@@ -74,8 +74,8 @@ export function DriverTripsPage() {
 
   const listFilters = useMemo(
     () => ({
-      from: from || undefined,
-      to: to || undefined,
+      from: toIsoFromLocal(from),
+      to: toIsoFromLocal(to),
       driverUserId: filterDriverId || undefined,
     }),
     [from, to, filterDriverId],
@@ -248,13 +248,13 @@ export function DriverTripsPage() {
         <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
           From
           <div className="mt-1">
-            <DatePicker value={from} onChange={setFrom} placeholder="From date" />
+            <DatePicker value={from} onChange={setFrom} showTime placeholder="From date & time" />
           </div>
         </label>
         <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
           To
           <div className="mt-1">
-            <DatePicker value={to} onChange={setTo} placeholder="To date" />
+            <DatePicker value={to} onChange={setTo} showTime placeholder="To date & time" />
           </div>
         </label>
         <label className="text-[11px] font-semibold block min-w-[180px]" style={{ color: "var(--text-2)" }}>
