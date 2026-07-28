@@ -287,7 +287,7 @@ export function CheckoutPage() {
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-[11px] font-bold" style={{ color: "var(--accent)" }}>{item.id}</span>
+                            <span className="font-mono text-[11px] font-bold" style={{ color: "var(--accent)" }}>{item.code}</span>
                             <span className="text-[12px] font-medium">{item.name}</span>
                           </div>
                         </div>

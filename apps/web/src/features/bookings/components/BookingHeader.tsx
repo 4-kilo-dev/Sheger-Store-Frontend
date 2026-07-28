@@ -2,6 +2,8 @@ import { Building2, MapPin, Calendar, Wrench } from "lucide-react";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { StatusStepper } from "@/components/status-stepper";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 import type { Booking } from "@/features/bookings/services/bookings.api";
 
 interface BookingHeaderProps {
@@ -10,6 +12,8 @@ interface BookingHeaderProps {
 
 export function BookingHeader({ booking }: BookingHeaderProps) {
   const { formatDate } = useDateFormatter();
+  const { can } = usePermissions();
+  const showContractValue = can(PERMISSION.PAYMENT_MANAGE);
 
   return (
     <div
@@ -58,12 +62,14 @@ export function BookingHeader({ booking }: BookingHeaderProps) {
             </div>
           )}
         </div>
-        <div className="text-right">
-          <div className="label-eyebrow">Total Contract Value</div>
-          <div className="mt-1 font-mono text-[24px] font-bold">
-            ETB {booking.amount.toLocaleString()}
+        {showContractValue && (
+          <div className="text-right">
+            <div className="label-eyebrow">Total Contract Value</div>
+            <div className="mt-1 font-mono text-[24px] font-bold">
+              ETB {booking.amount.toLocaleString()}
+            </div>
           </div>
-        </div>
+        )}
       </div>
       <div className="mt-6">
         <StatusStepper current={booking.status} />

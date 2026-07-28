@@ -241,7 +241,7 @@ export function EquipmentTab({
                     style={{ borderColor: "var(--border)" }}
                   >
                     <td className="py-3 font-mono font-bold" style={{ color: "var(--accent)" }}>
-                      {it.id}
+                      {it.code}
                     </td>
                     <td className="py-3">
                       <div>{it.name}</div>

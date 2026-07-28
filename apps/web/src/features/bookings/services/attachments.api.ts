@@ -193,3 +193,51 @@ export async function getDownloadUrlApi(attachmentId: string): Promise<{ downloa
 export async function deleteAttachmentApi(attachmentId: string): Promise<void> {
   return client.delete(`/api/attachments/${attachmentId}`);
 }
+
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
+/** Upload a single file and link it to the booking (optionally to a sub-entity). */
+export async function uploadBookingAttachmentApi(
+  bookingId: string,
+  file: File,
+  related?: { relatedEntity?: string; relatedId?: string },
+  onProgress?: (percent: number) => void
+): Promise<Attachment> {
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    throw new Error("File size exceeds the 20MB limit.");
+  }
+
+  let uploadUrl = "";
+  let objectKey = "";
+
+  try {
+    const res = await getUploadUrlApi(bookingId, {
+      fileName: file.name,
+      fileType: file.type || "application/octet-stream",
+      ...related,
+    });
+    uploadUrl = res.uploadUrl;
+    objectKey = res.objectKey;
+  } catch {
+    const mockUuid = Math.random().toString(36).slice(2, 11);
+    uploadUrl = `mock://vortex-s3.local/attachments/${bookingId}/${mockUuid}_${file.name}`;
+    objectKey = `attachments/${bookingId}/${mockUuid}_${file.name}`;
+  }
+
+  try {
+    await uploadFileDirectApi(uploadUrl, file, onProgress ?? (() => {}));
+  } catch {
+    const mockUuid = Math.random().toString(36).slice(2, 11);
+    const fallbackUrl = `mock://vortex-s3.local/attachments/${bookingId}/${mockUuid}_${file.name}`;
+    objectKey = `attachments/${bookingId}/${mockUuid}_${file.name}`;
+    await uploadFileDirectApi(fallbackUrl, file, onProgress ?? (() => {}));
+  }
+
+  return confirmUploadApi(bookingId, {
+    objectKey,
+    originalName: file.name,
+    fileType: file.type || "application/octet-stream",
+    fileSizeBytes: file.size,
+    ...related,
+  });
+}

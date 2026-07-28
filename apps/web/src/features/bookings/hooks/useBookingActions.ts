@@ -10,11 +10,15 @@ import {
   updateBookingApi,
   transitionBookingStatusApi,
   recordBookingPaymentApi,
+  createAssignmentApi,
   type Booking,
   type BookingStatus,
 } from "@/features/bookings/services/bookings.api";
+import { isChiefTechnicianRole } from "@/features/bookings/utils/staffRoles";
+import { isDeclinedAssignment } from "@/features/bookings/utils/assignmentHelpers";
 import { getStaffApi } from "@/features/users/services/staff.api";
 import { checkoutBookingApi } from "@/features/checkout/services/operations.api";
+import { uploadBookingAttachmentApi } from "@/features/bookings/services/attachments.api";
 import type { BookingAction } from "@/features/bookings/constants";
 import type { UnfulfilledBomLine } from "@/features/bookings/components/BomFulfillmentConflictModal";
 
@@ -39,11 +43,9 @@ export function useBookingActions(
   const [advancePayment, setAdvancePayment] = useState(0);
   const [fullPayment, setfullPayment] = useState(0);
 
-  const [checkoutTeamLeader, setCheckoutTeamLeader] = useState("");
   const [checkoutDriver, setCheckoutDriver] = useState("");
   const [checkoutVehiclePlate, setCheckoutVehiclePlate] = useState("");
   const [checkoutMealBudget, setCheckoutMealBudget] = useState(0);
-  const [checkoutSignature, setCheckoutSignature] = useState("");
 
   const [showDeclineModal, setShowDeclineModal] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
@@ -53,34 +55,40 @@ export function useBookingActions(
   const [damageType, setDamageType] = useState<"DAMAGE" | "MISSING">("DAMAGE");
   const [damageSelectedAssetId, setDamageSelectedAssetId] = useState("");
   const [damageQty, setDamageQty] = useState("1");
+  const [damageAttachments, setDamageAttachments] = useState<File[]>([]);
 
   const [staff, setStaff] = useState<any[]>([]);
+  const [selectedTechnicianIds, setSelectedTechnicianIds] = useState<string[]>([]);
   const [checkoutConflicts, setCheckoutConflicts] = useState<UnfulfilledBomLine[]>([]);
   const [showCheckoutConflictModal, setShowCheckoutConflictModal] = useState(false);
 
   useEffect(() => {
     if (booking) {
-      setfullPayment(booking.amount);
-      const existingAdvance = booking.customFields?.advancePayment;
-      setAdvancePayment(
-        existingAdvance !== undefined ? parseFloat(existingAdvance) : booking.amount / 2
-      );
+      const paid = booking.paymentAmount ?? 0;
+
+      if (booking.payment === "PAID" && paid > 0) {
+        setfullPayment(paid);
+        setPaymentType("fully_paid");
+        setAdvancePayment(paid);
+      } else if (booking.payment === "ADVANCE") {
+        setPaymentType("advance");
+        setAdvancePayment(paid > 0 ? paid : 0);
+        setfullPayment(0);
+      } else {
+        setPaymentType("advance");
+        setAdvancePayment(0);
+        setfullPayment(booking.amount > 0 ? booking.amount : 0);
+      }
     }
   }, [booking]);
 
   useEffect(() => {
     if (booking) {
-      setCheckoutTeamLeader(booking.teamLeader || "");
-      setCheckoutDriver(booking.driver || "");
+      setCheckoutDriver(booking.driver !== "None Assigned" ? booking.driver : "");
       setCheckoutVehiclePlate((booking as any).vehiclePlate || "");
       setCheckoutMealBudget(booking.mealBudget || 0);
     }
   }, [booking]);
-
-  // The checkout signature is inferred from the logged-in user — no typing.
-  useEffect(() => {
-    if (authUser?.name) setCheckoutSignature(authUser.name);
-  }, [authUser?.name]);
 
   useEffect(() => {
     if (!canFetchStaff) return;
@@ -88,6 +96,15 @@ export function useBookingActions(
       .then(setStaff)
       .catch((e) => console.error("Failed to load staff in useBookingActions", e));
   }, [canFetchStaff]);
+
+  useEffect(() => {
+    if (
+      selectedAction?.id === "assignment.assign_technician" ||
+      selectedAction?.requiresForm === "assign"
+    ) {
+      setSelectedTechnicianIds([]);
+    }
+  }, [selectedAction?.id, selectedAction?.requiresForm]);
 
   const myTechnicianAssignment = useMemo(() => {
     if (!booking?.assignments || !authUser?.id) return null;
@@ -138,17 +155,45 @@ export function useBookingActions(
   });
 
   const { mutate: submitDamageReport, isPending: submittingDamage } = useMutation({
-    mutationFn: (payload: { description?: string; poolId?: string; itemId?: string; reportType: "DAMAGE" | "MISSING"; quantity?: string }) => {
+    mutationFn: async (payload: {
+      description?: string;
+      poolId?: string;
+      itemId?: string;
+      reportType: "DAMAGE" | "MISSING";
+      quantity?: string;
+      attachments?: File[];
+    }) => {
       if (!booking) throw new Error("Booking is undefined");
-      return createDamageReportApi(booking.code, payload);
+      const { attachments: files = [], ...reportPayload } = payload;
+      const report = await createDamageReportApi(booking.code, reportPayload);
+
+      if (files.length > 0 && report?.id) {
+        await Promise.all(
+          files.map((file) =>
+            uploadBookingAttachmentApi(booking.id, file, {
+              relatedEntity: "damage_missing_report",
+              relatedId: report.id,
+            })
+          )
+        );
+      }
+
+      return report;
     },
-    onSuccess: () => {
-      toast.success("Damage report submitted successfully!");
+    onSuccess: (_report, variables) => {
+      const attachmentCount = variables.attachments?.length ?? 0;
+      toast.success(
+        attachmentCount > 0
+          ? `Damage report submitted with ${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"}.`
+          : "Damage report submitted successfully!"
+      );
       setShowDamageModal(false);
       setDamageDescription("");
       setDamageSelectedAssetId("");
       setDamageQty("1");
+      setDamageAttachments([]);
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
+      queryClient.invalidateQueries({ queryKey: ["booking-attachments", booking?.id] });
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to submit damage report");
@@ -241,6 +286,49 @@ export function useBookingActions(
     },
   });
 
+  const { mutate: assignTechnicians, isPending: isAssigningTechnicians } = useMutation({
+    mutationFn: async (techIds: string[]) => {
+      if (!booking) throw new Error("Booking is undefined");
+
+      const staffById = new Map(staff.map((s) => [s.id, s]));
+      const alreadyAssigned = new Set(
+        (booking.assignments || [])
+          .filter(
+            (a: any) =>
+              a.roleContext === "TECHNICIAN" &&
+              !isDeclinedAssignment(a)
+          )
+          .map((a: any) => a.userId)
+      );
+
+      const toAssign = techIds.filter((id) => !alreadyAssigned.has(id));
+      if (toAssign.length === 0) {
+        throw new Error("All selected technicians are already assigned to this booking");
+      }
+
+      for (const techId of toAssign) {
+        const member = staffById.get(techId);
+        await createAssignmentApi(booking.id, {
+          userId: techId,
+          roleContext: "TECHNICIAN",
+          isTeamLead: member ? isChiefTechnicianRole(member.role) : false,
+        });
+      }
+    },
+    onSuccess: () => {
+      toast.success("Technician assignment completed!");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions", booking?.id] });
+      setShowActionModal(false);
+      setSelectedAction(null);
+      setSelectedTechnicianIds([]);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to assign technicians");
+    },
+  });
+
   const { mutate: confirmBookingWithPayment, isPending: isConfirmingWithPayment } = useMutation({
     mutationFn: async ({
       toPaymentStatus,
@@ -253,15 +341,18 @@ export function useBookingActions(
     }) => {
       if (!booking) throw new Error("Booking is undefined");
 
-      // 1. Update the booking with total contract value
-      await updateBookingApi(booking.code, {
-        amount: totalAmount,
-      });
+      const needsNewPayment =
+        booking.payment === "UNPAID" ||
+        (booking.payment === "ADVANCE" && toPaymentStatus === "fully_paid");
 
-      // 2. Record the payment
-      await recordBookingPaymentApi(code, toPaymentStatus, amount);
+      if (needsNewPayment) {
+        await recordBookingPaymentApi(
+          code,
+          toPaymentStatus,
+          toPaymentStatus === "fully_paid" ? totalAmount : amount,
+        );
+      }
 
-      // 3. Transition booking status to CONFIRMED
       await transitionBookingStatusApi(code, "CONFIRMED");
     },
     onSuccess: () => {
@@ -292,16 +383,12 @@ export function useBookingActions(
     setAdvancePayment,
     fullPayment,
     setfullPayment,
-    checkoutTeamLeader,
-    setCheckoutTeamLeader,
     checkoutDriver,
     setCheckoutDriver,
     checkoutVehiclePlate,
     setCheckoutVehiclePlate,
     checkoutMealBudget,
     setCheckoutMealBudget,
-    checkoutSignature,
-    setCheckoutSignature,
     showDeclineModal,
     setShowDeclineModal,
     declineReason,
@@ -316,7 +403,13 @@ export function useBookingActions(
     setDamageSelectedAssetId,
     damageQty,
     setDamageQty,
+    damageAttachments,
+    setDamageAttachments,
     staff,
+    selectedTechnicianIds,
+    setSelectedTechnicianIds,
+    assignTechnicians,
+    isAssigningTechnicians,
     myTechnicianAssignment,
     pendingAssignment,
     acceptAssignment,

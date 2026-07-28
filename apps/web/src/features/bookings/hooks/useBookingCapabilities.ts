@@ -11,17 +11,19 @@ import {
   ASSIGNMENT_ACTION_IDS,
   TABS,
   resolveBookingActionUI,
+  createAssignTechnicianAction,
   type BookingAction,
   type TabName,
 } from "@/features/bookings/constants";
+import {
+  getActiveTechnicianAssignments,
+  getDeclinedTechnicianAssignments,
+  isAssignedTechnicianOnBooking,
+  isDeclinedAssignment,
+} from "@/features/bookings/utils/assignmentHelpers";
 
 function isNonDeclinedAssignment(a: any): boolean {
-  if (!a) return false;
-  const status = (a.status || a.responseStatus || "").toString().toUpperCase();
-  if (status === "DECLINED") return false;
-  // Legacy: declined rows often have respondedAt + declineReason
-  if (a.declineReason && a.respondedAt) return false;
-  return true;
+  return !isDeclinedAssignment(a);
 }
 
 /**
@@ -82,8 +84,10 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canEditLogistics = can(PERMISSION.BOOKING_EDIT);
 
   const canReportDamage = can(PERMISSION.DAMAGE_REPORT);
-  const canSubmitEval = can(PERMISSION.EVAL_SUBMIT_INTERNAL);
-  const canViewEval = can(PERMISSION.EVAL_VIEW) || canSubmitEval;
+  const canSubmitEval =
+    can(PERMISSION.EVAL_SUBMIT_INTERNAL) &&
+    isAssignedTechnicianOnBooking(booking?.assignments, authUser?.id);
+  const canViewEval = can(PERMISSION.EVAL_VIEW) || can(PERMISSION.EVAL_SUBMIT_INTERNAL);
 
   /** Finance surfaces (payments, revenue, financial figures) — Admin/CCR only. */
   const showFinancials = can(PERMISSION.PAYMENT_MANAGE);
@@ -182,6 +186,36 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     });
   }, [can, canAny, canViewEval]);
 
+  const declinedTechnicianAssignments = useMemo(
+    () => getDeclinedTechnicianAssignments(booking?.assignments),
+    [booking?.assignments]
+  );
+
+  const activeTechnicianAssignments = useMemo(
+    () => getActiveTechnicianAssignments(booking?.assignments),
+    [booking?.assignments]
+  );
+
+  const assignTechnicianAction = useMemo((): BookingAction | null => {
+    if (!canAssignTechnician || !booking) return null;
+
+    const fromTransitions = statusActions.find(
+      (a) => a.id === "assignment.assign_technician" || a.requiresForm === "assign"
+    );
+    if (fromTransitions) return fromTransitions;
+
+    if (booking.status === "CONFIRMED" || booking.status === "ASSIGNED") {
+      return createAssignTechnicianAction();
+    }
+
+    return null;
+  }, [canAssignTechnician, booking, statusActions]);
+
+  const showDeclinedAssignmentBanner =
+    canAssignTechnician &&
+    declinedTechnicianAssignments.length > 0 &&
+    assignTechnicianAction != null;
+
   const showFieldOpsBanner =
     canAcceptAssignment ||
     canDeclineAssignment ||
@@ -218,6 +252,10 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     advancePreparationAction,
     visibleTabs,
     showFieldOpsBanner,
+    declinedTechnicianAssignments,
+    activeTechnicianAssignments,
+    assignTechnicianAction,
+    showDeclinedAssignmentBanner,
     transitionsLoading,
     transitionsError,
     transitionsResponse,

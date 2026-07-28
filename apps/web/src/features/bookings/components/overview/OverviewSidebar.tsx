@@ -13,14 +13,22 @@ export function OverviewSidebar({
   b: Booking;
   caps: BookingCapabilities;
 }) {
-  const { formatDate } = useDateFormatter();
+  const { formatDate, formatDateTime } = useDateFormatter();
+
+  const assemblyDisplay = b.assemblyDate || b.rentalStart;
+  const dismantleDisplay = b.dismantleDate || b.rentalEnd;
+  const eventMs = b.eventDate ? new Date(b.eventDate).getTime() : NaN;
+  const daysToEvent = Number.isFinite(eventMs)
+    ? Math.max(0, Math.ceil((eventMs - Date.now()) / 86400000))
+    : null;
+  const crewSize = b.assignees.length;
 
   return (
     <>
       <Section title="Schedule" icon={Calendar}>
-        <KV label="Assembly" value={formatDate(b.assemblyDate)} mono />
-        <KV label="Event" value={formatDate(b.eventDate)} mono />
-        <KV label="Dismantle" value={formatDate(b.dismantleDate)} mono />
+        <KV label="Assembly" value={assemblyDisplay ? formatDateTime(assemblyDisplay) : "—"} mono />
+        <KV label="Event" value={b.eventDate ? formatDateTime(b.eventDate) : "—"} mono />
+        <KV label="Dismantle" value={dismantleDisplay ? formatDateTime(dismantleDisplay) : "—"} mono />
       </Section>
 
       {caps.showFinancials && (() => {
@@ -46,17 +54,10 @@ export function OverviewSidebar({
       })()}
 
       <Section title="Quick Stats" icon={CheckCircle2}>
-        <KV
-          label="Days to Event"
-          value={Math.max(
-            0,
-            Math.ceil((new Date(b.eventDate).getTime() - Date.now()) / 86400000)
-          )}
-          mono
-        />
-        <KV label="Crew Size" value={b.assignees.length + 4} mono />
+        <KV label="Days to Event" value={daysToEvent !== null ? daysToEvent : "—"} mono />
+        <KV label="Crew Size" value={crewSize > 0 ? crewSize : "—"} mono />
         <KV label="BOM Items" value={b.bomItems.length} mono />
-        <KV label="Created" value={b.createdAt} mono />
+        <KV label="Created" value={b.createdAt ? formatDate(b.createdAt) : "—"} mono />
       </Section>
     </>
   );

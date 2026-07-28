@@ -152,3 +152,14 @@ export function resolveBookingActionUI(
     variant: isCancel ? "destructive" : "primary",
   };
 }
+
+/** Opens the assign-technician modal even when no status-transition edge exists. */
+export function createAssignTechnicianAction(): BookingAction {
+  const ui = BOOKING_ACTION_UI["assignment.assign_technician"];
+  return {
+    ...ui,
+    targetStatus: "ASSIGNED",
+    permissionKey: "assignment.assign_technician",
+  };
+}
+

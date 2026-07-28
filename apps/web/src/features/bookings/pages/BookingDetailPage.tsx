@@ -11,6 +11,7 @@ import { useBookingCapabilities } from "../hooks/useBookingCapabilities";
 import { BookingHeader } from "../components/BookingHeader";
 import { BookingActionBar } from "../components/BookingActionBar";
 import { BookingActionModal } from "../components/BookingActionModal";
+import { DeclinedAssignmentBanner } from "../components/DeclinedAssignmentBanner";
 import { TechnicianBanner } from "../components/TechnicianBanner";
 import { BookingTabBar } from "../components/BookingTabBar";
 import { DeclineAssignmentModal } from "../components/DeclineAssignmentModal";
@@ -115,6 +116,8 @@ export function BookingDetail() {
 
       <BookingHeader booking={booking} />
 
+      <DeclinedAssignmentBanner booking={booking} caps={caps} actions={actions} />
+
       <TechnicianBanner
         booking={booking}
         caps={caps}
@@ -140,7 +143,7 @@ export function BookingDetail() {
       )}
 
       <DeclineAssignmentModal actions={actions} />
-      <DamageReportModal checkoutSnapshot={checkoutSnapshot} actions={actions} />
+      <DamageReportModal booking={booking} checkoutSnapshot={checkoutSnapshot} actions={actions} />
       <InternalEvalModal booking={booking} evaluations={evaluations} />
       <BomFulfillmentConflictModal
         open={actions.showCheckoutConflictModal}
