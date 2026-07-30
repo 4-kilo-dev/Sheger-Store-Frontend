@@ -31,8 +31,10 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
     setPaymentMethod,
     advancePayment,
     setAdvancePayment,
-    fullPayment,
-    setfullPayment,
+    dailyRate,
+    setDailyRate,
+    rentedDays,
+    setRentedDays,
     checkoutDriver,
     setCheckoutDriver,
     checkoutVehiclePlate,
@@ -115,6 +117,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
   const stagehandLeaderName = booking.teamLeader || "— Not assigned —";
   const screenTypeLabel = booking.screenType || "—";
   const screenSizeLabel = booking.size > 0 ? `${booking.size} sqm` : "—";
+  const computedTotal = dailyRate > 0 && rentedDays > 0 ? dailyRate * rentedDays : 0;
 
   return (
     <div
@@ -145,7 +148,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
             </p>
 
             {showPaymentCapture && (
-                <div className="mt-3 grid grid-cols-4 gap-3">
+                <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
                   <label
                     className="text-[11px] font-semibold"
                     style={{ color: "var(--text-2)" }}
@@ -183,12 +186,26 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                     className="text-[11px] font-semibold"
                     style={{ color: "var(--text-2)" }}
                   >
-                    Advance Payment (ETB)
+                    Number of Days
+                    <input
+                      type="text"
+                      readOnly
+                      value={rentedDays > 0 ? String(rentedDays) : "—"}
+                      className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px] opacity-80"
+                      style={{ borderColor: "var(--border)" }}
+                      title="Set at booking intake with event dates"
+                    />
+                  </label>
+                  <label
+                    className="text-[11px] font-semibold"
+                    style={{ color: "var(--text-2)" }}
+                  >
+                    Daily Rate (ETB)
                     <input
                       type="number"
-                      value={advancePayment || ""}
-                      onChange={(e) => setAdvancePayment(parseFloat(e.target.value) || 0)}
-                      placeholder="Enter amount"
+                      value={dailyRate || ""}
+                      onChange={(e) => setDailyRate(parseFloat(e.target.value) || 0)}
+                      placeholder="e.g. 60000"
                       className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px]"
                       style={{ borderColor: "var(--border)" }}
                     />
@@ -197,52 +214,76 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                     className="text-[11px] font-semibold"
                     style={{ color: "var(--text-2)" }}
                   >
-                    Total Contract Value (ETB)
+                    Computed Total (ETB)
                     <input
-                      type="number"
-                      value={fullPayment || ""}
-                      onChange={(e) => setfullPayment(parseFloat(e.target.value) || 0)}
-                      className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px]"
+                      type="text"
+                      readOnly
+                      value={computedTotal > 0 ? computedTotal.toLocaleString() : "—"}
+                      className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px] opacity-80"
                       style={{ borderColor: "var(--border)" }}
                     />
                   </label>
+                  {paymentType === "advance" && (
+                    <label
+                      className="text-[11px] font-semibold"
+                      style={{ color: "var(--text-2)" }}
+                    >
+                      Advance Payment (ETB)
+                      <input
+                        type="number"
+                        value={advancePayment || ""}
+                        onChange={(e) => setAdvancePayment(parseFloat(e.target.value) || 0)}
+                        placeholder="Enter amount"
+                        className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px]"
+                        style={{ borderColor: "var(--border)" }}
+                      />
+                    </label>
+                  )}
                 </div>
               )}
               
             {showPaymentCapture && (
                 <div className="mt-2 text-[10px]" style={{ color: "var(--text-3)" }}>
                   {paymentType === "advance" ? (
-                    advancePayment > 0 && fullPayment >= 1000 ? (
+                    advancePayment > 0 && computedTotal >= 1000 ? (
                       <span>
                         Advance payment will record{" "}
                         <strong>ETB {advancePayment.toLocaleString()}</strong> (
-                        {((advancePayment / fullPayment) * 100).toFixed(0)}
+                        {((advancePayment / computedTotal) * 100).toFixed(0)}
                         %) as paid, leaving a balance of{" "}
-                        <strong>ETB {(fullPayment - advancePayment).toLocaleString()} remaining.</strong>
+                        <strong>ETB {(computedTotal - advancePayment).toLocaleString()} remaining.</strong>
                       </span>
                     ) : (
-                      <span>Enter the advance amount and total contract value to preview the payment split.</span>
+                      <span>Enter the daily rate (after materials are confirmed) and advance amount to preview the payment split.</span>
                     )
-                  ) : fullPayment >= 1000 ? (
+                  ) : computedTotal >= 1000 ? (
                     <span>
                       Full payment will record the entire{" "}
-                      <strong>ETB {fullPayment.toLocaleString()}</strong> as paid, leaving no balance.
+                      <strong>ETB {computedTotal.toLocaleString()}</strong> as paid, leaving no balance.
                     </span>
                   ) : (
-                    <span>Enter the total contract value to continue.</span>
+                    <span>Enter the daily rate to compute the contract total (days × rate).</span>
                   )}
                 </div>
               )}
             {showPaymentCapture &&
-              fullPayment < 1000 && (
+              rentedDays <= 0 && (
                 <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
                   <AlertCircle className="h-3.5 w-3.5" />
-                  <span>Minimum payment amount is ETB 1,000.</span>
+                  <span>This booking has no number of days set — update the booking schedule first.</span>
+                </div>
+              )}
+            {showPaymentCapture &&
+              rentedDays > 0 &&
+              (computedTotal < 1000 || dailyRate <= 0) && (
+                <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>Daily rate is required (computed total min ETB 1,000).</span>
                 </div>
               )}
             {showPaymentCapture &&
               paymentType === "advance" &&
-              advancePayment > fullPayment && (
+              advancePayment > computedTotal && computedTotal >= 1000 && (
                 <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
                   <AlertCircle className="h-3.5 w-3.5" />
                   <span>Advance Payment can't be greater than total payment.</span>
@@ -250,7 +291,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
               )}
             {showPaymentCapture &&
               paymentType === "advance" &&
-              fullPayment >= 1000 &&
+              computedTotal >= 1000 &&
               advancePayment <= 0 && (
                 <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
                   <AlertCircle className="h-3.5 w-3.5" />
@@ -548,8 +589,12 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
               }
               assignTechnicians(selectedTechnicianIds);
             } else if (showPaymentCapture) {
-              if (fullPayment < 1000) {
-                toast.error("Minimum payment amount is ETB 1,000");
+              if (rentedDays <= 0) {
+                toast.error("This booking has no number of days set — update the booking schedule first.");
+                return;
+              }
+              if (computedTotal < 1000 || dailyRate <= 0) {
+                toast.error("Daily rate is required (computed total min ETB 1,000).");
                 return;
               }
               if (paymentType === "advance") {
@@ -557,20 +602,24 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                   toast.error("Advance payment must be greater than ETB 0");
                   return;
                 }
-                if (advancePayment > fullPayment) {
+                if (advancePayment > computedTotal) {
                   toast.error("Advance payment cannot exceed the total payment amount");
                   return;
                 }
                 confirmBookingWithPayment({
                   toPaymentStatus: "advance",
                   amount: advancePayment,
-                  totalAmount: fullPayment,
+                  totalAmount: computedTotal,
+                  pricingDailyRate: dailyRate,
+                  pricingRentedDays: rentedDays,
                 });
               } else {
                 confirmBookingWithPayment({
                   toPaymentStatus: "fully_paid",
-                  amount: fullPayment,
-                  totalAmount: fullPayment,
+                  amount: computedTotal,
+                  totalAmount: computedTotal,
+                  pricingDailyRate: dailyRate,
+                  pricingRentedDays: rentedDays,
                 });
               }
             } else {
@@ -590,8 +639,10 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
             (selectedAction.requiresReason && cancellationReason.trim().length < 10) ||
             (isAssignTechnicianAction && selectedTechnicianIds.length === 0) ||
             (showPaymentCapture &&
-              (fullPayment < 1000 ||
-                (paymentType === "advance" && advancePayment > fullPayment) ||
+              (computedTotal < 1000 ||
+                dailyRate <= 0 ||
+                rentedDays <= 0 ||
+                (paymentType === "advance" && advancePayment > computedTotal) ||
                 (paymentType === "advance" && advancePayment <= 0))) ||
             (isCheckinAction && !allCheckinItemsVerified)
           }

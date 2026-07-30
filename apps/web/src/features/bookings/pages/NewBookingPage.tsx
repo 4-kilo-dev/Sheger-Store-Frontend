@@ -34,9 +34,9 @@ export function NewBooking() {
   const [form, setForm] = useState({
     client: "", contactPerson: "", contactPhone: "",
     venue: "", assemblyDate: "", eventDate: "", dismantleDate: "",
+    rentedDays: 1,
     itemServiceSpec: "", size: "",
     notes: "",
-    amount: 0, paymentTerms: "UNPAID",
     customFields: {} as Record<string, any>,
   });
   const set = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
@@ -86,6 +86,9 @@ export function NewBooking() {
         if (dismantle.getTime() < assembly.getTime()) {
           errors.push("Dismantle Date & Time cannot be earlier than Assembly Date & Time");
         }
+      }
+      if (!form.rentedDays || form.rentedDays < 1) {
+        errors.push("Number of days must be at least 1");
       }
     }
     return errors;
@@ -289,6 +292,21 @@ export function NewBooking() {
                 </div>
               </div>
 
+              <Field label="Number of Days">
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={form.rentedDays || ""}
+                  onChange={(e) => set("rentedDays", parseInt(e.target.value, 10) || 0)}
+                  placeholder="e.g. 3"
+                  className={inputCls}
+                />
+              </Field>
+              <p className="text-[11px]" style={{ color: "var(--text-3)" }}>
+                Billable rental days for pricing. Independent of the assembly / event / dismantle window.
+              </p>
+
               {getStepErrors(1).length > 0 && (
                 <div className="mt-2 rounded p-2.5 text-[11px] border" style={{ color: "var(--destructive)", backgroundColor: "color-mix(in oklab, var(--destructive) 8%, transparent)", borderColor: "color-mix(in oklab, var(--destructive) 20%, transparent)" }}>
                   <div className="font-bold mb-1">Validation Errors:</div>
@@ -453,6 +471,7 @@ export function NewBooking() {
                   ["Assembly Date", form.assemblyDate ? form.assemblyDate.replace("T", " ") : "—"],
                   ["Event Date", form.eventDate ? form.eventDate.replace("T", " ") : "—"],
                   ["Dismantle Date", form.dismantleDate ? form.dismantleDate.replace("T", " ") : "—"],
+                  ["Number of Days", form.rentedDays > 0 ? String(form.rentedDays) : "—"],
                   ["Screen Size (sqm)", form.size ? `${form.size} sqm` : "—"],
                   ["Required Spec", form.itemServiceSpec || "—"],
 
@@ -525,6 +544,10 @@ export function NewBooking() {
                 <div>
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Event</div>
                   <div className="font-mono font-semibold">{form.eventDate ? form.eventDate.replace("T", " ") : "—"}</div>
+                </div>
+                <div className="col-span-2">
+                  <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Number of Days</div>
+                  <div className="font-semibold">{form.rentedDays > 0 ? form.rentedDays : "—"}</div>
                 </div>
                 <div className="col-span-2">
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Screen Size</div>

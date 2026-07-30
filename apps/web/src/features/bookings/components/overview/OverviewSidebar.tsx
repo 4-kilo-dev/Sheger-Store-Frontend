@@ -29,12 +29,18 @@ export function OverviewSidebar({
         <KV label="Assembly" value={assemblyDisplay ? formatDateTime(assemblyDisplay) : "—"} mono />
         <KV label="Event" value={b.eventDate ? formatDateTime(b.eventDate) : "—"} mono />
         <KV label="Dismantle" value={dismantleDisplay ? formatDateTime(dismantleDisplay) : "—"} mono />
+        {b.rentedDays != null && b.rentedDays > 0 && (
+          <KV label="Number of Days" value={String(b.rentedDays)} mono />
+        )}
       </Section>
 
       {caps.showFinancials && (() => {
         const summary = getPaymentSummary(b);
         return (
           <Section title="Financial" icon={DollarSign}>
+            {b.dailyRate != null && b.dailyRate > 0 && (
+              <KV label="Daily Rate" value={`ETB ${b.dailyRate.toLocaleString()}`} mono />
+            )}
             <KV label="Paid" value={`ETB ${summary.paid.toLocaleString()}`} mono />
             <KV
               label="Total"

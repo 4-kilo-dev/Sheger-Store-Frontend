@@ -66,8 +66,14 @@ export function BookingHeader({ booking }: BookingHeaderProps) {
           <div className="text-right">
             <div className="label-eyebrow">Total Contract Value</div>
             <div className="mt-1 font-mono text-[24px] font-bold">
-              ETB {booking.amount.toLocaleString()}
+              ETB {(booking.paymentAmount ?? booking.amount ?? 0).toLocaleString()}
             </div>
+            {booking.dailyRate != null && booking.rentedDays != null && booking.dailyRate > 0 && (
+              <div className="mt-1 text-[11px]" style={{ color: "var(--text-3)" }}>
+                ETB {booking.dailyRate.toLocaleString()} × {booking.rentedDays} day
+                {booking.rentedDays === 1 ? "" : "s"}
+              </div>
+            )}
           </div>
         )}
       </div>

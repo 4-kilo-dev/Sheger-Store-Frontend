@@ -41,7 +41,8 @@ export function useBookingActions(
   const [paymentType, setPaymentType] = useState<"advance" | "fully_paid">("advance");
   const [paymentMethod, setPaymentMethod] = useState("Bank Transfer");
   const [advancePayment, setAdvancePayment] = useState(0);
-  const [fullPayment, setfullPayment] = useState(0);
+  const [dailyRate, setDailyRate] = useState(0);
+  const [rentedDays, setRentedDays] = useState(0);
 
   const [checkoutDriver, setCheckoutDriver] = useState("");
   const [checkoutVehiclePlate, setCheckoutVehiclePlate] = useState("");
@@ -64,20 +65,18 @@ export function useBookingActions(
 
   useEffect(() => {
     if (booking) {
-      const paid = booking.paymentAmount ?? 0;
+      setDailyRate(booking.dailyRate ?? 0);
+      setRentedDays(booking.rentedDays ?? 0);
 
-      if (booking.payment === "PAID" && paid > 0) {
-        setfullPayment(paid);
+      if (booking.payment === "PAID") {
         setPaymentType("fully_paid");
-        setAdvancePayment(paid);
+        setAdvancePayment(booking.advanceAmount ?? booking.paymentAmount ?? 0);
       } else if (booking.payment === "ADVANCE") {
         setPaymentType("advance");
-        setAdvancePayment(paid > 0 ? paid : 0);
-        setfullPayment(0);
+        setAdvancePayment(booking.advanceAmount ?? 0);
       } else {
         setPaymentType("advance");
         setAdvancePayment(0);
-        setfullPayment(booking.amount > 0 ? booking.amount : 0);
       }
     }
   }, [booking]);
@@ -334,12 +333,27 @@ export function useBookingActions(
       toPaymentStatus,
       amount,
       totalAmount,
+      pricingDailyRate,
+      pricingRentedDays,
     }: {
       toPaymentStatus: string;
       amount: number;
       totalAmount: number;
+      pricingDailyRate: number;
+      pricingRentedDays: number;
     }) => {
       if (!booking) throw new Error("Booking is undefined");
+
+      if (pricingDailyRate > 0 && pricingRentedDays > 0) {
+        await updateBookingApi(booking.id, {
+          dailyRate: String(pricingDailyRate),
+          rentedDays: pricingRentedDays,
+        });
+      } else if (pricingDailyRate > 0) {
+        await updateBookingApi(booking.id, {
+          dailyRate: String(pricingDailyRate),
+        });
+      }
 
       const needsNewPayment =
         booking.payment === "UNPAID" ||
@@ -381,8 +395,10 @@ export function useBookingActions(
     setPaymentMethod,
     advancePayment,
     setAdvancePayment,
-    fullPayment,
-    setfullPayment,
+    dailyRate,
+    setDailyRate,
+    rentedDays,
+    setRentedDays,
     checkoutDriver,
     setCheckoutDriver,
     checkoutVehiclePlate,

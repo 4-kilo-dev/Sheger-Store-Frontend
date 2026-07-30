@@ -407,16 +407,22 @@ function OverviewTab({ booking }: { booking: Booking }) {
         <KV label="Assembly" value={booking.assemblyDate} mono />
         <KV label="Event" value={booking.eventDate} mono />
         <KV label="Dismantle" value={booking.dismantleDate} mono />
+        {booking.rentedDays != null && booking.rentedDays > 0 ? (
+          <KV label="Number of Days" value={String(booking.rentedDays)} mono />
+        ) : null}
       </Section>
       <Section title="Financial" icon={DollarSign}>
-        <KV label="Contract" value={formatCurrency(booking.amount)} mono />
+        {booking.dailyRate != null && booking.dailyRate > 0 ? (
+          <KV label="Daily Rate" value={formatCurrency(booking.dailyRate)} mono />
+        ) : null}
+        <KV label="Total" value={formatCurrency(booking.paymentAmount ?? booking.amount)} mono />
         <KV label="Paid" value={formatCurrency(getPaymentSummary(booking).paid)} mono />
         <KV
           label="Balance"
           value={
             getPaymentSummary(booking).remaining != null
               ? formatCurrency(getPaymentSummary(booking).remaining as number)
-              : "Unknown — awaiting full payment"
+              : "Unknown — awaiting pricing"
           }
           mono
         />
@@ -707,20 +713,26 @@ function PaymentsTab({ booking }: { booking: Booking }) {
   const canManagePayments = can(PERMISSION.PAYMENT_MANAGE);
   const summary = getPaymentSummary(booking);
   const paymentMutation = useRecordBookingPayment();
+  const updateBookingMutation = useUpdateBooking();
   const [recordOpen, setRecordOpen] = useState(false);
-  const [amount, setAmount] = useState(String(booking.amount));
+  const [pricingOpen, setPricingOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [dailyRate, setDailyRate] = useState(String(booking.dailyRate ?? ""));
+  const [rentedDays, setRentedDays] = useState(String(booking.rentedDays ?? ""));
   const [toStatus, setToStatus] = useState<"advance" | "fully_paid">("advance");
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
+  const computedTotal =
+    Number(dailyRate) > 0 && Number(rentedDays) > 0
+      ? Number(dailyRate) * Number(rentedDays)
+      : null;
+
   const tx =
-    booking.payment === "PAID" || booking.payment === "ADVANCE"
-      ? [
-          {
-            n: booking.payment === "PAID" ? "Full payment" : "Advance payment",
-            a: summary.paid,
-          },
-        ]
-      : [];
+    booking.payment === "PAID"
+      ? [{ n: "Full payment", a: summary.paid }]
+      : booking.payment === "ADVANCE" && (booking.advanceAmount ?? 0) > 0
+        ? [{ n: "Advance payment", a: booking.advanceAmount ?? 0 }]
+        : [];
 
   const handleRecordPayment = async () => {
     const parsed = Number(amount);
@@ -737,12 +749,57 @@ function PaymentsTab({ booking }: { booking: Booking }) {
     }
   };
 
+  const handleSavePricing = async () => {
+    const rate = Number(dailyRate);
+    const days = Number(rentedDays);
+    if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(days) || days <= 0) {
+      setPaymentError("Daily rate and number of days must be greater than zero.");
+      return;
+    }
+    setPaymentError(null);
+    try {
+      await updateBookingMutation.mutateAsync({
+        bookingId: booking.id,
+        payload: { dailyRate: String(rate), rentedDays: days },
+      });
+      setPricingOpen(false);
+    } catch (e) {
+      setPaymentError(e instanceof Error ? e.message : "Failed to update pricing.");
+    }
+  };
+
   if (!canManagePayments && tx.length === 0) {
     return <EmptyState title="You don't have access to payment details for this booking." />;
   }
 
   return (
     <View style={{ gap: 14 }}>
+      {canManagePayments ? (
+        <Section
+          title="Pricing"
+          icon={DollarSign}
+          action={
+            <Button variant="ghost" onPress={() => setPricingOpen(true)}>
+              Edit
+            </Button>
+          }
+        >
+          {booking.dailyRate != null && booking.dailyRate > 0 ? (
+            <KV label="Daily Rate" value={formatCurrency(booking.dailyRate)} mono />
+          ) : null}
+          {booking.rentedDays != null && booking.rentedDays > 0 ? (
+            <KV label="Number of Days" value={String(booking.rentedDays)} mono />
+          ) : null}
+          <KV
+            label="Computed Total"
+            value={
+              summary.total != null ? formatCurrency(summary.total) : "Not set"
+            }
+            mono
+          />
+        </Section>
+      ) : null}
+
       <Section
         title="Transactions"
         icon={DollarSign}
@@ -768,26 +825,59 @@ function PaymentsTab({ booking }: { booking: Booking }) {
         )}
       </Section>
       <Section title="Summary" icon={DollarSign}>
-        <KV label="Contract" value={formatCurrency(booking.amount)} mono />
+        <KV label="Total" value={formatCurrency(summary.total ?? booking.amount)} mono />
         <KV label="Paid" value={formatCurrency(summary.paid)} mono />
         <KV
           label="Balance Due"
-          value={summary.remaining != null ? formatCurrency(summary.remaining) : "Unknown"}
+          value={summary.remaining != null ? formatCurrency(summary.remaining) : "Pending"}
           mono
         />
       </Section>
 
+      <BottomSheet visible={pricingOpen} title="Edit Pricing" onClose={() => setPricingOpen(false)}>
+        <Field label="Daily Rate (ETB)">
+          <Input value={dailyRate} onChangeText={setDailyRate} keyboardType="numeric" />
+        </Field>
+        <Field label="Number of Days">
+          <Input value={rentedDays} onChangeText={setRentedDays} keyboardType="numeric" />
+        </Field>
+        {computedTotal != null ? (
+          <Field label="Computed Total">
+            <Input editable={false} value={formatCurrency(computedTotal)} />
+          </Field>
+        ) : null}
+        {paymentError ? (
+          <AppText variant="small" color={colors.destructive}>
+            {paymentError}
+          </AppText>
+        ) : null}
+        <Button disabled={updateBookingMutation.isPending} onPress={handleSavePricing}>
+          {updateBookingMutation.isPending ? "Saving..." : "Save Pricing"}
+        </Button>
+      </BottomSheet>
+
       <BottomSheet visible={recordOpen} title="Record Payment" onClose={() => setRecordOpen(false)}>
         <Field label="Amount (ETB)">
-          <Input value={amount} onChangeText={setAmount} keyboardType="numeric" />
+          <Input
+            value={amount}
+            onChangeText={setAmount}
+            keyboardType="numeric"
+            placeholder={
+              booking.payment === "ADVANCE" && summary.remaining != null
+                ? String(summary.remaining)
+                : "50000"
+            }
+          />
         </Field>
         <Field label="Payment Status">
           <View style={styles.choiceWrap}>
-            <Choice
-              label="Advance"
-              active={toStatus === "advance"}
-              onPress={() => setToStatus("advance")}
-            />
+            {booking.payment !== "ADVANCE" ? (
+              <Choice
+                label="Advance"
+                active={toStatus === "advance"}
+                onPress={() => setToStatus("advance")}
+              />
+            ) : null}
             <Choice
               label="Fully Paid"
               active={toStatus === "fully_paid"}

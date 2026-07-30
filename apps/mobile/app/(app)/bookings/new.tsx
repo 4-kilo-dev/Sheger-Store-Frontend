@@ -5,7 +5,6 @@ import {
   Calendar,
   CheckCircle2,
   ClipboardCheck,
-  DollarSign,
   MapPin,
   MessageSquare,
   Package,
@@ -28,7 +27,6 @@ import {
   TextArea,
 } from "@/components/ui";
 import { alpha, colors, radius } from "@/theme/tokens";
-import { formatCurrency } from "@/utils/format";
 import { useCreateBooking, useCustomFieldDefinitions } from "@/hooks/useOperations";
 
 const STEPS = [
@@ -37,7 +35,6 @@ const STEPS = [
   "Venue & Date",
   "Screen Spec",
   "Team",
-  "Payment",
   "Review",
 ] as const;
 const screenTypes = ["P2.97", "P4", "P5", "P2.97-New", "P3.91 INDOOR", "P3.91 OUTDOOR"] as const;
@@ -58,8 +55,7 @@ type BookingDraft = {
   chief: string;
   technician: string;
   stageHand: string;
-  amount: number;
-  paymentTerms: string;
+  rentedDays: number;
 };
 
 export default function NewBookingScreen() {
@@ -85,8 +81,7 @@ export default function NewBookingScreen() {
     chief: "",
     technician: "",
     stageHand: "TEAM 1 · Abel",
-    amount: 75000,
-    paymentTerms: "ADVANCE",
+    rentedDays: 1,
   });
 
   const set = <K extends keyof BookingDraft>(key: K, value: BookingDraft[K]) =>
@@ -108,6 +103,7 @@ export default function NewBookingScreen() {
       if (!form.venue.trim()) errors.push("Venue is required.");
       if (!form.assemblyDate) errors.push("Assembly date is required.");
       if (!form.eventDate) errors.push("Event date is required.");
+      if (!form.rentedDays || form.rentedDays < 1) errors.push("Number of days must be at least 1.");
       if (form.assemblyDate && new Date(form.assemblyDate) < new Date(new Date().toDateString())) {
         errors.push("Assembly date cannot be in the past.");
       }
@@ -138,8 +134,7 @@ export default function NewBookingScreen() {
         screenType: form.screenType,
         size: form.size,
         arrangement: form.arrangement,
-        amount: form.amount,
-        paymentTerms: form.paymentTerms as "UNPAID" | "ADVANCE" | "PAID",
+        rentedDays: form.rentedDays,
         ctoNotes: form.ctoNotes || form.ctoArrangement,
         customValues,
       });
@@ -288,6 +283,13 @@ export default function NewBookingScreen() {
               placeholder="YYYY-MM-DD"
             />
           </Field>
+          <Field label="Number of Days">
+            <Input
+              value={String(form.rentedDays)}
+              keyboardType="numeric"
+              onChangeText={(value) => set("rentedDays", Number(value) || 0)}
+            />
+          </Field>
         </Section>
       ) : null}
 
@@ -340,30 +342,6 @@ export default function NewBookingScreen() {
         </Section>
       ) : null}
 
-      {step === "Payment" ? (
-        <Section title="Payment Terms" icon={DollarSign}>
-          <Field label="Total Contract Value (ETB)">
-            <Input
-              value={String(form.amount)}
-              keyboardType="numeric"
-              onChangeText={(value) => set("amount", Number(value) || 0)}
-            />
-          </Field>
-          <Field label="Initial Status">
-            <View style={styles.choiceWrap}>
-              {["UNPAID", "ADVANCE", "PAID"].map((status) => (
-                <Choice
-                  key={status}
-                  label={status}
-                  active={form.paymentTerms === status}
-                  onPress={() => set("paymentTerms", status)}
-                />
-              ))}
-            </View>
-          </Field>
-        </Section>
-      ) : null}
-
       {step === "Review" ? (
         <Section title="Review & Confirm" icon={CheckCircle2}>
           {submitError ? (
@@ -379,9 +357,9 @@ export default function NewBookingScreen() {
             ["Venue", form.venue || "-"],
             ["Assembly", form.assemblyDate || "-"],
             ["Event", form.eventDate || "-"],
+            ["Number of Days", String(form.rentedDays)],
             ["Screen", `${form.screenType} · ${form.size} sqm · ${form.arrangement}`],
             ["Team", `${form.chief || "?"} / ${form.technician || "?"} · ${form.stageHand}`],
-            ["Contract", `${formatCurrency(form.amount)} (${form.paymentTerms})`],
           ].map(([label, value]) => (
             <Field key={label} label={label}>
               <Input editable={false} value={value} />

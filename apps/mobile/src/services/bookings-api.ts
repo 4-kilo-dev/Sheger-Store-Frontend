@@ -48,6 +48,8 @@ interface RawBooking {
   rentalEnd?: string;
   paymentStatus?: string;
   paymentAmount?: string | number;
+  dailyRate?: string | number;
+  advanceAmount?: string | number;
   amount?: string;
   mealProvision?: string;
   notes?: string;
@@ -69,6 +71,12 @@ interface RawBooking {
     createdAt: string;
   }>;
   customFields?: Record<string, unknown>;
+}
+
+function parseNumericField(value: string | number | null | undefined): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = typeof value === "number" ? value : parseFloat(value);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 function mapBackendBookingToFrontend(b: RawBooking): Booking {
@@ -117,7 +125,7 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
     ? screenAreaSqm
     : Number.isFinite(parsedSpecSize)
       ? parsedSpecSize
-      : b.rentedDays || 0;
+      : 0;
   const arrangement = specParts[2] || b.itemServiceSpec || "Standard layout";
 
   const paymentAmountNum =
@@ -161,7 +169,10 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
     status: (b.status || "RESERVED") as BookingStatus,
     payment,
     amount: paymentAmountNum || parseFloat(b.amount || "0"),
-    paymentAmount: Number.isFinite(paymentAmountNum) ? paymentAmountNum : undefined,
+    paymentAmount: parseNumericField(b.paymentAmount),
+    dailyRate: parseNumericField(b.dailyRate),
+    rentedDays: b.rentedDays ?? undefined,
+    advanceAmount: parseNumericField(b.advanceAmount),
     ctoNotes: b.ctoConsultationNotes || b.notes || "",
     bomItems,
     teamLeader,
@@ -199,8 +210,7 @@ export async function createBookingApi(form: {
   screenType?: string;
   size?: number;
   arrangement?: string;
-  amount?: number;
-  paymentTerms?: "UNPAID" | "ADVANCE" | "PAID";
+  rentedDays?: number;
   ctoNotes?: string;
   customValues?: Record<string, unknown>;
 }): Promise<Booking> {
@@ -217,14 +227,13 @@ export async function createBookingApi(form: {
     ? `${form.dismantleDate}T23:59:59.000Z`
     : `${form.eventDate || new Date().toISOString().slice(0, 10)}T23:59:00.000Z`;
 
-  const bookingPayload = {
+  const bookingPayload: Record<string, unknown> = {
     customerId: customer.id,
     eventDate: eventDateStr,
     eventLocation: form.venue || "TBD",
     deliveryDate: assemblyStartStr,
     rentalStart: eventDateStr,
     rentalEnd: dismantleDateStr,
-    rentedDays: 1,
     assemblyStart: assemblyStartStr,
     assemblyEnd: assemblyEndStr,
     disassemblyStart: dismantleDateStr,
@@ -236,18 +245,11 @@ export async function createBookingApi(form: {
     customFields: form.customValues || {},
   };
 
-  const booking = await client.post<RawBooking>("/api/bookings", bookingPayload);
-
-  if (form.amount && form.amount > 0) {
-    try {
-      await client.post(`/api/bookings/${booking.id}/payment`, {
-        toStatus: form.paymentTerms === "PAID" ? "fully_paid" : "advance",
-        amount: String(form.amount),
-      });
-    } catch (e) {
-      console.error("Failed to record initial booking payment", e);
-    }
+  if (form.rentedDays != null && form.rentedDays > 0) {
+    bookingPayload.rentedDays = form.rentedDays;
   }
+
+  const booking = await client.post<RawBooking>("/api/bookings", bookingPayload);
 
   return mapBackendBookingToFrontend(booking);
 }
@@ -300,19 +302,23 @@ export interface PaymentSummary {
   remaining: number | null;
 }
 
-/**
- * Honest payment figures from the fields the API actually exposes (`payment`
- * status + `paymentAmount`) — no `/2` guessing. Mirrors web's getPaymentSummary.
- */
+/** Payment figures from paymentAmount (total), advanceAmount (deposit), and payment status. */
 export function getPaymentSummary(b: Booking): PaymentSummary {
-  const recorded = b.paymentAmount ?? b.amount ?? 0;
+  const totalRaw = b.paymentAmount ?? b.amount;
+  const total = totalRaw != null && totalRaw > 0 ? totalRaw : null;
+
   if (b.payment === "PAID") {
-    return { paid: recorded, total: recorded, remaining: 0 };
+    return { paid: total ?? 0, total, remaining: 0 };
   }
   if (b.payment === "ADVANCE") {
-    return { paid: recorded, total: null, remaining: null };
+    const paid = b.advanceAmount ?? 0;
+    return {
+      paid,
+      total,
+      remaining: total != null ? Math.max(0, total - paid) : null,
+    };
   }
-  return { paid: 0, total: null, remaining: null };
+  return { paid: 0, total, remaining: total };
 }
 
 export async function updateBookingApi(
