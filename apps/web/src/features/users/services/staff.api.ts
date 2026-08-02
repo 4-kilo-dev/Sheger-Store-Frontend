@@ -43,8 +43,9 @@ export async function removeRolePermissionApi(roleId: string, permissionId: stri
 export async function getStaffApi(): Promise<StaffMember[]> {
   const users = await client.get<any[]>("/api/users");
   return users.map((u) => {
-    // Determine the role name based on nested object structure
-    const roleName = u.role?.displayName || (u.roles && u.roles[0]?.displayName) || "Staff";
+    const roleObj = u.role || (u.roles && u.roles[0]) || null;
+    const roleName = roleObj?.displayName || "Staff";
+    const roleKey = roleObj?.key || undefined;
     
     const initials = u.name
       .split(" ")
@@ -57,6 +58,7 @@ export async function getStaffApi(): Promise<StaffMember[]> {
       id: u.id,
       name: u.name,
       role: roleName,
+      roleKey,
       team: u.team || "Operations",
       phone: u.phone || "",
       status: u.active ? "ACTIVE" : "OFF DUTY",

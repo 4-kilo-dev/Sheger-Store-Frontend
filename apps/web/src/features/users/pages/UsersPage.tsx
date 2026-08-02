@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Search, UserCheck, Users, Radio, BriefcaseBusiness, Phone, Calendar } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { STAFF_ROLES } from "@/features/checkout/services/operations.api";
+import { STAFF_ROLES, staffMatchesRoleFilter } from "@/features/checkout/services/operations.api";
 import { AddStaffModal } from "../components/AddStaffModal";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStaffApi, resetPasswordApi, toggleUserActiveApi, setStaffFreelancerApi } from "@/features/users/services/staff.api";
@@ -96,7 +96,7 @@ export function StaffPage() {
     () =>
       staffList.filter(
         (person) =>
-          (roleFilter === "All" || person.role === roleFilter) &&
+          staffMatchesRoleFilter(person, roleFilter) &&
           `${person.name} ${person.role} ${person.team}`.toLowerCase().includes(query.toLowerCase()),
       ),
     [query, roleFilter, staffList],
@@ -112,13 +112,17 @@ export function StaffPage() {
   return (
     <AppShell>
       {/* Header */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+      <div className="mb-6 flex flex-col gap-3 sm:gap-4">
         <div>
           <div className="label-eyebrow mb-1">People Operations</div>
           <h1 className="text-[20px] sm:text-[24px] font-bold tracking-tight">Staff Management</h1>
           <p className="mt-1 text-[12px] text-text-2">Roles, duty status, workload, and crew contact directory.</p>
         </div>
-        {canManageStaff && <AddStaffModal />}
+        {canManageStaff && (
+          <div className="self-start">
+            <AddStaffModal />
+          </div>
+        )}
       </div>
 
       {!canViewStaff ? (

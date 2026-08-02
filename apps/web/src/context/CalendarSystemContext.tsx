@@ -16,7 +16,7 @@ const CalendarSystemContext = createContext<CalendarSystemContextType | undefine
 
 export function CalendarSystemProvider({ children }: { children: React.ReactNode }) {
   const authUser = useAuthUser();
-  const [calendarSystem, setCalendarSystemState] = useState<CalendarSystem>("gregorian");
+  const [calendarSystem, setCalendarSystemState] = useState<CalendarSystem>("ethiopic");
   const [numeralsSystem, setNumeralsSystemState] = useState<NumeralsSystem>("latn");
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
 

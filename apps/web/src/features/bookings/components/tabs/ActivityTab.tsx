@@ -5,8 +5,10 @@ import {
   type Booking,
   type BookingStatus,
 } from "@/features/bookings/services/bookings.api";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 export function ActivityTab({ b }: { b: Booking }) {
+  const { formatDateTime } = useDateFormatter();
   const log = b.statusHistory || [];
   
   return (
@@ -23,12 +25,7 @@ export function ActivityTab({ b }: { b: Booking }) {
               <div className="flex items-center justify-between">
                 <span className="font-semibold">{l.actorName}</span>
                 <span className="font-mono text-[10px]" style={{ color: "var(--text-3)" }}>
-                  {new Date(l.createdAt).toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {formatDateTime(l.createdAt)}
                 </span>
               </div>
               <div className="mt-1" style={{ color: "var(--text-2)" }}>

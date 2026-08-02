@@ -14,6 +14,8 @@ export interface InventoryItem {
   condition: InventoryCondition;
   availability: InventoryAvailability;
   location: string;
+  /** Optional inventory notes — never shown as location. */
+  notes?: string;
   lastService: string;
   nextService: string;
 }
@@ -121,7 +123,9 @@ export async function getCombinedInventoryApi(): Promise<InventoryItem[]> {
       damaged: 0,
       condition: "GOOD",
       availability: "AVAILABLE",
-      location: p.notes || "Main Warehouse",
+      // Location is warehouse default; notes stay notes (not location).
+      location: "Main Warehouse",
+      notes: p.notes || undefined,
       lastService: new Date().toISOString().slice(0, 10),
       nextService: new Date().toISOString().slice(0, 10),
     };
@@ -134,7 +138,7 @@ export async function getCombinedInventoryApi(): Promise<InventoryItem[]> {
       id: i.assetTag || i.id,
       name: i.name,
       category: cat?.name || "Serialized Asset",
-      model: i.notes || "VV Serialized",
+      model: "VV Serialized",
       total: 1,
       available: isDamaged ? 0 : 1,
       reserved: 0,
@@ -143,6 +147,7 @@ export async function getCombinedInventoryApi(): Promise<InventoryItem[]> {
       condition: isDamaged ? "DAMAGED" : "GOOD",
       availability: isDamaged ? "RESERVED" : "AVAILABLE",
       location: "Main Warehouse",
+      notes: i.notes || undefined,
       lastService: i.purchasedAt ? i.purchasedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
       nextService: new Date().toISOString().slice(0, 10),
     };
@@ -161,7 +166,7 @@ export async function getInventoryItemDetailApi(id: string): Promise<InventoryIt
       id: itemMatch.assetTag || itemMatch.id,
       name: itemMatch.name,
       category: "Serialized Asset",
-      model: itemMatch.notes || "VV Serialized",
+      model: "VV Serialized",
       total: 1,
       available: isDamaged ? 0 : 1,
       reserved: 0,
@@ -170,6 +175,7 @@ export async function getInventoryItemDetailApi(id: string): Promise<InventoryIt
       condition: isDamaged ? "DAMAGED" : "GOOD",
       availability: isDamaged ? "RESERVED" : "AVAILABLE",
       location: "Main Warehouse",
+      notes: itemMatch.notes || undefined,
       lastService: itemMatch.purchasedAt ? itemMatch.purchasedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
       nextService: new Date().toISOString().slice(0, 10),
     };
@@ -192,7 +198,8 @@ export async function getInventoryItemDetailApi(id: string): Promise<InventoryIt
       damaged: 0,
       condition: "GOOD",
       availability: "AVAILABLE",
-      location: poolMatch.notes || "Main Warehouse",
+      location: "Main Warehouse",
+      notes: poolMatch.notes || undefined,
       lastService: new Date().toISOString().slice(0, 10),
       nextService: new Date().toISOString().slice(0, 10),
     };

@@ -5,8 +5,10 @@ import { ArrowRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { getBookingsApi } from "@/features/bookings/services/bookings.api";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 export function RecentBookingsWidget() {
+  const { formatDate } = useDateFormatter();
   const { data: bookingsList = [], isLoading } = useQuery({
     queryKey: ["bookings"],
     queryFn: getBookingsApi,
@@ -57,7 +59,7 @@ export function RecentBookingsWidget() {
                   </Link>
                 </td>
                 <td className="py-3 font-medium" style={{ color: "var(--text-1)" }}>{b.client}</td>
-                <td className="py-3 font-data" style={{ color: "var(--text-2)" }}>{b.eventDate}</td>
+                <td className="py-3 font-data" style={{ color: "var(--text-2)" }}>{formatDate(b.eventDate)}</td>
                 <td className="py-3" style={{ color: "var(--text-2)" }}>{b.venue}</td>
                 <td className="py-3">
                   <StatusBadge status={b.status} />

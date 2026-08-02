@@ -6,6 +6,7 @@ import { FilterDropdown, SortButton } from "@/components/filter-dropdown";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { useQuery } from "@tanstack/react-query";
 import { getBookingsApi, STATUS_ORDER, STATUS_LABELS, type Booking, type PaymentStatus, type ScreenType } from "@/features/bookings/services/bookings.api";
+import { getStaffApi } from "@/features/users/services/staff.api";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
@@ -26,6 +27,18 @@ const TABS = ["All", "This Week", "Upcoming", "Onsite", "Last Week", "Assigned t
 const ALL_STATUSES = STATUS_ORDER.map((s) => STATUS_LABELS[s]);
 const ALL_SCREEN_TYPES: ScreenType[] = ["P2.97", "P2.97-New", "P3.91 INDOOR", "P3.91 OUTDOOR", "P4", "P5"];
 const ALL_PAYMENTS: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
+
+/** Calendar-day bounds for week tabs (Sun–Sat). */
+function getWeekBounds(weeksAgo = 0): { start: Date; end: Date } {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - start.getDay() - weeksAgo * 7);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
 
 export function BookingsIndex() {
   const { formatDate } = useDateFormatter();
@@ -53,9 +66,17 @@ export function BookingsIndex() {
     queryFn: getBookingsApi,
   });
 
+  const { data: staffList = [] } = useQuery({
+    queryKey: ["staff"],
+    queryFn: getStaffApi,
+    enabled: can(PERMISSION.USER_VIEW) || can(PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN) || can(PERMISSION.ASSIGNMENT_ASSIGN_CREW),
+  });
+
   const ALL_ASSIGNEES = useMemo(() => {
-    return [...new Set(bookingsList.flatMap((b) => b.assignees || []))].sort();
-  }, [bookingsList]);
+    const fromStaff = staffList.map((s) => s.name).filter(Boolean);
+    const fromBookings = bookingsList.flatMap((b) => b.assignees || []);
+    return [...new Set([...fromStaff, ...fromBookings])].sort((a, b) => a.localeCompare(b));
+  }, [staffList, bookingsList]);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
@@ -77,25 +98,17 @@ export function BookingsIndex() {
     if (tab === "Onsite") r = r.filter((b) => b.status === "ONSITE");
     if (tab === "Upcoming") r = r.filter((b) => new Date(b.assemblyDate) > new Date());
     if (tab === "This Week") {
-      const now = new Date();
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - now.getDay());
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      const { start, end } = getWeekBounds(0);
       r = r.filter((b) => {
         const d = new Date(b.eventDate);
-        return d >= startOfWeek && d <= endOfWeek;
+        return !Number.isNaN(d.getTime()) && d >= start && d <= end;
       });
     }
     if (tab === "Last Week") {
-      const now = new Date();
-      const startOfLastWeek = new Date(now);
-      startOfLastWeek.setDate(now.getDate() - now.getDay() - 7);
-      const endOfLastWeek = new Date(startOfLastWeek);
-      endOfLastWeek.setDate(startOfLastWeek.getDate() + 6);
+      const { start, end } = getWeekBounds(1);
       r = r.filter((b) => {
         const d = new Date(b.eventDate);
-        return d >= startOfLastWeek && d <= endOfLastWeek;
+        return !Number.isNaN(d.getTime()) && d >= start && d <= end;
       });
     }
     if (tab === "Assigned to Me") r = r.filter((b) => b.assignees.includes(authUser?.name || ""));
@@ -240,7 +253,7 @@ export function BookingsIndex() {
   return (
     <AppShell>
       {/* Header */}
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="text-[20px] sm:text-[22px] font-bold tracking-tight">Bookings</h1>
           <span className="rounded-md border px-2 py-0.5 text-[11px] font-semibold" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>

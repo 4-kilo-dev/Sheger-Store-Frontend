@@ -1,12 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { StatusBadge } from "@/components/status-badge";
 import type { Booking } from "@/features/bookings/services/bookings.api";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 interface BookingQueueItemProps {
   booking: Booking;
 }
 
 export function BookingQueueItem({ booking }: BookingQueueItemProps) {
+  const { formatDate } = useDateFormatter();
   return (
     <Link
       to="/bookings/$code"
@@ -21,7 +23,7 @@ export function BookingQueueItem({ booking }: BookingQueueItemProps) {
         <span style={{ color: "var(--text-2)" }}>{booking.venue}</span>
       </div>
       <div className="flex items-center gap-3">
-        <span className="font-data text-[11px]" style={{ color: "var(--text-2)" }}>{booking.eventDate}</span>
+        <span className="font-data text-[11px]" style={{ color: "var(--text-2)" }}>{formatDate(booking.eventDate)}</span>
         <StatusBadge status={booking.status} />
       </div>
     </Link>
