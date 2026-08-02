@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { getBookingsApi, type Booking, type BomItem } from "@/features/bookings/services/bookings.api";
 import { getBookingBomLinesApi, checkoutBookingApi, checkinBookingApi } from "@/features/checkout/services/operations.api";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 const _Route = createFileRoute("/checkout")({
   head: () => ({
@@ -27,6 +28,7 @@ type Mode = "checkout" | "checkin";
 export function CheckoutPage() {
   const queryClient = useQueryClient();
   const authUser = useAuthUser();
+  const { formatDateTime } = useDateFormatter();
   const userRole = authUser?.role?.toLowerCase() || "";
   const [mode, setMode] = useState<Mode>("checkout");
   const [selectedCode, setSelectedCode] = useState("");
@@ -243,7 +245,7 @@ export function CheckoutPage() {
                 <option value="">— Select a booking —</option>
                 {eligibleBookings.map((b) => (
                   <option key={b.code} value={b.code}>
-                    {b.code} · {b.client} · {b.venue} · {b.eventDate}
+                    {b.code} · {b.client} · {b.venue} · {formatDateTime(b.eventDate)}
                   </option>
                 ))}
               </select>
@@ -377,7 +379,7 @@ export function CheckoutPage() {
                     </div>
                     <div className="flex justify-between">
                       <span style={{ color: "var(--text-3)" }}>Event</span>
-                      <span className="font-mono">{selected.eventDate}</span>
+                      <span className="font-mono">{formatDateTime(selected.eventDate)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span style={{ color: "var(--text-3)" }}>Status</span>

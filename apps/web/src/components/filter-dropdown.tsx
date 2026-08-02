@@ -81,28 +81,34 @@ export function FilterDropdown({ icon, label, options, selected, onChange, multi
             </button>
           )}
           <div className="max-h-52 overflow-y-auto scrollbar-thin">
-            {options.map((opt) => {
-              const isSelected = selected.has(opt);
-              return (
-                <button
-                  key={opt}
-                  onClick={() => toggle(opt)}
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[12px] transition hover:bg-[var(--surface-2)]"
-                  style={{ color: isSelected ? "var(--accent)" : "var(--foreground)" }}
-                >
-                  <div
-                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded border transition"
-                    style={{
-                      borderColor: isSelected ? "var(--accent)" : "var(--border)",
-                      background: isSelected ? "var(--accent)" : "transparent",
-                    }}
+            {options.length === 0 ? (
+              <div className="px-3 py-3 text-[11px]" style={{ color: "var(--text-3)" }}>
+                No options available
+              </div>
+            ) : (
+              options.map((opt) => {
+                const isSelected = selected.has(opt);
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => toggle(opt)}
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[12px] transition hover:bg-[var(--surface-2)]"
+                    style={{ color: isSelected ? "var(--accent)" : "var(--foreground)" }}
                   >
-                    {isSelected && <Check className="h-3 w-3" style={{ color: "var(--accent-foreground)" }} />}
-                  </div>
-                  {opt}
-                </button>
-              );
-            })}
+                    <div
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded border transition"
+                      style={{
+                        borderColor: isSelected ? "var(--accent)" : "var(--border)",
+                        background: isSelected ? "var(--accent)" : "transparent",
+                      }}
+                    >
+                      {isSelected && <Check className="h-3 w-3" style={{ color: "var(--accent-foreground)" }} />}
+                    </div>
+                    {opt}
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
       )}
