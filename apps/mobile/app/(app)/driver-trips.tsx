@@ -3,6 +3,7 @@ import { Alert, Pressable, StyleSheet, View } from "react-native";
 import {
   AppText,
   Button,
+  BottomSheet,
   ErrorState,
   Field,
   Input,
@@ -25,9 +26,28 @@ import { Truck } from "lucide-react-native";
 
 const TABS = ["All Trips", "Pending", "Approved", "Rejected"] as const;
 
+function toIsoFromLocal(value: string): string | undefined {
+  if (!value.trim()) return undefined;
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
 export default function DriverTripsScreen() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("All Trips");
-  const { data: trips = [], isLoading, isError, refetch } = useDriverTrips();
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [filterDriverId, setFilterDriverId] = useState("");
+  const listFilters = useMemo(
+    () => ({
+      from: toIsoFromLocal(from),
+      to: toIsoFromLocal(to),
+      driverUserId: filterDriverId || undefined,
+    }),
+    [from, to, filterDriverId],
+  );
+  const { data: trips = [], isLoading, isError, refetch } = useDriverTrips(listFilters);
   const { data: staff = [] } = useStaff();
   const { can } = usePermissions();
   const canView = can(PERMISSION.DRIVER_TRIP_VIEW);
@@ -42,6 +62,8 @@ export default function DriverTripsScreen() {
   const [reason, setReason] = useState("");
   const [plate, setPlate] = useState("");
   const [selectedDriver, setSelectedDriver] = useState("");
+  const [leftAt, setLeftAt] = useState("");
+  const [arrivedAt, setArrivedAt] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -59,25 +81,38 @@ export default function DriverTripsScreen() {
 
   const handleCreate = async () => {
     setCreateError(null);
+    const leftIso = toIsoFromLocal(leftAt);
     if (!selectedDriver) {
       setCreateError("Select a driver.");
+      return;
+    }
+    if (!leftIso) {
+      setCreateError("Enter a valid leave time (YYYY-MM-DDTHH:mm).");
       return;
     }
     if (!reason.trim()) {
       setCreateError("Enter a reason or destination.");
       return;
     }
+    const arrivedIso = toIsoFromLocal(arrivedAt);
+    if (arrivedIso && new Date(arrivedIso).getTime() < new Date(leftIso).getTime()) {
+      setCreateError("Arrive time must be on or after leave time.");
+      return;
+    }
     try {
       await createTrip.mutateAsync({
         driverUserId: selectedDriver,
-        leftAt: new Date().toISOString(),
+        leftAt: leftIso,
         reason,
         plate: plate || undefined,
+        arrivedAt: arrivedIso,
       });
       setShowCreate(false);
       setReason("");
       setPlate("");
       setSelectedDriver("");
+      setLeftAt("");
+      setArrivedAt("");
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : "Failed to create trip.");
     }
@@ -134,6 +169,45 @@ export default function DriverTripsScreen() {
         <AppText variant="title">Driver Trips</AppText>
         <AppText variant="subtitle">Track driver departures, arrivals, and approvals.</AppText>
       </View>
+      <Section title="Filters">
+        <Field label="From (YYYY-MM-DDTHH:mm)">
+          <Input value={from} onChangeText={setFrom} placeholder="2026-08-01T08:00" />
+        </Field>
+        <Field label="To (YYYY-MM-DDTHH:mm)">
+          <Input value={to} onChangeText={setTo} placeholder="2026-08-31T23:59" />
+        </Field>
+        <Field label="Driver">
+          <View style={styles.chipWrap}>
+            <Chip
+              label="All drivers"
+              active={!filterDriverId}
+              onPress={() => setFilterDriverId("")}
+            />
+            {staff.map((member) => (
+              <Chip
+                key={member.id}
+                label={member.name}
+                active={filterDriverId === member.id}
+                onPress={() =>
+                  setFilterDriverId((current) => (current === member.id ? "" : member.id))
+                }
+              />
+            ))}
+          </View>
+        </Field>
+        {from || to || filterDriverId ? (
+          <Button
+            variant="outline"
+            onPress={() => {
+              setFrom("");
+              setTo("");
+              setFilterDriverId("");
+            }}
+          >
+            Clear filters
+          </Button>
+        ) : null}
+      </Section>
       <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
 
       <View style={{ gap: 12 }}>
@@ -221,44 +295,49 @@ export default function DriverTripsScreen() {
       </View>
 
       {showCreate && (
-        <View style={styles.modal}>
-          <View style={styles.modalContent}>
-            <AppText variant="title" style={{ marginBottom: 12 }}>
-              New Driver Trip
-            </AppText>
-            <Field label="Driver">
-              <View style={styles.chipWrap}>
-                {staff.map((member) => (
-                  <Chip
-                    key={member.id}
-                    label={member.name}
-                    active={selectedDriver === member.id}
-                    onPress={() => setSelectedDriver(member.id)}
-                  />
-                ))}
-              </View>
-            </Field>
-            <Field label="Reason / Destination">
-              <Input value={reason} onChangeText={setReason} placeholder="e.g. Delivery to venue" />
-            </Field>
-            <Field label="Plate Number (optional)">
-              <Input value={plate} onChangeText={setPlate} placeholder="ABC-1234" />
-            </Field>
-            {createError ? (
-              <AppText variant="small" color={colors.destructive}>
-                {createError}
-              </AppText>
-            ) : null}
-            <View style={styles.actionRow}>
-              <Button variant="outline" onPress={() => setShowCreate(false)}>
-                Cancel
-              </Button>
-              <Button onPress={handleCreate} disabled={createTrip.isPending}>
-                {createTrip.isPending ? "Saving..." : "Create Trip"}
-              </Button>
+        <BottomSheet
+          visible={showCreate}
+          title="New Driver Trip"
+          onClose={() => setShowCreate(false)}
+        >
+          <Field label="Driver">
+            <View style={styles.chipWrap}>
+              {staff.map((member) => (
+                <Chip
+                  key={member.id}
+                  label={member.name}
+                  active={selectedDriver === member.id}
+                  onPress={() => setSelectedDriver(member.id)}
+                />
+              ))}
             </View>
+          </Field>
+          <Field label="Reason / Destination">
+            <Input value={reason} onChangeText={setReason} placeholder="e.g. Delivery to venue" />
+          </Field>
+          <Field label="Plate Number (optional)">
+            <Input value={plate} onChangeText={setPlate} placeholder="ABC-1234" />
+          </Field>
+          <Field label="Leave time (YYYY-MM-DDTHH:mm)">
+            <Input value={leftAt} onChangeText={setLeftAt} placeholder="2026-08-03T08:00" />
+          </Field>
+          <Field label="Arrive time (optional)">
+            <Input value={arrivedAt} onChangeText={setArrivedAt} placeholder="2026-08-03T18:00" />
+          </Field>
+          {createError ? (
+            <AppText variant="small" color={colors.destructive}>
+              {createError}
+            </AppText>
+          ) : null}
+          <View style={styles.actionRow}>
+            <Button variant="outline" onPress={() => setShowCreate(false)}>
+              Cancel
+            </Button>
+            <Button onPress={handleCreate} disabled={createTrip.isPending}>
+              {createTrip.isPending ? "Saving..." : "Create Trip"}
+            </Button>
           </View>
-        </View>
+        </BottomSheet>
       )}
     </Screen>
   );
@@ -306,23 +385,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     marginTop: 8,
-  },
-  modal: {
-    position: "absolute",
-    inset: 0,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  modalContent: {
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 20,
-    gap: 12,
   },
 });

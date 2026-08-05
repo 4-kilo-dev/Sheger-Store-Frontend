@@ -27,3 +27,22 @@ export async function deleteAttachmentApi(attachmentId: string): Promise<void> {
 export async function getDownloadUrlApi(attachmentId: string): Promise<{ downloadUrl: string }> {
   return client.get<{ downloadUrl: string }>(`/api/attachments/${attachmentId}/download-url`);
 }
+
+/**
+ * Upload a file attachment for a booking.
+ * Uses a multipart/form-data POST to the backend which proxies to S3.
+ * Mirrors apps/web/src/features/bookings/services/attachments.api.ts uploadBookingAttachmentApi.
+ */
+export async function uploadBookingAttachmentApi(
+  bookingId: string,
+  file: { uri: string; name: string; type: string },
+  meta?: { relatedEntity?: string; relatedId?: string },
+): Promise<Attachment> {
+  const formData = new FormData();
+  // React Native's FormData accepts { uri, name, type } objects directly
+  formData.append("file", { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
+  if (meta?.relatedEntity) formData.append("relatedEntity", meta.relatedEntity);
+  if (meta?.relatedId) formData.append("relatedId", meta.relatedId);
+
+  return client.post<Attachment>(`/api/bookings/${bookingId}/attachments`, formData);
+}

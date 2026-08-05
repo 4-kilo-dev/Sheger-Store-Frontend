@@ -14,15 +14,18 @@ import {
   Package,
   Paperclip,
   ShieldAlert,
+  Star,
   Trash2,
   Truck,
   Upload,
   User,
   Users,
   Wrench,
+  XCircle,
 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { PaymentBadge, StatusBadge, StatusStepper, ToneBadge } from "@/components/status";
 import {
   AppText,
@@ -41,21 +44,22 @@ import {
   SegmentedTabs,
   TextArea,
 } from "@/components/ui";
-import { alpha, colors } from "@/theme/tokens";
+import { BookingActionSheet } from "@/components/booking/BookingActionSheet";
+import { BomFulfillmentConflictSheet } from "@/components/booking/BomFulfillmentConflictSheet";
+import { DamageReportSheet } from "@/components/booking/DamageReportSheet";
+import { AccessLockOverlay } from "@/components/booking/AccessLockOverlay";
+import { alpha, colors, radius } from "@/theme/tokens";
 import type { Booking, BookingStatus } from "@/types/domain";
+import { STATUS_LABELS } from "@/types/domain";
 import { daysUntil, formatCurrency } from "@/utils/format";
 import {
   useBooking,
   useRecordBookingPayment,
-  useTransitionBookingStatus,
   useBomLines,
   useBookingAssignments,
   useInternalEvaluation,
   useClientEvaluation,
   useBookingAttachments,
-  useCreateAssignment,
-  useAllowedTransitions,
-  useStaff,
   useCreateBomLine,
   useDeleteBomLine,
   useDeleteAttachment,
@@ -64,75 +68,81 @@ import {
   usePerformanceMetrics,
   useSubmitInternalEvaluation,
   useUpdateBooking,
+  useCreateHandoffSnapshot,
+  useCheckoutReverse,
+  useBookingSnapshots,
+  useBookingReservations,
+  useCreateReservation,
+  useDeleteReservation,
+  useCustomFieldDefinitions,
 } from "@/hooks/useOperations";
+import { useBookingActions } from "@/hooks/useBookingActions";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 import { PERMISSION } from "@/lib/auth/permission-keys";
-import { getPaymentSummary, type AllowedTransition } from "@/services/bookings-api";
+import { getPaymentSummary } from "@/services/bookings-api";
+import { getInventoryPoolsApi } from "@/services/inventory-api";
+import { uploadBookingAttachmentApi } from "@/services/attachments.api";
+import {
+  useBookingCapabilities,
+  type BookingTabName,
+} from "@/hooks/useBookingCapabilities";
+import { createAssignTechnicianAction } from "@/utils/bookingActions";
 import * as Linking from "expo-linking";
-
-const TABS = [
-  "Overview",
-  "Schedule",
-  "Team",
-  "Equipment",
-  "Payments",
-  "Files",
-  "Evaluations",
-  "Activity",
-] as const;
-
-/** Display metadata for a transition's target status. Mirrors the copy web shows per action. */
-const ACTION_META: Partial<Record<BookingStatus, { label: string; role: string; tone?: string }>> =
-  {
-    CONFIRMED: { label: "Confirm & Record Payment", role: "CCR" },
-    ASSIGNED: { label: "Assign Technician", role: "CTO" },
-    ACCEPTED: { label: "Accept Task", role: "Technician" },
-    PREPARATION: { label: "Submit BOM & Mark Preparation", role: "Technician" },
-    ONSITE: { label: "Dispatch to Site", role: "Operation Officer" },
-    COMPLETED: { label: "Mark Completed", role: "TO / OO", tone: colors.success },
-    DONE: { label: "Check-In Materials & Close", role: "Storekeeper", tone: colors.status.DONE },
-    CANCELED: { label: "Cancel Booking", role: "Admin", tone: colors.destructive },
-  };
-
-function describeAction(transition: AllowedTransition) {
-  const meta = ACTION_META[transition.toStatus];
-  return {
-    label: meta?.label ?? `Advance to ${transition.toStatus}`,
-    role: meta?.role ?? "",
-    tone: meta?.tone,
-    nextStatus: transition.toStatus,
-    permissionKey: transition.permissionKey,
-    reasonRequired: transition.reasonRequired,
-  };
-}
 
 export default function BookingDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const { data: booking, isLoading, isError, refetch } = useBooking(params.id);
   const bookingId = booking?.id ?? "";
-  const { data: bomLines = [], isLoading: bomLoading } = useBomLines(bookingId);
-  const { data: assignments = [], isLoading: assignmentsLoading } =
-    useBookingAssignments(bookingId);
+  const { data: bomLines = [] } = useBomLines(bookingId);
+  const { data: assignments = [] } = useBookingAssignments(bookingId);
   const { data: internalEval } = useInternalEvaluation(bookingId);
   const { data: clientEval } = useClientEvaluation(bookingId);
-  const { data: attachments = [], isLoading: attachmentsLoading } =
-    useBookingAttachments(bookingId);
-  const { data: transitionsData } = useAllowedTransitions(bookingId);
-  const { data: staff = [] } = useStaff();
-  const { canAny } = usePermissions();
-  const createAssignment = useCreateAssignment();
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
-  const [actionOpen, setActionOpen] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [assigneeId, setAssigneeId] = useState("");
-  const [assigneeRole, setAssigneeRole] = useState("CREW");
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [teamLeaderInput, setTeamLeaderInput] = useState("");
-  const [driverInput, setDriverInput] = useState("");
-  const [mealBudgetInput, setMealBudgetInput] = useState("");
-  const transitionMutation = useTransitionBookingStatus();
-  const paymentMutation = useRecordBookingPayment();
-  const updateBookingMutation = useUpdateBooking();
+  const { data: attachments = [] } = useBookingAttachments(bookingId);
+  const createHandoff = useCreateHandoffSnapshot();
+  const checkoutReverse = useCheckoutReverse();
+  const [tab, setTab] = useState<BookingTabName>("Overview");
+  const [reverseOpen, setReverseOpen] = useState(false);
+  const [reverseReason, setReverseReason] = useState("");
+
+  const bookingWithAssignments = useMemo(() => {
+    if (!booking) return undefined;
+    if (!assignments.length) return booking;
+    return {
+      ...booking,
+      assignments: assignments.map((a: any) => ({
+        id: a.id,
+        userId: a.userId || a.user?.id,
+        roleContext: a.roleContext,
+        isTeamLead: a.isTeamLead,
+        phase: a.phase,
+        respondedAt: a.respondedAt ?? null,
+        declineReason: a.declineReason ?? null,
+        user: a.user?.id ? { id: a.user.id, name: a.user.name || "" } : undefined,
+      })),
+    };
+  }, [booking, assignments]);
+
+  const caps = useBookingCapabilities(bookingWithAssignments);
+  const actions = useBookingActions(params.id, bookingWithAssignments, {
+    canFetchStaff: caps.canFetchStaff,
+    onGoToEquipmentTab: () => setTab("Equipment"),
+    canOverrideAvailability: caps.canReverseCheckout,
+  });
+
+  const { data: checkoutSnapshots = [] } = useBookingSnapshots(
+    booking &&
+      (booking.status === "ONSITE" ||
+        booking.status === "COMPLETED" ||
+        booking.status === "DONE" ||
+        booking.status === "PARTIALLY_RETURNED")
+      ? booking.id
+      : "",
+    "CHECKOUT",
+  );
+  const checkoutSnapshot = checkoutSnapshots[0] || null;
+
+  const safeTab = caps.visibleTabs.includes(tab) ? tab : caps.visibleTabs[0] || "Overview";
 
   if (isLoading) {
     return (
@@ -158,92 +168,51 @@ export default function BookingDetailScreen() {
     );
   }
 
-  // Permission-gated, backend-driven transitions — mirrors web's useBookingCapabilities,
-  // which never lets the client invent a transition the backend didn't offer.
-  const permittedTransitions = (transitionsData?.transitions || []).filter((t) =>
-    canAny([t.permissionKey]),
+  const barActions = caps.statusActions.filter((a) => {
+    if (caps.showFieldOpsBanner && a.targetStatus === "PREPARATION") return false;
+    if (caps.showFieldOpsBanner && a.permissionKey === "eval.submit_internal") return false;
+    return true;
+  });
+  const reverseAction = barActions.find(
+    (a) =>
+      a.permissionKey === PERMISSION.INVENTORY_CHECKOUT_REVERSE ||
+      a.id === "booking.checkout_reverse" ||
+      a.id === "inventory.checkout_reverse",
   );
-  const primaryTransition = permittedTransitions[0];
-  const action = primaryTransition ? describeAction(primaryTransition) : null;
+  const primaryAction = barActions[0] ?? caps.assignTechnicianAction ?? null;
+
   const isSubmittingAction =
-    transitionMutation.isPending || paymentMutation.isPending || updateBookingMutation.isPending;
-
-  const openActionSheet = () => {
-    setActionError(null);
-    if (booking.status === "RESERVED") setPaymentAmount(String(booking.amount));
-    if (booking.status === "PREPARATION") {
-      setTeamLeaderInput(booking.teamLeader);
-      setDriverInput(booking.driver);
-      setMealBudgetInput(String(booking.mealBudget));
-    }
-    setActionOpen(true);
-  };
-
-  const handleConfirmAction = async () => {
-    if (!action) return;
-    setActionError(null);
-    try {
-      if (booking.status === "RESERVED" && action.nextStatus === "CONFIRMED") {
-        const parsedAmount = Number(paymentAmount);
-        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-          setActionError("Enter a valid amount received.");
-          return;
-        }
-        await paymentMutation.mutateAsync({
-          bookingId: booking.id,
-          toStatus: "advance",
-          amount: parsedAmount,
-        });
-      }
-      if (booking.status === "PREPARATION" && action.nextStatus === "ONSITE") {
-        await updateBookingMutation.mutateAsync({
-          bookingId: booking.id,
-          payload: {
-            teamLeader: teamLeaderInput,
-            driver: driverInput,
-            mealBudget: Number(mealBudgetInput) || 0,
-          },
-        });
-      }
-      await transitionMutation.mutateAsync({
-        bookingId: booking.id,
-        toStatus: action.nextStatus as BookingStatus,
-      });
-      setActionOpen(false);
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Failed to update booking.");
-    }
-  };
-
-  const handleAssignMember = async () => {
-    if (!assigneeId) return;
-    try {
-      await createAssignment.mutateAsync({
-        bookingId: booking.id,
-        payload: {
-          userId: assigneeId,
-          roleContext: assigneeRole,
-          isTeamLead: assigneeRole === "CTO",
-        },
-      });
-      setAssigneeId("");
-      setActionOpen(false);
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Failed to assign member.");
-    }
-  };
+    actions.isTransitioning ||
+    actions.isConfirmingWithPayment ||
+    actions.isCheckingOut ||
+    actions.isAssigningTechnicians ||
+    createHandoff.isPending;
 
   return (
     <Screen
       footer={
-        action ? (
-          <Button icon={CheckCircle2} onPress={openActionSheet}>
-            {action.label}
+        primaryAction ? (
+          <Button icon={CheckCircle2} onPress={() => actions.openAction(primaryAction)}>
+            {primaryAction.label}
           </Button>
         ) : null
       }
     >
       <BackLink label="Back to Bookings" href="/bookings" />
+
+      {barActions.length > 1 ? (
+        <View style={styles.actionBar}>
+          {barActions.slice(1).map((act) => (
+            <Button
+              key={`${act.id}-${act.targetStatus}`}
+              variant={act.variant === "destructive" ? "danger" : act.variant === "outline" ? "outline" : "primary"}
+              onPress={() => actions.openAction(act)}
+            >
+              {act.label}
+            </Button>
+          ))}
+        </View>
+      ) : null}
 
       <Card style={styles.hero}>
         <View style={styles.heroHeader}>
@@ -277,114 +246,562 @@ export default function BookingDetailScreen() {
         <StatusStepper current={booking.status} />
       </Card>
 
-      <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
-      {tab === "Overview" ? <OverviewTab booking={booking} /> : null}
-      {tab === "Schedule" ? <ScheduleTab booking={booking} /> : null}
-      {tab === "Team" ? (
-        <TeamTab booking={booking} assignments={assignments} onAssignPress={openActionSheet} />
+      {caps.showFieldOpsBanner ? (
+        <Card style={styles.techBanner}>
+          <View style={styles.techBannerRow}>
+            <AlertTriangle size={16} color={colors.accent} />
+            <View style={{ flex: 1 }}>
+              <AppText style={{ fontWeight: "800" }}>Field Operations</AppText>
+              <AppText variant="small" color={colors.text2}>
+                {booking.status === "ASSIGNED" && caps.pendingTechAssignment
+                  ? "You have a pending crew assignment for this booking. Please accept or decline below."
+                  : booking.status === "ACCEPTED"
+                    ? "BOM Preparation: specify equipment in Equipment, upload schematics in Files, then submit to Operations."
+                    : booking.status === "ONSITE"
+                      ? "Event active. Report equipment failures or submit the post-event crew evaluation."
+                      : booking.status === "COMPLETED"
+                        ? "Event completed. Damage reports can still be filed if needed."
+                        : "Review booking details and take the available field action."}
+              </AppText>
+            </View>
+          </View>
+          <View style={styles.techBannerActions}>
+            {caps.canAcceptAssignment ? (
+              <Button
+                variant="success"
+                icon={CheckCircle2}
+                disabled={actions.accepting}
+                onPress={() =>
+                  Alert.alert("Accept Assignment", "Confirm you accept this job assignment.", [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Accept", onPress: () => actions.acceptAssignment() },
+                  ])
+                }
+              >
+                {actions.accepting ? "Accepting..." : "Accept"}
+              </Button>
+            ) : null}
+            {caps.canDeclineAssignment ? (
+              <Button
+                variant="danger"
+                icon={XCircle}
+                onPress={() => actions.setShowDeclineModal(true)}
+              >
+                Decline
+              </Button>
+            ) : null}
+            {caps.advancePreparationAction && booking.status === "ACCEPTED" ? (
+              <Button
+                icon={Package}
+                disabled={isSubmittingAction}
+                onPress={async () => {
+                  try {
+                    await createHandoff.mutateAsync(booking.id);
+                    if (caps.advancePreparationAction?.requiresForm) {
+                      actions.openAction(caps.advancePreparationAction);
+                    } else {
+                      actions.transitionStatus({ toStatus: "PREPARATION" });
+                    }
+                  } catch (error) {
+                    Alert.alert(
+                      "Submit BOM failed",
+                      error instanceof Error ? error.message : "Failed to submit BOM",
+                    );
+                  }
+                }}
+              >
+                {isSubmittingAction
+                  ? "Submitting..."
+                  : caps.advancePreparationAction.viaBypass
+                    ? "Submit BOM to Operations"
+                    : caps.advancePreparationAction.label}
+              </Button>
+            ) : null}
+            {(booking.status === "ONSITE" || booking.status === "COMPLETED") &&
+            caps.canReportDamage ? (
+              <Button
+                variant="danger"
+                icon={ShieldAlert}
+                onPress={() => actions.setShowDamageModal(true)}
+              >
+                Report Damaged Gear
+              </Button>
+            ) : null}
+            {booking.status === "ONSITE" && caps.canSubmitEval ? (
+              <Button icon={Star} onPress={() => setTab("Evaluations")}>
+                Submit Crew Evaluation
+              </Button>
+            ) : null}
+          </View>
+        </Card>
       ) : null}
-      {tab === "Equipment" ? <EquipmentTab booking={booking} bomLines={bomLines} /> : null}
-      {tab === "Payments" ? <PaymentsTab booking={booking} /> : null}
-      {tab === "Files" ? <FilesTab attachments={attachments} /> : null}
-      {tab === "Evaluations" ? (
+
+      {caps.showDeclinedAssignmentBanner && caps.assignTechnicianAction ? (
+        <Card
+          style={{
+            ...styles.techBanner,
+            borderColor: colors.destructive,
+          }}
+        >
+          <AppText style={{ fontWeight: "800" }}>Technician declined assignment</AppText>
+          <AppText variant="small" color={colors.text2}>
+            {caps.declinedTechnicianAssignments.length} decline
+            {caps.declinedTechnicianAssignments.length === 1 ? "" : "s"} recorded. Re-assign a
+            technician to continue.
+          </AppText>
+          <Button
+            icon={Users}
+            onPress={() => actions.openAction(caps.assignTechnicianAction!)}
+          >
+            Re-assign Technician
+          </Button>
+        </Card>
+      ) : null}
+
+      {caps.canReverseCheckout && reverseAction ? (
+        <Button variant="outline" onPress={() => setReverseOpen(true)}>
+          Reverse Checkout
+        </Button>
+      ) : null}
+
+      <SegmentedTabs
+        tabs={caps.visibleTabs}
+        value={safeTab}
+        onChange={(next) => setTab(next as BookingTabName)}
+      />
+      {safeTab === "Overview" ? <OverviewTab booking={booking} caps={caps} /> : null}
+      {safeTab === "Schedule" ? <ScheduleTab booking={booking} /> : null}
+      {safeTab === "Team" ? (
+        <TeamTab
+          booking={booking}
+          assignments={assignments}
+          onAssignPress={() =>
+            actions.openAction(caps.assignTechnicianAction ?? createAssignTechnicianAction())
+          }
+        />
+      ) : null}
+      {safeTab === "Equipment" ? (
+        <EquipmentTab booking={booking} bomLines={bomLines} canEditBom={caps.canEditBom} />
+      ) : null}
+      {safeTab === "Payments" ? <PaymentsTab booking={booking} /> : null}
+      {safeTab === "Files" ? <FilesTab booking={booking} attachments={attachments} /> : null}
+      {safeTab === "Evaluations" ? (
         <EvaluationsTab booking={booking} internalEval={internalEval} clientEval={clientEval} />
       ) : null}
-      {tab === "Activity" ? <ActivityTab statusHistory={booking.statusHistory} /> : null}
+      {safeTab === "Activity" ? <ActivityTab statusHistory={booking.statusHistory} /> : null}
+
+      <BookingActionSheet booking={booking} actions={actions} />
+      <DamageReportSheet
+        booking={booking}
+        checkoutSnapshot={checkoutSnapshot}
+        actions={actions}
+      />
+      <BomFulfillmentConflictSheet
+        open={actions.showCheckoutConflictModal}
+        lines={actions.checkoutConflicts}
+        onClose={() => actions.setShowCheckoutConflictModal(false)}
+        onGoToEquipment={() => {
+          setTab("Equipment");
+          actions.onGoToEquipmentTab?.();
+        }}
+        canOverride={actions.canOverrideAvailability}
+      />
 
       <BottomSheet
-        visible={actionOpen}
-        title={action?.label ?? "Booking action"}
-        onClose={() => setActionOpen(false)}
+        visible={actions.showDeclineModal}
+        title="Decline Assignment"
+        onClose={() => actions.setShowDeclineModal(false)}
       >
-        {action ? (
-          <>
-            <AppText variant="subtitle">
-              This will advance the booking from {booking.status} to {action.nextStatus}.
-              Responsible role: {action.role}.
-            </AppText>
-            {booking.status === "RESERVED" ? (
-              <Field label="Amount Received (ETB)">
-                <Input
-                  value={paymentAmount}
-                  onChangeText={setPaymentAmount}
-                  keyboardType="numeric"
-                />
-              </Field>
-            ) : null}
-            {booking.status === "CONFIRMED" ? (
-              <AppText variant="small" color={colors.text2}>
-                Assign the chief technician and technician from the Team tab after confirming.
-              </AppText>
-            ) : null}
-            {booking.status === "PREPARATION" ? (
-              <>
-                <Field label="Team Leader">
-                  <Input value={teamLeaderInput} onChangeText={setTeamLeaderInput} />
-                </Field>
-                <Field label="Driver">
-                  <Input value={driverInput} onChangeText={setDriverInput} />
-                </Field>
-                <Field label="Meal Budget (ETB)">
-                  <Input
-                    value={mealBudgetInput}
-                    onChangeText={setMealBudgetInput}
-                    keyboardType="numeric"
-                  />
-                </Field>
-              </>
-            ) : null}
-            {booking.status === "ASSIGNED" || booking.status === "ACCEPTED" ? (
-              <>
-                <Field label="Assign Member">
-                  <View style={styles.choiceWrap}>
-                    {staff.map((member) => (
-                      <Choice
-                        key={member.id}
-                        label={member.name}
-                        active={assigneeId === member.id}
-                        onPress={() => setAssigneeId(member.id)}
-                      />
-                    ))}
-                  </View>
-                </Field>
-                <Field label="Role">
-                  <View style={styles.choiceWrap}>
-                    {["CREW", "CTO", "OO", "TECHNICIAN", "STOREKEEPER"].map((role) => (
-                      <Choice
-                        key={role}
-                        label={role}
-                        active={assigneeRole === role}
-                        onPress={() => setAssigneeRole(role)}
-                      />
-                    ))}
-                  </View>
-                </Field>
-                <Button onPress={handleAssignMember} disabled={createAssignment.isPending}>
-                  {createAssignment.isPending ? "Assigning..." : "Assign Member"}
-                </Button>
-              </>
-            ) : null}
-            {actionError ? (
-              <AppText variant="small" color={colors.destructive}>
-                {actionError}
-              </AppText>
-            ) : null}
-            <Button disabled={isSubmittingAction} onPress={handleConfirmAction}>
-              {isSubmittingAction ? "Submitting..." : `Confirm: ${action.label}`}
-            </Button>
-            <Button variant="outline" onPress={() => setActionOpen(false)}>
-              Cancel
-            </Button>
-          </>
+        <AppText variant="subtitle">
+          Please provide a reason for declining this assignment. This will be visible to the
+          assigning manager.
+        </AppText>
+        <Field label="Reason for declining">
+          <TextArea
+            value={actions.declineReason}
+            onChangeText={actions.setDeclineReason}
+            placeholder="e.g. Schedule conflict, equipment unavailable..."
+          />
+        </Field>
+        {actions.declineReason.trim().length > 0 && actions.declineReason.trim().length < 10 ? (
+          <AppText variant="small" color={colors.destructive}>
+            Reason must be at least 10 characters.
+          </AppText>
         ) : null}
+        <Button
+          variant="danger"
+          disabled={actions.declining || actions.declineReason.trim().length < 10}
+          onPress={() => actions.declineAssignment(actions.declineReason)}
+        >
+          {actions.declining ? "Declining..." : "Decline Assignment"}
+        </Button>
+        <Button variant="outline" onPress={() => actions.setShowDeclineModal(false)}>
+          Cancel
+        </Button>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={reverseOpen}
+        title="Reverse Checkout"
+        onClose={() => setReverseOpen(false)}
+      >
+        <AppText variant="subtitle">
+          Reverse the warehouse checkout for this booking. A reason is required.
+        </AppText>
+        <Field label="Reason">
+          <TextArea
+            value={reverseReason}
+            onChangeText={setReverseReason}
+            placeholder="e.g. Wrong booking checked out, gear recalled..."
+          />
+        </Field>
+        <Button
+          variant="danger"
+          disabled={checkoutReverse.isPending || reverseReason.trim().length < 5}
+          onPress={async () => {
+            try {
+              await checkoutReverse.mutateAsync({
+                bookingId: booking.id,
+                reason: reverseReason.trim(),
+              });
+              setReverseOpen(false);
+              setReverseReason("");
+              Alert.alert("Checkout reversed", "The booking checkout was reversed.");
+            } catch (error) {
+              Alert.alert(
+                "Reverse failed",
+                error instanceof Error ? error.message : "Could not reverse checkout.",
+              );
+            }
+          }}
+        >
+          {checkoutReverse.isPending ? "Reversing..." : "Confirm Reverse Checkout"}
+        </Button>
+        <Button variant="outline" onPress={() => setReverseOpen(false)}>
+          Cancel
+        </Button>
       </BottomSheet>
     </Screen>
   );
 }
 
-function OverviewTab({ booking }: { booking: Booking }) {
+function OverviewTab({
+  booking,
+  caps,
+}: {
+  booking: Booking;
+  caps: ReturnType<typeof useBookingCapabilities>;
+}) {
+  const { formatDate } = useDateFormatter();
+  const isOnsiteSurface =
+    booking.status === "ONSITE" ||
+    booking.status === "COMPLETED" ||
+    booking.status === "DONE" ||
+    booking.status === "PARTIALLY_RETURNED";
+  const { data: snapshots = [] } = useBookingSnapshots(
+    isOnsiteSurface ? booking.id : "",
+    "CHECKOUT",
+  );
+  const { data: reservationsData } = useBookingReservations(
+    booking.status === "RESERVED" ? booking.id : "",
+  );
+  const updateBooking = useUpdateBooking();
+  const createReservation = useCreateReservation();
+  const deleteReservation = useDeleteReservation();
+  const [ctoNotes, setCtoNotes] = useState(booking.ctoNotes || "");
+  const [allocations, setAllocations] = useState<Array<{ poolId: string; quantity: string }>>([
+    { poolId: "", quantity: "" },
+  ]);
+  const [pools, setPools] = useState<Array<{ id: string; name: string; categoryId?: string }>>([]);
+  const [poolsRestricted, setPoolsRestricted] = useState(false);
+  const [savingHolds, setSavingHolds] = useState(false);
+  const [isEditingHolds, setIsEditingHolds] = useState(true);
+  const [vehiclePlate, setVehiclePlate] = useState(booking.vehiclePlate || "");
+  const [driverName, setDriverName] = useState(booking.driver || "");
+  const [teamLeader, setTeamLeader] = useState(booking.teamLeader || "");
+  const customFieldsQuery = useCustomFieldDefinitions();
+
+  useEffect(() => {
+    if (booking.status !== "RESERVED") return;
+    getInventoryPoolsApi()
+      .then((rows) => setPools(rows.map((p) => ({ id: p.id, name: p.name, categoryId: p.categoryId }))))
+      .catch((error) => {
+        setPools([]);
+        if (error && typeof error === "object" && "status" in error && (error as { status: number }).status === 403) {
+          setPoolsRestricted(true);
+        }
+      });
+  }, [booking.status]);
+
+  const checkoutSnapshot = snapshots[0] || null;
+  const reservations = reservationsData?.reservations ?? [];
+
+  useEffect(() => {
+    const mapped = reservations.map((r) => ({
+      poolId: r.poolId || "",
+      quantity: String(r.quantity ?? ""),
+    }));
+    if (mapped.length > 0) {
+      setAllocations(mapped);
+      setIsEditingHolds(false);
+    } else if (booking.ctoNotes) {
+      setIsEditingHolds(false);
+    } else {
+      setAllocations([{ poolId: "", quantity: "" }]);
+      setIsEditingHolds(true);
+    }
+  }, [reservationsData, booking.ctoNotes]);
+
+  const saveTechnicalHolds = async () => {
+    const valid = allocations.filter((a) => a.poolId && Number(a.quantity) > 0);
+    if (valid.length === 0 && !ctoNotes.trim()) {
+      Alert.alert(
+        "Incomplete",
+        "Please add at least one screen type and quantity or provide CTO notes.",
+      );
+      return;
+    }
+    setSavingHolds(true);
+    try {
+      for (const reservation of reservations) {
+        await deleteReservation.mutateAsync({ bookingId: booking.id, id: reservation.id });
+      }
+      await Promise.all(
+        valid.map((a) =>
+          createReservation.mutateAsync({
+            bookingId: booking.id,
+            payload: { poolId: a.poolId, quantity: a.quantity },
+          }),
+        ),
+      );
+      const spec = valid
+        .map((a) => {
+          const poolName = pools.find((p) => p.id === a.poolId)?.name || "LED Screen";
+          return `${a.quantity}sqm of ${poolName}`;
+        })
+        .join("; ");
+      const totalSqm = valid.reduce((sum, a) => sum + (Number(a.quantity) || 0), 0);
+      await updateBooking.mutateAsync({
+        bookingId: booking.id,
+        payload: {
+          ctoConsultationNotes: ctoNotes,
+          ...(spec
+            ? {
+                itemServiceSpec: spec,
+                screenAreaSqm: totalSqm,
+              }
+            : {}),
+        },
+      });
+      setIsEditingHolds(false);
+      Alert.alert("Saved", "Technical allocation holds saved.");
+    } catch (error) {
+      Alert.alert(
+        "Save failed",
+        error instanceof Error ? error.message : "Could not save technical holds.",
+      );
+    } finally {
+      setSavingHolds(false);
+    }
+  };
+
   return (
     <View style={{ gap: 14 }}>
+      {caps.showTechAcceptedWorkspace ? (
+        <Section title="Technician Accepted Workspace" icon={Wrench}>
+          <AppText variant="subtitle">
+            Review CTO notes, build the BOM in Equipment, and upload schematics in Files before
+            submitting to Operations.
+          </AppText>
+          {booking.ctoNotes ? (
+            <AppText variant="small" color={colors.text2}>
+              CTO Note: {booking.ctoNotes}
+            </AppText>
+          ) : null}
+          {booking.itemServiceSpec ? (
+            <KV label="Intake Spec" value={booking.itemServiceSpec} />
+          ) : null}
+        </Section>
+      ) : null}
+
+      {booking.status === "ONSITE" ? (
+        <>
+          <Card style={{ borderColor: colors.status.ONSITE, gap: 8 }}>
+            <AppText variant="eyebrow" color={colors.status.ONSITE}>
+              ONSITE (Active Job)
+            </AppText>
+            <AppText variant="small" color={colors.text2}>
+              Equipment has been checked out and dispatched. Crew is executing onsite setup.
+            </AppText>
+          </Card>
+          <Section title="Dispatched Equipment" icon={Package}>
+            {checkoutSnapshot?.lines?.length ? (
+              checkoutSnapshot.lines.map((line) => (
+                <KV
+                  key={line.id}
+                  label={line.item?.name || line.pool?.name || line.name || "Equipment"}
+                  value={String(line.quantity ?? "—")}
+                  mono
+                />
+              ))
+            ) : (
+              <AppText variant="subtitle">
+                No checkout snapshot found. Warehouse check-out may still be pending.
+              </AppText>
+            )}
+          </Section>
+          <Section title="Onsite Logistics" icon={Truck}>
+            <KV label="Driver" value={booking.driver || "No driver assigned"} />
+            <KV label="Plate" value={booking.vehiclePlate || "—"} mono />
+            <KV label="Lead" value={booking.teamLeader || "—"} />
+            <KV label="Stage Hand" value={booking.stageHand || "—"} />
+          </Section>
+        </>
+      ) : null}
+
+      {booking.status === "RESERVED" ? (
+        <Section
+          title="Technical Hold Specifications"
+          icon={Wrench}
+          action={
+            !isEditingHolds && caps.canWriteTechnicalHolds ? (
+              <Button variant="ghost" onPress={() => setIsEditingHolds(true)}>
+                Edit holds
+              </Button>
+            ) : undefined
+          }
+        >
+          {poolsRestricted ? (
+            <AccessLockOverlay
+              sectionName="Technical Holds Allocation"
+              permissionKey={PERMISSION.INVENTORY_RESERVE}
+            />
+          ) : null}
+          {!isEditingHolds ? (
+            <>
+              {allocations
+                .filter((a) => a.poolId)
+                .map((alloc) => (
+                  <KV
+                    key={alloc.poolId}
+                    label={pools.find((p) => p.id === alloc.poolId)?.name || "LED Screen"}
+                    value={`${alloc.quantity} sqm`}
+                    mono
+                  />
+                ))}
+              {booking.ctoNotes ? <KV label="CTO Notes" value={booking.ctoNotes} /> : null}
+              {!allocations.some((a) => a.poolId) && !booking.ctoNotes ? (
+                <AppText variant="subtitle">
+                  Awaiting technical hold allocation and notes by Chief Technical Officer.
+                </AppText>
+              ) : null}
+            </>
+          ) : caps.canWriteTechnicalHolds && !poolsRestricted ? (
+            <>
+              <Field label="CTO Consultation Notes">
+                <TextArea value={ctoNotes} onChangeText={setCtoNotes} />
+              </Field>
+              {allocations.map((alloc, idx) => (
+                <View key={`alloc-${idx}`} style={{ gap: 8 }}>
+                  <Field label={`Screen Pool ${idx + 1}`}>
+                    <View style={styles.choiceWrap}>
+                      {pools.slice(0, 12).map((pool) => (
+                        <Choice
+                          key={pool.id}
+                          label={pool.name}
+                          active={alloc.poolId === pool.id}
+                          onPress={() =>
+                            setAllocations((prev) =>
+                              prev.map((a, i) => (i === idx ? { ...a, poolId: pool.id } : a)),
+                            )
+                          }
+                        />
+                      ))}
+                    </View>
+                  </Field>
+                  <Field label="Quantity (sqm)">
+                    <Input
+                      value={alloc.quantity}
+                      onChangeText={(v) =>
+                        setAllocations((prev) =>
+                          prev.map((a, i) => (i === idx ? { ...a, quantity: v } : a)),
+                        )
+                      }
+                      keyboardType="numeric"
+                    />
+                  </Field>
+                  {allocations.length > 1 ? (
+                    <Button
+                      variant="ghost"
+                      icon={Trash2}
+                      onPress={() => setAllocations((prev) => prev.filter((_, i) => i !== idx))}
+                    >
+                      Remove row
+                    </Button>
+                  ) : null}
+                </View>
+              ))}
+              <Button
+                variant="outline"
+                onPress={() => setAllocations((prev) => [...prev, { poolId: "", quantity: "" }])}
+              >
+                Add another screen type
+              </Button>
+              <Button disabled={savingHolds} onPress={saveTechnicalHolds}>
+                {savingHolds ? "Saving..." : "Save Technical Holds"}
+              </Button>
+            </>
+          ) : null}
+        </Section>
+      ) : null}
+
+      {booking.status === "PREPARATION" && (caps.canAssignCrew || caps.canEditBooking) ? (
+        <Section title="Dispatch Logistics" icon={Truck}>
+          {caps.canEditBooking ? (
+            <>
+              <Field label="Team Leader">
+                <Input value={teamLeader} onChangeText={setTeamLeader} />
+              </Field>
+              <Field label="Driver">
+                <Input value={driverName} onChangeText={setDriverName} />
+              </Field>
+              <Field label="Vehicle Plate">
+                <Input value={vehiclePlate} onChangeText={setVehiclePlate} />
+              </Field>
+              <Button
+                disabled={updateBooking.isPending}
+                onPress={async () => {
+                  try {
+                    await updateBooking.mutateAsync({
+                      bookingId: booking.id,
+                      payload: {
+                        teamLeader,
+                        driver: driverName,
+                        vehiclePlate,
+                      },
+                    });
+                    Alert.alert("Saved", "Dispatch logistics updated.");
+                  } catch (error) {
+                    Alert.alert(
+                      "Save failed",
+                      error instanceof Error ? error.message : "Could not update logistics.",
+                    );
+                  }
+                }}
+              >
+                {updateBooking.isPending ? "Saving..." : "Save Logistics"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <KV label="Team Leader" value={booking.teamLeader || "—"} />
+              <KV label="Driver" value={booking.driver || "—"} />
+              <KV label="Plate" value={booking.vehiclePlate || "—"} mono />
+            </>
+          )}
+        </Section>
+      ) : null}
+
       <Section title="Client & Contact" icon={User}>
         <KV label="Client" value={booking.client} />
         <KV label="Contact Person" value={booking.contactPerson} />
@@ -396,43 +813,61 @@ function OverviewTab({ booking }: { booking: Booking }) {
         <KV label="Arrangement" value={booking.arrangement} mono />
         <KV label="Screen Type" value={booking.screenType} mono />
         <KV label="Size (sqm)" value={booking.size} mono />
+        {booking.itemServiceSpec ? (
+          <KV label="Intake Specification" value={booking.itemServiceSpec} />
+        ) : null}
       </Section>
-      <Section title="Logistics & Team" icon={Truck}>
-        <KV label="Team Leader" value={booking.teamLeader} />
-        <KV label="Stage Hand" value={booking.stageHand} />
-        <KV label="Driver" value={booking.driver} />
-        <KV label="Meal Budget" value={formatCurrency(booking.mealBudget)} mono />
-      </Section>
+      {caps.showOpsSidebar ? (
+        <Section title="Logistics & Team" icon={Truck}>
+          <KV label="Team Leader" value={booking.teamLeader} />
+          <KV label="Stage Hand" value={booking.stageHand} />
+          <KV label="Driver" value={booking.driver} />
+          <KV label="Meal Budget" value={formatCurrency(booking.mealBudget)} mono />
+        </Section>
+      ) : null}
       <Section title="Schedule" icon={Calendar}>
-        <KV label="Assembly" value={booking.assemblyDate} mono />
-        <KV label="Event" value={booking.eventDate} mono />
-        <KV label="Dismantle" value={booking.dismantleDate} mono />
+        <KV label="Assembly" value={formatDate(booking.assemblyDate)} mono />
+        <KV label="Event" value={formatDate(booking.eventDate)} mono />
+        <KV label="Dismantle" value={formatDate(booking.dismantleDate)} mono />
         {booking.rentedDays != null && booking.rentedDays > 0 ? (
           <KV label="Number of Days" value={String(booking.rentedDays)} mono />
         ) : null}
       </Section>
-      <Section title="Financial" icon={DollarSign}>
-        {booking.dailyRate != null && booking.dailyRate > 0 ? (
-          <KV label="Daily Rate" value={formatCurrency(booking.dailyRate)} mono />
-        ) : null}
-        <KV label="Total" value={formatCurrency(booking.paymentAmount ?? booking.amount)} mono />
-        <KV label="Paid" value={formatCurrency(getPaymentSummary(booking).paid)} mono />
-        <KV
-          label="Balance"
-          value={
-            getPaymentSummary(booking).remaining != null
-              ? formatCurrency(getPaymentSummary(booking).remaining as number)
-              : "Unknown — awaiting pricing"
-          }
-          mono
-        />
-      </Section>
+      {caps.showFinancials ? (
+        <Section title="Financial" icon={DollarSign}>
+          {booking.dailyRate != null && booking.dailyRate > 0 ? (
+            <KV label="Daily Rate" value={formatCurrency(booking.dailyRate)} mono />
+          ) : null}
+          <KV label="Total" value={formatCurrency(booking.paymentAmount ?? booking.amount)} mono />
+          <KV label="Paid" value={formatCurrency(getPaymentSummary(booking).paid)} mono />
+          <KV
+            label="Balance"
+            value={
+              getPaymentSummary(booking).remaining != null
+                ? formatCurrency(getPaymentSummary(booking).remaining as number)
+                : "Unknown — awaiting pricing"
+            }
+            mono
+          />
+        </Section>
+      ) : null}
       <Section title="Quick Stats" icon={CheckCircle2}>
         <KV label="Days to Event" value={daysUntil(booking.eventDate)} mono />
         <KV label="Crew Size" value={booking.assignments.length} mono />
         <KV label="BOM Items" value={booking.bomItems.length} mono />
-        <KV label="Created" value={booking.createdAt} mono />
+        <KV label="Created" value={formatDate(booking.createdAt)} mono />
       </Section>
+      {(customFieldsQuery.data || []).length > 0 ? (
+        <Section title="Booking Specifications" icon={MessageSquare}>
+          {(customFieldsQuery.data || []).map((field) => (
+            <KV
+              key={field.id}
+              label={field.name}
+              value={String(booking.customFields?.[field.key] ?? "—")}
+            />
+          ))}
+        </Section>
+      ) : null}
       <Section title="Notes & Special Requirements" icon={MessageSquare}>
         <AppText variant="subtitle">
           {booking.ctoNotes ||
@@ -444,49 +879,81 @@ function OverviewTab({ booking }: { booking: Booking }) {
 }
 
 function ScheduleTab({ booking }: { booking: Booking }) {
-  const events = [
-    { t: "07:00", title: "Load Out from Warehouse", who: "Storekeeper · Storeroom A" },
-    { t: "09:30", title: "Arrive at Venue", who: booking.venue },
+  const { formatDateTime } = useDateFormatter();
+
+  const assemblyWhen = booking.assemblyDate || booking.rentalStart;
+  const eventWhen = booking.eventDate;
+  const dismantleWhen = booking.dismantleDate || booking.rentalEnd;
+
+  const items = [
     {
-      t: "10:00",
+      key: "assembly",
       title: "Assembly Start",
-      who: booking.assignees.join(" · "),
-      date: booking.assemblyDate,
+      when: assemblyWhen,
+      detail: booking.venue || undefined,
+      accent: false,
     },
-    { t: "16:00", title: "Test Run & Calibration", who: "Chief Technician" },
-    { t: "18:00", title: "Live Event", who: booking.client, date: booking.eventDate, accent: true },
-    { t: "23:30", title: "Dismantle", who: booking.stageHand, date: booking.dismantleDate },
-    { t: "00:30", title: "Material Return & Check-in", who: "Storekeeper" },
-  ];
+    {
+      key: "event",
+      title: "Event Start",
+      when: eventWhen,
+      detail: [booking.client, booking.venue].filter(Boolean).join(" · ") || undefined,
+      accent: true,
+    },
+    {
+      key: "dismantle",
+      title: "Dismantle Start",
+      when: dismantleWhen,
+      detail: booking.venue || undefined,
+      accent: false,
+    },
+  ].filter((item) => {
+    if (!item.when) return false;
+    const d = new Date(item.when);
+    return !Number.isNaN(d.getTime());
+  });
+
   return (
     <Section title="Timeline" icon={Clock}>
-      {events.map((event) => (
-        <View key={`${event.t}-${event.title}`} style={styles.timelineRow}>
-          <AppText
-            variant="data"
-            color={event.accent ? colors.accent : colors.text2}
-            style={{ width: 48, fontWeight: "900" }}
-          >
-            {event.t}
-          </AppText>
-          <View
-            style={[styles.timelineDot, event.accent ? { borderColor: colors.accent } : null]}
-          />
-          <View style={styles.timelineCard}>
-            <View style={styles.rowBetween}>
-              <AppText style={{ fontWeight: "800" }}>{event.title}</AppText>
-              {event.date ? (
-                <AppText variant="data" color={colors.text3}>
-                  {event.date}
-                </AppText>
-              ) : null}
+      {items.length === 0 ? (
+        <AppText variant="subtitle">No schedule dates recorded for this booking yet.</AppText>
+      ) : (
+        items.map((event) => {
+          const when = new Date(event.when!);
+          const timeLabel = when.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          });
+          return (
+            <View key={event.key} style={styles.timelineRow}>
+              <AppText
+                variant="data"
+                color={event.accent ? colors.accent : colors.text2}
+                style={{ width: 48, fontWeight: "900" }}
+              >
+                {timeLabel}
+              </AppText>
+              <View
+                style={[styles.timelineDot, event.accent ? { borderColor: colors.accent } : null]}
+              />
+              <View style={styles.timelineCard}>
+                <View style={styles.rowBetween}>
+                  <AppText style={{ fontWeight: "800" }}>{event.title}</AppText>
+                  <AppText variant="data" color={colors.text3}>
+                    {formatDateTime(event.when)}
+                  </AppText>
+                </View>
+                {event.detail ? (
+                  <AppText variant="small" color={colors.text2}>
+                    {event.detail}
+                  </AppText>
+                ) : null}
+              </View>
             </View>
-            <AppText variant="small" color={colors.text2}>
-              {event.who}
-            </AppText>
-          </View>
-        </View>
-      ))}
+          );
+        })
+      )}
     </Section>
   );
 }
@@ -497,7 +964,16 @@ function TeamTab({
   onAssignPress,
 }: {
   booking: Booking;
-  assignments: Array<{ isTeamLead?: boolean; roleContext?: string; user?: { name?: string } }>;
+  assignments: Array<{
+    id: string;
+    isTeamLead?: boolean;
+    roleContext?: string;
+    userId?: string;
+    respondedAt?: string | null;
+    declineReason?: string | null;
+    status?: string;
+    user?: { id?: string; name?: string };
+  }>;
   onAssignPress: () => void;
 }) {
   const { canAny } = usePermissions();
@@ -505,29 +981,101 @@ function TeamTab({
     PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN,
     PERMISSION.ASSIGNMENT_ASSIGN_CREW,
   ]);
-  const roster = [
+
+  type MemberStatus = "UNASSIGNED" | "PENDING" | "ASSIGNED" | "ACCEPTED" | "DECLINED";
+
+  function getAssignmentStatus(a: (typeof assignments)[number]): MemberStatus {
+    if (a.status === "DECLINED" || a.declineReason) return "DECLINED";
+    if (a.respondedAt == null) return "PENDING";
+    return "ACCEPTED";
+  }
+
+  const STATUS_TONE: Record<MemberStatus, string> = {
+    UNASSIGNED: colors.text3,
+    PENDING: colors.status.ASSIGNED,
+    ASSIGNED: colors.status.CONFIRMED,
+    ACCEPTED: colors.status.ACCEPTED,
+    DECLINED: colors.destructive,
+  };
+
+  function isEmptyName(v?: string | null) {
+    return !v || v.trim() === "" || v === "None Assigned" || v === "Unassigned";
+  }
+
+  // Build roster from live assignments, mirroring web TeamTab buildTeamRoster
+  const activeTech = assignments.filter(
+    (a) => (a.roleContext === "TECHNICIAN") && !a.declineReason && a.status !== "DECLINED",
+  );
+  const declinedTech = assignments.filter(
+    (a) => (a.roleContext === "TECHNICIAN") && (a.declineReason || a.status === "DECLINED"),
+  );
+  const chief = activeTech.find((a) => a.isTeamLead);
+  const technicians = activeTech.filter((a) => !a.isTeamLead);
+  const oo = assignments.find(
+    (a) => a.roleContext === "OO" && !a.declineReason && a.status !== "DECLINED",
+  );
+  const crew = assignments.filter(
+    (a) => a.roleContext === "CREW" && !a.declineReason && a.status !== "DECLINED",
+  );
+
+  type RosterRow = { role: string; name: string; statusKey: MemberStatus };
+
+  const roster: RosterRow[] = [
     {
       role: "Chief Technician",
-      name: assignments.find((a) => a.isTeamLead)?.user?.name || booking.teamLeader || "Unassigned",
-      status: "CONFIRMED",
+      name: chief?.user?.name || (isEmptyName(booking.teamLeader) ? "Unassigned" : booking.teamLeader),
+      statusKey: chief ? getAssignmentStatus(chief) : "UNASSIGNED",
     },
     {
       role: "Technician",
-      name: assignments.find((a) => a.roleContext === "TECHNICIAN")?.user?.name || "Unassigned",
-      status: "CONFIRMED",
+      name:
+        technicians.map((a) => a.user?.name).filter(Boolean).join(", ") || "Unassigned",
+      statusKey:
+        technicians.length === 0
+          ? "UNASSIGNED"
+          : technicians.some((a) => a.respondedAt == null && !a.declineReason)
+            ? "PENDING"
+            : technicians.every((a) => a.declineReason || a.status === "DECLINED")
+              ? "DECLINED"
+              : "ACCEPTED",
     },
+    ...declinedTech.map((a) => ({
+      role: a.isTeamLead ? "Chief Technician (Declined)" : "Technician (Declined)",
+      name: a.user?.name ?? "Unknown",
+      statusKey: "DECLINED" as MemberStatus,
+    })),
     {
       role: "Operation Officer",
-      name: assignments.find((a) => a.roleContext === "OO")?.user?.name || "Unassigned",
-      status: "CONFIRMED",
+      name: oo?.user?.name || "Unassigned",
+      statusKey: oo ? getAssignmentStatus(oo) : "UNASSIGNED",
     },
-    { role: "Team Leader", name: booking.teamLeader || "Unassigned", status: "CONFIRMED" },
-    { role: "Stage Hand Team", name: booking.stageHand || "Unassigned", status: "CONFIRMED" },
-    { role: "Driver", name: booking.driver || "Unassigned", status: "CONFIRMED" },
-    ...assignments
-      .filter((a) => a.roleContext === "CREW" && a.user?.name)
-      .map((a) => ({ role: "Crew", name: a.user?.name ?? "", status: "CONFIRMED" })),
+    {
+      role: "Team Leader",
+      name: isEmptyName(booking.teamLeader) ? "Unassigned" : booking.teamLeader,
+      statusKey: isEmptyName(booking.teamLeader) ? "UNASSIGNED" : "ASSIGNED",
+    },
+    {
+      role: "Stage Hand Team",
+      name:
+        crew.length > 0
+          ? crew.map((a) => a.user?.name).filter(Boolean).join(", ")
+          : isEmptyName(booking.stageHand)
+            ? "Unassigned"
+            : booking.stageHand.replace(/^TEAM · /, ""),
+      statusKey: crew.length > 0 ? "ASSIGNED" : "UNASSIGNED",
+    },
+    {
+      role: "Driver",
+      name: isEmptyName(booking.driver) ? "Unassigned" : booking.driver,
+      statusKey: isEmptyName(booking.driver) ? "UNASSIGNED" : "ASSIGNED",
+    },
   ];
+
+  function initialsFor(name: string) {
+    if (isEmptyName(name)) return "—";
+    return name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+  }
+
   return (
     <Section
       title="Assigned Team"
@@ -535,23 +1083,38 @@ function TeamTab({
       action={
         canAssign ? (
           <Button variant="ghost" onPress={onAssignPress}>
-            + Assign Member
+            + Assign
           </Button>
         ) : undefined
       }
     >
-      {roster.map((person) => (
-        <View key={`${person.role}-${person.name}`} style={styles.personRow}>
-          <View>
-            <AppText style={{ fontWeight: "800" }}>{person.name}</AppText>
-            <AppText variant="eyebrow">{person.role}</AppText>
+      {roster.map((person) => {
+        const tone = STATUS_TONE[person.statusKey];
+        const unassigned = person.statusKey === "UNASSIGNED";
+        return (
+          <View key={`${person.role}-${person.name}`} style={styles.personRow}>
+            <View style={styles.personAvatar}>
+              <AppText
+                variant="small"
+                color={unassigned ? colors.text3 : colors.accent}
+                style={{ fontWeight: "900" }}
+              >
+                {initialsFor(person.name)}
+              </AppText>
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText
+                style={{ fontWeight: "800" }}
+                color={unassigned ? colors.text3 : colors.foreground}
+              >
+                {person.name}
+              </AppText>
+              <AppText variant="eyebrow">{person.role}</AppText>
+            </View>
+            <ToneBadge label={person.statusKey} tone={tone} />
           </View>
-          <ToneBadge
-            label={person.status}
-            tone={person.status === "ACCEPTED" ? colors.status.ACCEPTED : colors.status.CONFIRMED}
-          />
-        </View>
-      ))}
+        );
+      })}
     </Section>
   );
 }
@@ -559,6 +1122,7 @@ function TeamTab({
 function EquipmentTab({
   booking,
   bomLines,
+  canEditBom: canEditBomProp,
 }: {
   booking: Booking;
   bomLines: Array<{
@@ -569,9 +1133,10 @@ function EquipmentTab({
     item?: { name?: string };
     pool?: { name?: string };
   }>;
+  canEditBom?: boolean;
 }) {
   const { can } = usePermissions();
-  const canEditBom = can(PERMISSION.BOM_CREATE);
+  const canEditBom = canEditBomProp ?? can(PERMISSION.BOM_CREATE);
   const { data: pools = [] } = useInventory();
   const createBomLine = useCreateBomLine();
   const deleteBomLine = useDeleteBomLine();
@@ -723,9 +1288,7 @@ function PaymentsTab({ booking }: { booking: Booking }) {
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const computedTotal =
-    Number(dailyRate) > 0 && Number(rentedDays) > 0
-      ? Number(dailyRate) * Number(rentedDays)
-      : null;
+    Number(dailyRate) > 0 && Number(rentedDays) > 0 ? Number(dailyRate) * Number(rentedDays) : null;
 
   const tx =
     booking.payment === "PAID"
@@ -738,6 +1301,10 @@ function PaymentsTab({ booking }: { booking: Booking }) {
     const parsed = Number(amount);
     if (!Number.isFinite(parsed) || parsed <= 0) {
       setPaymentError("Enter a valid amount.");
+      return;
+    }
+    if (parsed < 1000) {
+      setPaymentError("Minimum payment amount is ETB 1,000.");
       return;
     }
     setPaymentError(null);
@@ -792,9 +1359,7 @@ function PaymentsTab({ booking }: { booking: Booking }) {
           ) : null}
           <KV
             label="Computed Total"
-            value={
-              summary.total != null ? formatCurrency(summary.total) : "Not set"
-            }
+            value={summary.total != null ? formatCurrency(summary.total) : "Not set"}
             mono
           />
         </Section>
@@ -899,8 +1464,10 @@ function PaymentsTab({ booking }: { booking: Booking }) {
 }
 
 function FilesTab({
+  booking,
   attachments,
 }: {
+  booking: Booking;
   attachments: Array<{
     id: string;
     originalName: string;
@@ -910,6 +1477,9 @@ function FilesTab({
 }) {
   const deleteAttachment = useDeleteAttachment();
   const downloadAttachment = useDownloadAttachment();
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const { can } = usePermissions();
 
   const files = attachments.map((att) => ({
     id: att.id,
@@ -923,7 +1493,37 @@ function FilesTab({
       const { downloadUrl } = await downloadAttachment.mutateAsync(id);
       await Linking.openURL(downloadUrl);
     } catch {
-      // Surfaced implicitly by the disabled row state; no dedicated error UI in this view.
+      Alert.alert("Error", "Could not open download URL.");
+    }
+  };
+
+  const handleUpload = async () => {
+    try {
+      setUploadError(null);
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setUploadError("Photo library access is needed to attach files.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsMultipleSelection: false,
+        quality: 0.9,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      setUploading(true);
+      const ext = asset.uri.split(".").pop() || "jpg";
+      const mimeType = asset.type === "video" ? `video/${ext}` : `image/${ext}`;
+      await uploadBookingAttachmentApi(booking.id, {
+        uri: asset.uri,
+        name: asset.fileName || `attachment_${Date.now()}.${ext}`,
+        type: mimeType,
+      });
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -932,19 +1532,27 @@ function FilesTab({
       title="Files & Attachments"
       icon={Paperclip}
       action={
-        <Button variant="ghost" icon={Upload} disabled>
-          Upload
+        <Button variant="ghost" icon={Upload} disabled={uploading} onPress={handleUpload}>
+          {uploading ? "Uploading..." : "Upload"}
         </Button>
       }
     >
+      {uploadError ? (
+        <AppText variant="small" color={colors.destructive}>
+          {uploadError}
+        </AppText>
+      ) : null}
       {files.length === 0 ? (
-        <EmptyState title="No files attached yet." />
+        <EmptyState
+          title="No files attached yet."
+          detail="Tap Upload to attach contracts, photos, or documents to this booking."
+        />
       ) : (
         files.map((file) => (
           <View key={file.id} style={styles.fileCard}>
             <FileText size={20} color={colors.accent} />
             <View style={{ flex: 1 }}>
-              <AppText style={{ fontWeight: "800" }}>{file.n}</AppText>
+              <AppText style={{ fontWeight: "800" }} numberOfLines={1}>{file.n}</AppText>
               <AppText variant="small" color={colors.text3}>
                 {file.s} · {file.d}
               </AppText>
@@ -987,8 +1595,19 @@ function EvaluationsTab({
   clientEval,
 }: {
   booking: Booking;
-  internalEval?: { scores: Array<{ label?: string; score: number }>; notes?: string };
-  clientEval?: { respondentName: string; scores: Array<{ label?: string; score: number }> };
+  internalEval?: {
+    evaluatorId?: string;
+    createdAt?: string;
+    clientNameVenue?: string;
+    teamSize?: number;
+    scores: Array<{ metricId?: string; label?: string; score: number; valueType?: string; description?: string }>;
+    notes?: string;
+  };
+  clientEval?: {
+    respondentName: string;
+    submittedAt?: string;
+    scores: Array<{ metricId?: string; label?: string; score: number; valueType?: string; description?: string }>;
+  };
 }) {
   const { can } = usePermissions();
   const canSubmit = can(PERMISSION.EVAL_SUBMIT_INTERNAL);
@@ -997,20 +1616,40 @@ function EvaluationsTab({
   const submitEval = useSubmitInternalEvaluation();
   const [submitOpen, setSubmitOpen] = useState(false);
   const [scores, setScores] = useState<Record<string, string>>({});
+  const [notes, setNotes] = useState("");
   const [evalError, setEvalError] = useState<string | null>(null);
+
+  /** Render a score value according to its metric type, mirroring web's ScoreDisplay. */
+  function renderScore(score: number, valueType?: string): string {
+    if (valueType === "boolean") return score >= 1 ? "✓ Yes" : "✗ No";
+    if (valueType === "rating_5") return `${score} / 5`;
+    if (valueType === "rating_10") return `${score} / 10`;
+    if (valueType === "percentage") return `${score}%`;
+    return String(score);
+  }
 
   const handleSubmit = async () => {
     setEvalError(null);
+    const scoreEntries = internalMetrics
+      .map((m) => ({ metricId: m.id, score: Number(scores[m.id]) }))
+      .filter((s) => Number.isFinite(s.score));
+    if (scoreEntries.length === 0) {
+      setEvalError("Enter at least one score before submitting.");
+      return;
+    }
     try {
       await submitEval.mutateAsync({
         bookingId: booking.id,
         payload: {
-          scores: internalMetrics
-            .map((m) => ({ metricId: m.id, score: Number(scores[m.id]) }))
-            .filter((s) => Number.isFinite(s.score)),
+          clientNameVenue: booking.venue,
+          teamSize: booking.assignments.length,
+          notes: notes.trim() || undefined,
+          scores: scoreEntries,
         },
       });
       setSubmitOpen(false);
+      setScores({});
+      setNotes("");
     } catch (e) {
       setEvalError(e instanceof Error ? e.message : "Failed to submit evaluation.");
     }
@@ -1018,75 +1657,160 @@ function EvaluationsTab({
 
   return (
     <View style={{ gap: 14 }}>
+      {/* Internal Crew Review */}
       <Section
-        title="Internal Crew Evaluation"
+        title="Internal Crew Review"
         icon={CheckCircle2}
         action={
-          canSubmit ? (
+          canSubmit && !internalEval ? (
             <Button variant="ghost" onPress={() => setSubmitOpen(true)}>
-              {internalEval ? "Update" : "+ Submit"}
+              + Submit
             </Button>
           ) : undefined
         }
       >
         {!internalEval ? (
-          <EmptyState title="No internal evaluation submitted yet." />
+          <EmptyState
+            title="No internal review submitted yet."
+            detail="Technicians and administrators can complete the operations review after the event."
+          />
         ) : (
-          <>
+          <View style={{ gap: 10 }}>
+            <View style={styles.evalMeta}>
+              <AppText variant="small" color={colors.text3}>
+                Evaluated by: <AppText variant="small" style={{ fontWeight: "800" }}>{internalEval.evaluatorId || "Staff"}</AppText>
+              </AppText>
+              {internalEval.createdAt ? (
+                <AppText variant="data" color={colors.text3}>
+                  {new Date(internalEval.createdAt).toLocaleDateString()}
+                </AppText>
+              ) : null}
+            </View>
             {internalEval.scores.map((s, index) => (
-              <KV key={`${s.label}-${index}`} label={s.label || "Metric"} value={s.score} mono />
+              <View key={s.metricId || index} style={styles.scoreRow}>
+                <View style={{ flex: 1 }}>
+                  <AppText style={{ fontWeight: "700" }}>{s.label || "Metric"}</AppText>
+                  {s.description ? (
+                    <AppText variant="small" color={colors.text3}>{s.description}</AppText>
+                  ) : null}
+                </View>
+                <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
+                  {renderScore(s.score, s.valueType)}
+                </AppText>
+              </View>
             ))}
             {internalEval.notes ? (
-              <AppText variant="small" color={colors.text2}>
-                {internalEval.notes}
-              </AppText>
+              <View style={styles.evalNoteBox}>
+                <AppText variant="eyebrow">Evaluator Notes</AppText>
+                <AppText variant="small" color={colors.text2}>{internalEval.notes}</AppText>
+              </View>
             ) : null}
-          </>
-        )}
-      </Section>
-      <Section title="Client Feedback" icon={MessageSquare}>
-        {!clientEval ? (
-          <EmptyState title="No client feedback received yet." />
-        ) : (
-          <>
-            <KV label="Respondent" value={clientEval.respondentName} />
-            {clientEval.scores.map((s, index) => (
-              <KV key={`${s.label}-${index}`} label={s.label || "Metric"} value={s.score} mono />
-            ))}
-          </>
+          </View>
         )}
       </Section>
 
+      {/* Client Satisfaction Review */}
+      <Section title="Client Satisfaction Review" icon={Star}>
+        {!clientEval ? (
+          <EmptyState
+            title="Awaiting client feedback."
+            detail="This card updates automatically once the client completes the post-event evaluation form."
+          />
+        ) : (
+          <View style={{ gap: 10 }}>
+            <View style={styles.evalMeta}>
+              <AppText variant="small" color={colors.text3}>
+                Respondent: <AppText variant="small" style={{ fontWeight: "800" }}>{clientEval.respondentName}</AppText>
+              </AppText>
+              {clientEval.submittedAt ? (
+                <AppText variant="data" color={colors.text3}>
+                  {new Date(clientEval.submittedAt).toLocaleDateString()}
+                </AppText>
+              ) : null}
+            </View>
+            {clientEval.scores.map((s, index) => (
+              <View key={s.metricId || index} style={styles.scoreRow}>
+                <View style={{ flex: 1 }}>
+                  <AppText style={{ fontWeight: "700" }}>{s.label || "Metric"}</AppText>
+                  {s.description ? (
+                    <AppText variant="small" color={colors.text3}>{s.description}</AppText>
+                  ) : null}
+                </View>
+                <AppText variant="data" color={colors.status.ACCEPTED} style={{ fontWeight: "900" }}>
+                  {renderScore(s.score, s.valueType)}
+                </AppText>
+              </View>
+            ))}
+          </View>
+        )}
+      </Section>
+
+      {/* Submit internal eval bottom sheet */}
       <BottomSheet
         visible={submitOpen}
-        title="Submit Internal Evaluation"
+        title="Submit Internal Crew Review"
         onClose={() => setSubmitOpen(false)}
       >
+        <AppText variant="subtitle">
+          Rate each criterion for the crew's performance on this booking.
+        </AppText>
         {internalMetrics.map((metric) => (
-          <Field key={metric.id} label={metric.label}>
-            <Input
-              value={scores[metric.id] || ""}
-              onChangeText={(v) => setScores((prev) => ({ ...prev, [metric.id]: v }))}
-              keyboardType="numeric"
-              placeholder="Score"
-            />
+          <Field key={metric.id} label={`${metric.label} (${metric.valueType.replace(/_/g, " ")})`}>
+            {metric.valueType === "boolean" ? (
+              <View style={styles.choiceWrap}>
+                <Choice
+                  label="Yes"
+                  active={scores[metric.id] === "1"}
+                  onPress={() => setScores((prev) => ({ ...prev, [metric.id]: "1" }))}
+                />
+                <Choice
+                  label="No"
+                  active={scores[metric.id] === "0"}
+                  onPress={() => setScores((prev) => ({ ...prev, [metric.id]: "0" }))}
+                />
+              </View>
+            ) : (
+              <Input
+                value={scores[metric.id] || ""}
+                onChangeText={(v) => setScores((prev) => ({ ...prev, [metric.id]: v }))}
+                keyboardType="numeric"
+                placeholder={
+                  metric.valueType === "rating_5"
+                    ? "1–5"
+                    : metric.valueType === "rating_10"
+                      ? "1–10"
+                      : metric.valueType === "percentage"
+                        ? "0–100"
+                        : "Score"
+                }
+              />
+            )}
+            {metric.description ? (
+              <AppText variant="small" color={colors.text3}>{metric.description}</AppText>
+            ) : null}
           </Field>
         ))}
+        <Field label="Evaluator Notes (optional)">
+          <TextArea
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Any observations about this event's execution..."
+          />
+        </Field>
         {evalError ? (
-          <AppText variant="small" color={colors.destructive}>
-            {evalError}
-          </AppText>
+          <AppText variant="small" color={colors.destructive}>{evalError}</AppText>
         ) : null}
         <Button disabled={submitEval.isPending} onPress={handleSubmit}>
-          {submitEval.isPending ? "Submitting..." : "Submit Evaluation"}
+          {submitEval.isPending ? "Submitting..." : "Submit Review"}
         </Button>
+        <Button variant="outline" onPress={() => setSubmitOpen(false)}>Cancel</Button>
       </BottomSheet>
     </View>
   );
 }
 
 function ActivityTab({ statusHistory }: { statusHistory: Booking["statusHistory"] }) {
-  const log = [...statusHistory].sort(
+  const log = [...(statusHistory || [])].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 
@@ -1100,35 +1824,49 @@ function ActivityTab({ statusHistory }: { statusHistory: Booking["statusHistory"
 
   return (
     <Section title="Activity Log" icon={Clock}>
-      {log.map((item, index) => (
-        <View key={item.id} style={styles.activityRow}>
-          <View
-            style={[styles.activityDot, index === 0 ? { backgroundColor: colors.accent } : null]}
-          />
-          <View style={{ flex: 1 }}>
-            <AppText>
-              <AppText style={{ fontWeight: "800" }}>{item.actorName}</AppText>{" "}
-              <AppText color={colors.text2}>
-                {item.fromStatus ? `moved from ${item.fromStatus} to` : "set status to"}
-              </AppText>{" "}
-              <AppText
-                color={index === 0 ? colors.accent : colors.foreground}
-                style={{ fontWeight: "800" }}
-              >
-                {item.toStatus}
+      {log.map((item, index) => {
+        const toLabel = STATUS_LABELS[item.toStatus as keyof typeof STATUS_LABELS] || item.toStatus;
+        const fromLabel = item.fromStatus
+          ? STATUS_LABELS[item.fromStatus as keyof typeof STATUS_LABELS] || item.fromStatus
+          : null;
+        return (
+          <View key={item.id} style={styles.activityRow}>
+            <View
+              style={[styles.activityDot, index === 0 ? { backgroundColor: colors.accent } : null]}
+            />
+            <View style={{ flex: 1, gap: 4 }}>
+              <View style={styles.rowBetween}>
+                <AppText style={{ fontWeight: "800", flex: 1 }}>{item.actorName}</AppText>
+                <AppText variant="data" color={colors.text3} style={{ fontSize: 10 }}>
+                  {new Date(item.createdAt).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </AppText>
+              </View>
+              <AppText variant="small" color={colors.text2}>
+                {fromLabel ? `Moved from ${fromLabel} to ` : "Set status to "}
+                <AppText
+                  variant="small"
+                  color={index === 0 ? colors.accent : colors.foreground}
+                  style={{ fontWeight: "800" }}
+                >
+                  {toLabel}
+                </AppText>
               </AppText>
-            </AppText>
-            {item.reason ? (
-              <AppText variant="small" color={colors.text3}>
-                {item.reason}
-              </AppText>
-            ) : null}
+              {item.reason ? (
+                <View style={styles.reasonBox}>
+                  <AppText variant="small" color={colors.text3} style={{ fontStyle: "italic" }}>
+                    "{item.reason}"
+                  </AppText>
+                </View>
+              ) : null}
+            </View>
           </View>
-          <AppText variant="data" color={colors.text3}>
-            {new Date(item.createdAt).toLocaleString()}
-          </AppText>
-        </View>
-      ))}
+        );
+      })}
     </Section>
   );
 }
@@ -1173,6 +1911,12 @@ function Choice({
 }
 
 const styles = StyleSheet.create({
+  actionBar: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
   rowIconButton: {
     minWidth: 44,
     minHeight: 44,
@@ -1203,13 +1947,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface2,
-    borderRadius: 8,
+    borderRadius: radius.md,
     padding: 10,
   },
   rowBetween: {
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 12,
+  },
+  techBanner: {
+    padding: 14,
+    gap: 12,
+    borderColor: colors.accent,
+    backgroundColor: alpha(colors.accent, 0.06),
+  },
+  techBannerRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+  },
+  techBannerActions: {
+    flexDirection: "row",
+    gap: 8,
   },
   timelineRow: {
     flexDirection: "row",
@@ -1228,18 +1987,28 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: radius.md,
     backgroundColor: colors.surface2,
     padding: 10,
     gap: 4,
   },
   personRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
+    alignItems: "center",
+    gap: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
     paddingBottom: 12,
+  },
+  personAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
   itemRow: {
     flexDirection: "row",
@@ -1256,7 +2025,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface2,
-    borderRadius: 8,
+    borderRadius: radius.md,
     padding: 12,
   },
   activityRow: {
@@ -1271,6 +2040,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.text3,
     marginTop: 6,
   },
+  reasonBox: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.sm,
+    padding: 8,
+  },
   choiceWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1278,7 +2054,7 @@ const styles = StyleSheet.create({
   },
   choice: {
     minWidth: "47%",
-    borderRadius: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 8,
@@ -1286,5 +2062,33 @@ const styles = StyleSheet.create({
   choiceActive: {
     borderColor: colors.accent,
     backgroundColor: alpha(colors.accent, 0.1),
+  },
+  evalMeta: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    padding: 10,
+    gap: 8,
+  },
+  evalNoteBox: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    padding: 10,
+    gap: 6,
+  },
+  scoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
 });

@@ -16,11 +16,14 @@ export type ScreenType = "P2.97" | "P4" | "P5" | "P2.97-New" | "P3.91 INDOOR" | 
 
 export interface BomItem {
   id: string;
+  /** Human-readable line code, e.g. SC-001 (derived from material category). */
+  code: string;
   name: string;
   qty: number;
   status: "Reserved" | "Checked Out" | "Returned";
   poolId?: string;
   itemId?: string;
+  categoryKey?: string;
 }
 
 export interface StatusHistoryItem {
@@ -39,6 +42,8 @@ export interface BookingAssignment {
   isTeamLead?: boolean;
   phase?: string;
   user?: { id: string; name: string };
+  respondedAt?: string | null;
+  declineReason?: string | null;
 }
 
 export interface Booking {
@@ -53,7 +58,7 @@ export interface Booking {
   rentalStart?: string;
   rentalEnd?: string;
   venue: string;
-  screenType: ScreenType;
+  screenType: ScreenType | "";
   size: number;
   arrangement: string;
   assignees: string[];

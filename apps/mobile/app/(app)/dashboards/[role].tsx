@@ -17,7 +17,6 @@ import {
 } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
 import { StatusBadge } from "@/components/status";
-import { ScreenAvailabilityWidget } from "@/components/dashboard/ScreenAvailabilityWidget";
 import {
   AppText,
   Button,
@@ -214,7 +213,6 @@ function CTO({ BOOKINGS }: { BOOKINGS: Booking[] }) {
           <QueueRow key={b.code} booking={b} action="Review & assign" />
         ))}
       </Queue>
-      <ScreenAvailabilityWidget />
     </Screen>
   );
 }

@@ -1,42 +1,61 @@
-import { Monitor } from "lucide-react-native";
-import { View } from "react-native";
-import { AppText, Card, Section } from "@/components/ui";
+import { View, StyleSheet } from "react-native";
+import { AppText, LoadingState, Section } from "@/components/ui";
 import { useBookings } from "@/hooks/useOperations";
 import { colors, radius } from "@/theme/tokens";
+import { Monitor } from "lucide-react-native";
 
-const ACTIVE_STATUSES = ["RESERVED", "CONFIRMED", "ASSIGNED", "ACCEPTED", "PREPARATION", "ONSITE"];
 const SCREEN_TYPES = ["P2.97", "P4", "P3.91 INDOOR"] as const;
+const ACTIVE_STATUSES = new Set([
+  "RESERVED",
+  "CONFIRMED",
+  "ASSIGNED",
+  "ACCEPTED",
+  "PREPARATION",
+  "ONSITE",
+]);
 
 export function ScreenAvailabilityWidget() {
-  const { data: BOOKINGS = [] } = useBookings();
+  const { data: bookings = [], isLoading } = useBookings();
+
+  if (isLoading) return <LoadingState label="Loading screen availability..." />;
+
   return (
     <Section title="Screen availability" icon={Monitor}>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+      <View style={styles.grid}>
         {SCREEN_TYPES.map((type) => {
-          const activeCount = BOOKINGS.filter(
-            (booking) => booking.screenType === type && ACTIVE_STATUSES.includes(booking.status),
+          const count = bookings.filter(
+            (booking) => booking.screenType === type && ACTIVE_STATUSES.has(booking.status),
           ).length;
           return (
-            <Card
-              key={type}
-              style={{
-                flexGrow: 1,
-                minWidth: "30%",
-                padding: 12,
-                backgroundColor: colors.surface2,
-                borderRadius: radius.md,
-              }}
-            >
+            <View key={type} style={styles.card}>
               <AppText variant="data" style={{ fontWeight: "900" }}>
                 {type}
               </AppText>
-              <AppText variant="small" color={colors.text2} style={{ marginTop: 4 }}>
-                {activeCount} active bookings
+              <AppText variant="small" color={colors.text2}>
+                {count} active bookings
               </AppText>
-            </Card>
+            </View>
           );
         })}
       </View>
     </Section>
   );
 }
+
+const styles = StyleSheet.create({
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  card: {
+    flexGrow: 1,
+    minWidth: "30%",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    padding: 12,
+    gap: 4,
+  },
+});

@@ -106,7 +106,7 @@ export default function CheckoutScreen() {
             ? { itemId: line.itemId }
             : { poolId: line?.poolId || null, quantity: String(item.qty) };
         });
-        await checkoutMutation.mutateAsync({ bookingId: selected.code, assets });
+        await checkoutMutation.mutateAsync({ bookingId: selected.id, assets });
       } else {
         const returns = items.map((item) => {
           const line = matchLine(item);
@@ -117,7 +117,7 @@ export default function CheckoutScreen() {
             condition: "AVAILABLE" as const,
           };
         });
-        await checkinMutation.mutateAsync({ bookingId: selected.code, returns });
+        await checkinMutation.mutateAsync({ bookingId: selected.id, returns });
       }
       setSubmitted(true);
     } catch (error) {

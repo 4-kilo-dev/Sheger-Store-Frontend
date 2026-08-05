@@ -18,7 +18,7 @@ import {
   SegmentedTabs,
 } from "@/components/ui";
 import { alpha, colors } from "@/theme/tokens";
-import type { Booking, BookingStatus, PaymentStatus, ScreenType } from "@/types/domain";
+import type { Booking, BookingStatus, PaymentStatus } from "@/types/domain";
 import { STATUS_ORDER } from "@/types/domain";
 import { useBookings, useStaff } from "@/hooks/useOperations";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -26,27 +26,19 @@ import { PERMISSION } from "@/lib/auth/permission-keys";
 import { useAppContext } from "@/context/AppContext";
 
 const TABS = ["All", "This Week", "Upcoming", "Onsite", "Last Week", "Assigned to Me"] as const;
-const SCREEN_TYPES: ScreenType[] = [
-  "P2.97",
-  "P4",
-  "P5",
-  "P2.97-New",
-  "P3.91 INDOOR",
-  "P3.91 OUTDOOR",
-];
 const PAYMENT_STATUSES: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
 
 export default function BookingsScreen() {
   const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings();
   const { data: staff = [] } = useStaff();
-  const { canAny } = usePermissions();
+  const { canAny, can } = usePermissions();
   const { activeProfile } = useAppContext();
+  const canCreateBooking = can(PERMISSION.BOOKING_CREATE);
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
   const [query, setQuery] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<BookingStatus | null>(null);
-  const [screenFilter, setScreenFilter] = useState<ScreenType | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | null>(null);
 
@@ -61,13 +53,44 @@ export default function BookingsScreen() {
     if (isAssignedScopeOnly) {
       result = result.filter((booking) => booking.assignees.includes(activeProfile.name));
     }
-    if (tab === "Onsite") result = result.filter((booking) => booking.status === "ONSITE");
-    if (tab === "Upcoming")
-      result = result.filter((booking) => new Date(booking.assemblyDate) > new Date());
-    if (tab === "Assigned to Me")
+    if (tab === "Onsite") {
+      result = result.filter((booking) => booking.status === "ONSITE");
+    } else if (tab === "Upcoming") {
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      result = result.filter((booking) => {
+        const d = new Date(booking.assemblyDate);
+        return !isNaN(d.getTime()) && d >= now;
+      });
+    } else if (tab === "This Week") {
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      startOfWeek.setHours(0, 0, 0, 0);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
+      result = result.filter((booking) => {
+        const d = new Date(booking.eventDate);
+        return !isNaN(d.getTime()) && d >= startOfWeek && d <= endOfWeek;
+      });
+    } else if (tab === "Last Week") {
+      const now = new Date();
+      const startOfThisWeek = new Date(now);
+      startOfThisWeek.setHours(0, 0, 0, 0);
+      startOfThisWeek.setDate(now.getDate() - now.getDay());
+      const startOfLastWeek = new Date(startOfThisWeek);
+      startOfLastWeek.setDate(startOfThisWeek.getDate() - 7);
+      const endOfLastWeek = new Date(startOfThisWeek);
+      endOfLastWeek.setMilliseconds(-1);
+      result = result.filter((booking) => {
+        const d = new Date(booking.eventDate);
+        return !isNaN(d.getTime()) && d >= startOfLastWeek && d <= endOfLastWeek;
+      });
+    } else if (tab === "Assigned to Me") {
       result = result.filter((booking) => booking.assignees.includes(activeProfile.name));
+    }
     if (statusFilter) result = result.filter((booking) => booking.status === statusFilter);
-    if (screenFilter) result = result.filter((booking) => booking.screenType === screenFilter);
     if (assigneeFilter)
       result = result.filter((booking) => booking.assignees.includes(assigneeFilter));
     if (paymentFilter) result = result.filter((booking) => booking.payment === paymentFilter);
@@ -85,16 +108,13 @@ export default function BookingsScreen() {
     query,
     tab,
     statusFilter,
-    screenFilter,
     assigneeFilter,
     paymentFilter,
     isAssignedScopeOnly,
     activeProfile.name,
   ]);
 
-  const activeFilterCount = [statusFilter, screenFilter, assigneeFilter, paymentFilter].filter(
-    Boolean,
-  ).length;
+  const activeFilterCount = [statusFilter, assigneeFilter, paymentFilter].filter(Boolean).length;
 
   const toggle = (code: string) => {
     setSelected((current) => {
@@ -133,9 +153,11 @@ export default function BookingsScreen() {
             />
           </Field>
         </View>
-        <Button icon={Plus} onPress={() => router.push(to("/bookings/new"))}>
-          New Booking
-        </Button>
+        {canCreateBooking ? (
+          <Button icon={Plus} onPress={() => router.push(to("/bookings/new"))}>
+            New Booking
+          </Button>
+        ) : null}
       </View>
 
       <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
@@ -188,18 +210,6 @@ export default function BookingsScreen() {
             ))}
           </View>
         </Field>
-        <Field label="Screen Type">
-          <View style={styles.choiceWrap}>
-            {SCREEN_TYPES.map((type) => (
-              <FilterChip
-                key={type}
-                label={type}
-                active={screenFilter === type}
-                onPress={() => setScreenFilter((current) => (current === type ? null : type))}
-              />
-            ))}
-          </View>
-        </Field>
         <Field label="Assignee">
           <View style={styles.choiceWrap}>
             {staff.map((member) => (
@@ -230,7 +240,6 @@ export default function BookingsScreen() {
           variant="outline"
           onPress={() => {
             setStatusFilter(null);
-            setScreenFilter(null);
             setAssigneeFilter(null);
             setPaymentFilter(null);
           }}

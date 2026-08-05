@@ -7,6 +7,8 @@ import { useState } from "react";
 import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AppProvider } from "@/context/AppContext";
+import { CalendarSystemProvider } from "@/context/CalendarSystemContext";
+import { NotificationsProvider } from "@/context/NotificationsContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { colors } from "@/theme/tokens";
 import { useAppFonts } from "@/theme/fonts";
@@ -23,14 +25,18 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <AppProvider>
-          <ErrorBoundary>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: colors.background },
-              }}
-            />
-          </ErrorBoundary>
+          <CalendarSystemProvider>
+            <NotificationsProvider>
+              <ErrorBoundary>
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: colors.background },
+                  }}
+                />
+              </ErrorBoundary>
+            </NotificationsProvider>
+          </CalendarSystemProvider>
         </AppProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>

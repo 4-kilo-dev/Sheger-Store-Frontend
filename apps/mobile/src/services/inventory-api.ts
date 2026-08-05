@@ -77,6 +77,19 @@ export async function getInventoryCategoriesApi(): Promise<InventoryCategory[]> 
   return client.get<InventoryCategory[]>("/api/inventory/categories?limit=200&active=true");
 }
 
+export async function getInventoryPoolsApi(): Promise<RawPool[]> {
+  return getPoolsApi();
+}
+
+export async function getPoolAvailabilityApi(
+  poolId: string,
+  from: string,
+  to: string,
+): Promise<{ available?: number; total?: number }> {
+  const params = new URLSearchParams({ from, to });
+  return client.get(`/api/inventory/pools/${poolId}/availability?${params.toString()}`);
+}
+
 export async function createInventoryCategoryApi(
   payload: CreateCategoryPayload,
 ): Promise<InventoryCategory> {

@@ -7,11 +7,9 @@ import {
   ClipboardCheck,
   MapPin,
   MessageSquare,
-  Package,
   Phone,
   Save,
   User,
-  Users,
   Wrench,
 } from "lucide-react-native";
 import { useState } from "react";
@@ -29,33 +27,20 @@ import {
 import { alpha, colors, radius } from "@/theme/tokens";
 import { useCreateBooking, useCustomFieldDefinitions } from "@/hooks/useOperations";
 
-const STEPS = [
-  "Client",
-  "CTO Consult",
-  "Venue & Date",
-  "Screen Spec",
-  "Team",
-  "Review",
-] as const;
-const screenTypes = ["P2.97", "P4", "P5", "P2.97-New", "P3.91 INDOOR", "P3.91 OUTDOOR"] as const;
+const STEPS = ["Client", "Venue & Date", "Intake Requirements", "Review"] as const;
 
 type BookingDraft = {
   client: string;
   contactPerson: string;
   contactPhone: string;
-  ctoConsulted: boolean;
-  ctoNotes: string;
-  ctoArrangement: string;
   venue: string;
   assemblyDate: string;
   eventDate: string;
-  screenType: string;
-  size: number;
-  arrangement: string;
-  chief: string;
-  technician: string;
-  stageHand: string;
+  dismantleDate: string;
   rentedDays: number;
+  itemServiceSpec: string;
+  size: string;
+  notes: string;
 };
 
 export default function NewBookingScreen() {
@@ -69,19 +54,14 @@ export default function NewBookingScreen() {
     client: "",
     contactPerson: "",
     contactPhone: "",
-    ctoConsulted: false,
-    ctoNotes: "",
-    ctoArrangement: "",
     venue: "",
     assemblyDate: "",
     eventDate: "",
-    screenType: "P4",
-    size: 36,
-    arrangement: "6M x 3M",
-    chief: "",
-    technician: "",
-    stageHand: "TEAM 1 · Abel",
+    dismantleDate: "",
     rentedDays: 1,
+    itemServiceSpec: "",
+    size: "",
+    notes: "",
   });
 
   const set = <K extends keyof BookingDraft>(key: K, value: BookingDraft[K]) =>
@@ -94,25 +74,30 @@ export default function NewBookingScreen() {
   function getStepErrors(current: (typeof STEPS)[number]): string[] {
     const errors: string[] = [];
     if (current === "Client") {
-      if (!form.client.trim()) errors.push("Client name is required.");
-      if (form.contactPhone && /[a-zA-Z]/.test(form.contactPhone)) {
+      if (!form.client.trim()) errors.push("Client / Organization is required.");
+      if (/[a-zA-Z]/.test(form.contactPhone)) {
         errors.push("Phone number cannot contain letters.");
       }
     }
     if (current === "Venue & Date") {
-      if (!form.venue.trim()) errors.push("Venue is required.");
-      if (!form.assemblyDate) errors.push("Assembly date is required.");
-      if (!form.eventDate) errors.push("Event date is required.");
-      if (!form.rentedDays || form.rentedDays < 1) errors.push("Number of days must be at least 1.");
-      if (form.assemblyDate && new Date(form.assemblyDate) < new Date(new Date().toDateString())) {
-        errors.push("Assembly date cannot be in the past.");
+      if (!form.venue.trim()) errors.push("Venue / Location is required.");
+      if (!form.assemblyDate) {
+        errors.push("Assembly Date is required.");
+      } else if (new Date(form.assemblyDate) < new Date(new Date().toDateString())) {
+        errors.push("Assembly Date cannot be in the past.");
       }
-      if (
-        form.assemblyDate &&
-        form.eventDate &&
-        new Date(form.eventDate) < new Date(form.assemblyDate)
-      ) {
-        errors.push("Event date must be on or after the assembly date.");
+      if (!form.eventDate) {
+        errors.push("Event Date is required.");
+      } else if (form.assemblyDate && new Date(form.eventDate) < new Date(form.assemblyDate)) {
+        errors.push("Event Date cannot be earlier than Assembly Date.");
+      }
+      if (!form.dismantleDate) {
+        errors.push("Dismantle Date is required.");
+      } else if (form.assemblyDate && new Date(form.dismantleDate) < new Date(form.assemblyDate)) {
+        errors.push("Dismantle Date cannot be earlier than Assembly Date.");
+      }
+      if (!form.rentedDays || form.rentedDays < 1) {
+        errors.push("Number of Days must be at least 1.");
       }
     }
     return errors;
@@ -131,11 +116,11 @@ export default function NewBookingScreen() {
         venue: form.venue,
         assemblyDate: form.assemblyDate,
         eventDate: form.eventDate,
-        screenType: form.screenType,
-        size: form.size,
-        arrangement: form.arrangement,
+        dismantleDate: form.dismantleDate,
         rentedDays: form.rentedDays,
-        ctoNotes: form.ctoNotes || form.ctoArrangement,
+        itemServiceSpec: form.itemServiceSpec,
+        size: form.size,
+        notes: form.notes,
         customValues,
       });
       router.push(to(`/bookings/${booking.code}`));
@@ -222,44 +207,6 @@ export default function NewBookingScreen() {
         </Section>
       ) : null}
 
-      {step === "CTO Consult" ? (
-        <Section title="CTO Consultation" icon={Wrench}>
-          <View style={styles.sopBox}>
-            <Wrench size={16} color={colors.accent} />
-            <Field label="SOP §1.2 — Consult Chief Technical Officer">
-              <Input
-                editable={false}
-                value="Confirm screen availability for requested dates and get arrangement guidance."
-              />
-            </Field>
-          </View>
-          <Button variant="outline" icon={Package} onPress={() => router.push(to("/inventory"))}>
-            Check current screen stock in Inventory
-          </Button>
-          <Field label="CTO Arrangement Suggestions" icon={MessageSquare}>
-            <TextArea
-              value={form.ctoArrangement}
-              onChangeText={(value) => set("ctoArrangement", value)}
-              placeholder="CTO arrangement notes..."
-            />
-          </Field>
-          <Field label="CTO Notes / Special Guidance">
-            <TextArea
-              value={form.ctoNotes}
-              onChangeText={(value) => set("ctoNotes", value)}
-              placeholder="Backup PSU, converters, rigging notes..."
-            />
-          </Field>
-          <Button
-            variant={form.ctoConsulted ? "success" : "outline"}
-            icon={CheckCircle2}
-            onPress={() => set("ctoConsulted", !form.ctoConsulted)}
-          >
-            CTO Consultation Completed
-          </Button>
-        </Section>
-      ) : null}
-
       {step === "Venue & Date" ? (
         <Section title="Venue & Date" icon={MapPin}>
           <Field label="Venue / Location">
@@ -283,6 +230,13 @@ export default function NewBookingScreen() {
               placeholder="YYYY-MM-DD"
             />
           </Field>
+          <Field label="Dismantle Date" icon={Calendar}>
+            <Input
+              value={form.dismantleDate}
+              onChangeText={(value) => set("dismantleDate", value)}
+              placeholder="YYYY-MM-DD"
+            />
+          </Field>
           <Field label="Number of Days">
             <Input
               value={String(form.rentedDays)}
@@ -290,54 +244,36 @@ export default function NewBookingScreen() {
               onChangeText={(value) => set("rentedDays", Number(value) || 0)}
             />
           </Field>
+          <AppText variant="small" color={colors.text3}>
+            Billable rental days for pricing. Independent of the assembly / event / dismantle
+            window.
+          </AppText>
         </Section>
       ) : null}
 
-      {step === "Screen Spec" ? (
-        <Section title="Screen Specification" icon={Package}>
-          <Field label="Screen Type">
-            <View style={styles.choiceWrap}>
-              {screenTypes.map((type) => (
-                <Choice
-                  key={type}
-                  label={type}
-                  active={form.screenType === type}
-                  onPress={() => set("screenType", type)}
-                />
-              ))}
-            </View>
-          </Field>
-          <Field label="Size (sqm)">
+      {step === "Intake Requirements" ? (
+        <Section title="Intake Requirements" icon={Wrench}>
+          <Field label="Screen Size (sqm)">
             <Input
-              value={String(form.size)}
+              value={form.size}
               keyboardType="numeric"
-              onChangeText={(value) => set("size", Number(value) || 0)}
+              onChangeText={(value) => set("size", value)}
+              placeholder="e.g. 48"
             />
           </Field>
-          <Field label="Arrangement (W x H)">
-            <Input value={form.arrangement} onChangeText={(value) => set("arrangement", value)} />
-          </Field>
-        </Section>
-      ) : null}
-
-      {step === "Team" ? (
-        <Section title="Team Assignment" icon={Users}>
-          <Field label="Chief Technician">
+          <Field label="Screen Specification (Text Description)">
             <Input
-              value={form.chief}
-              onChangeText={(value) => set("chief", value)}
-              placeholder="Bereket Alemu"
+              value={form.itemServiceSpec}
+              onChangeText={(value) => set("itemServiceSpec", value)}
+              placeholder="e.g. P3.9 Outdoor LED panel"
             />
           </Field>
-          <Field label="Technician">
-            <Input
-              value={form.technician}
-              onChangeText={(value) => set("technician", value)}
-              placeholder="Yeabtsega"
+          <Field label="Intake Notes / Client Guidance" icon={MessageSquare}>
+            <TextArea
+              value={form.notes}
+              onChangeText={(value) => set("notes", value)}
+              placeholder="e.g. Client wants wide stage setup, curve layout if possible."
             />
-          </Field>
-          <Field label="Stage Hand Team">
-            <Input value={form.stageHand} onChangeText={(value) => set("stageHand", value)} />
           </Field>
         </Section>
       ) : null}
@@ -352,14 +288,14 @@ export default function NewBookingScreen() {
           {[
             ["Client", form.client || "-"],
             ["Contact", `${form.contactPerson || "-"} · ${form.contactPhone || "-"}`],
-            ["CTO Consulted", form.ctoConsulted ? "Yes" : "Pending"],
-            ["CTO Notes", form.ctoNotes || form.ctoArrangement || "-"],
             ["Venue", form.venue || "-"],
-            ["Assembly", form.assemblyDate || "-"],
-            ["Event", form.eventDate || "-"],
+            ["Assembly Date", form.assemblyDate || "-"],
+            ["Event Date", form.eventDate || "-"],
+            ["Dismantle Date", form.dismantleDate || "-"],
             ["Number of Days", String(form.rentedDays)],
-            ["Screen", `${form.screenType} · ${form.size} sqm · ${form.arrangement}`],
-            ["Team", `${form.chief || "?"} / ${form.technician || "?"} · ${form.stageHand}`],
+            ["Screen Size (sqm)", form.size ? `${form.size} sqm` : "-"],
+            ["Required Spec", form.itemServiceSpec || "-"],
+            ["Intake Notes", form.notes || "-"],
           ].map(([label, value]) => (
             <Field key={label} label={label}>
               <Input editable={false} value={value} />
@@ -475,14 +411,6 @@ const styles = StyleSheet.create({
   footerActions: {
     flexDirection: "row",
     gap: 10,
-  },
-  sopBox: {
-    borderWidth: 1,
-    borderColor: colors.accent,
-    borderRadius: radius.md,
-    backgroundColor: alpha(colors.accent, 0.06),
-    padding: 12,
-    gap: 8,
   },
   choiceWrap: {
     flexDirection: "row",

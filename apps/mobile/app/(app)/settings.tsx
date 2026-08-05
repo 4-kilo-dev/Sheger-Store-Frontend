@@ -41,6 +41,14 @@ import {
   useCreateCustomField,
   useDeleteCustomField,
 } from "@/hooks/useOperations";
+import {
+  useCalendarSystem,
+  type CalendarSystem,
+  type NumeralsSystem,
+} from "@/context/CalendarSystemContext";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useAppContext } from "@/context/AppContext";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 import { colors, radius } from "@/theme/tokens";
 import type { Permission, RoleWithPermissions, CustomFieldDefinition } from "@/types/domain";
 
@@ -60,26 +68,36 @@ const LANGUAGES = [
 ] as const;
 const CALENDARS = [
   { label: "Gregorian", value: "gregorian" },
-  { label: "Ethiopian", value: "ethiopian" },
+  { label: "Ethiopian", value: "ethiopic" },
 ] as const;
 const NUMERALS = [
   { label: "Latin (1, 2, 3)", value: "latn" },
-  { label: "Ge'ez", value: "ethi" },
+  { label: "Ge'ez", value: "geez" },
 ] as const;
 
 export default function SettingsScreen() {
   const [active, setActive] = useState<(typeof PANELS)[number]>("Company");
   const [savingSettings, setSavingSettings] = useState(false);
+  const { can } = usePermissions();
+  const { authUser, activeProfile } = useAppContext();
+  const canManageRoles = can(PERMISSION.ROLE_MANAGE);
+  const isAdmin =
+    (authUser?.role || activeProfile?.role || "").toLowerCase() === "admin";
 
   const rolesQuery = useRolesWithPermissions();
   const permsQuery = usePermissionsCatalog();
   const togglePermission = useToggleRolePermission();
   const settingsQuery = useSettings();
   const updateSettings = useUpdateSettings();
+  const {
+    calendarSystem,
+    numeralsSystem,
+    commitSettings,
+  } = useCalendarSystem();
 
   const [language, setLanguage] = useState("en");
-  const [calendarSystem, setCalendarSystem] = useState("gregorian");
-  const [numerals, setNumerals] = useState("latn");
+  const [tempCalendarSystem, setTempCalendarSystem] = useState<CalendarSystem>(calendarSystem);
+  const [tempNumerals, setTempNumerals] = useState<NumeralsSystem>(numeralsSystem);
 
   const FIELD_DEFAULTS: Record<string, string> = {
     companyName: "Vortex Visual",
@@ -122,12 +140,16 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (!settingsQuery.data) return;
     if (settingsQuery.data.language) setLanguage(settingsQuery.data.language);
-    if (settingsQuery.data.calendar) setCalendarSystem(settingsQuery.data.calendar);
-    if (settingsQuery.data.numerals) setNumerals(settingsQuery.data.numerals);
     setForm((current) => ({ ...current, ...settingsQuery.data }));
   }, [settingsQuery.data]);
 
+  useEffect(() => {
+    setTempCalendarSystem(calendarSystem);
+    setTempNumerals(numeralsSystem);
+  }, [calendarSystem, numeralsSystem]);
+
   const customFieldsQuery = useCustomFieldDefinitions();
+  const createCustomField = useCreateCustomField();
   const deleteCustomField = useDeleteCustomField();
 
   const roles = rolesQuery.data ?? [];
@@ -135,6 +157,8 @@ export default function SettingsScreen() {
   const rolesLoading = rolesQuery.isLoading;
   const customFieldsLoading = customFieldsQuery.isLoading;
   const customFields = customFieldsQuery.data ?? [];
+
+  const [addFieldOpen, setAddFieldOpen] = useState(false);
 
   const rolePermKeys = new Map<string, Set<string>>(
     roles.map((r) => [r.id, new Set((r.permissions || []).map((p) => p.key))]),
@@ -158,9 +182,12 @@ export default function SettingsScreen() {
         ...form,
         language,
         currency: "ETB",
-        calendar: calendarSystem,
-        numerals,
+        calendar: tempCalendarSystem,
+        calendarSystem: tempCalendarSystem,
+        numerals: tempNumerals,
+        numeralsSystem: tempNumerals,
       });
+      await commitSettings(tempCalendarSystem, tempNumerals);
       Alert.alert("Success", "Settings saved successfully!");
     } catch (e) {
       Alert.alert("Error", "Failed to save settings. Please try again.");
@@ -239,6 +266,11 @@ export default function SettingsScreen() {
 
       {active === "Roles & permissions" && (
         <Section title="Role Permissions Matrix" icon={UsersRound} aside="Access control">
+          {!canManageRoles ? (
+            <AppText variant="subtitle" color={colors.text2}>
+              You can view the matrix but need role.manage permission to change grants.
+            </AppText>
+          ) : null}
           {rolesLoading ? (
             <LoadingState label="Loading roles..." />
           ) : (
@@ -268,18 +300,21 @@ export default function SettingsScreen() {
                         {roles.map((role) => (
                           <Pressable
                             key={role.id}
-                            onPress={() =>
+                            disabled={!canManageRoles || togglePermission.isPending}
+                            onPress={() => {
+                              if (!canManageRoles) return;
                               togglePermission.mutate({
                                 roleId: role.id,
                                 permissionId: perm.id,
                                 active: !has(role),
-                              })
-                            }
+                              });
+                            }}
                             style={[
                               styles.permCell,
                               has(role)
                                 ? { backgroundColor: "rgba(48,164,108,0.15)" }
                                 : { backgroundColor: colors.surface2 },
+                              !canManageRoles ? { opacity: 0.55 } : null,
                             ]}
                           >
                             {has(role) ? (
@@ -398,8 +433,8 @@ export default function SettingsScreen() {
                 <ChoiceChip
                   key={opt.value}
                   label={opt.label}
-                  active={calendarSystem === opt.value}
-                  onPress={() => setCalendarSystem(opt.value)}
+                  active={tempCalendarSystem === opt.value}
+                  onPress={() => setTempCalendarSystem(opt.value as CalendarSystem)}
                 />
               ))}
             </View>
@@ -410,16 +445,18 @@ export default function SettingsScreen() {
                 <ChoiceChip
                   key={opt.value}
                   label={opt.label}
-                  active={numerals === opt.value}
-                  onPress={() => setNumerals(opt.value)}
+                  active={tempNumerals === opt.value}
+                  onPress={() => setTempNumerals(opt.value as NumeralsSystem)}
                 />
               ))}
             </View>
           </Field>
           <View style={styles.preview}>
             <AppText variant="eyebrow">Preview</AppText>
-            <AppText>Calendar: {CALENDARS.find((c) => c.value === calendarSystem)?.label}</AppText>
-            <AppText>Numerals: {NUMERALS.find((n) => n.value === numerals)?.label}</AppText>
+            <AppText>
+              Calendar: {CALENDARS.find((c) => c.value === tempCalendarSystem)?.label}
+            </AppText>
+            <AppText>Numerals: {NUMERALS.find((n) => n.value === tempNumerals)?.label}</AppText>
             <AppText>Language: {LANGUAGES.find((l) => l.value === language)?.label}</AppText>
           </View>
         </Section>
@@ -486,14 +523,26 @@ export default function SettingsScreen() {
         </Section>
       ) : null}
 
-      {active === "Performance Metrics" ? <PerformanceMetricsPanel /> : null}
+      {active === "Performance Metrics" ? <PerformanceMetricsPanel isAdmin={isAdmin} /> : null}
 
       {active === "Custom Fields" ? (
-        <Section title="Booking Custom Fields" icon={SlidersHorizontal} aside="Dynamic inputs">
+        <Section title="Booking Custom Fields" icon={SlidersHorizontal} aside="Dynamic inputs"
+          action={
+            isAdmin ? (
+              <Button variant="ghost" icon={Plus} onPress={() => setAddFieldOpen(true)}>
+                Add
+              </Button>
+            ) : undefined
+          }
+        >          {!isAdmin ? (
+            <AppText variant="subtitle" color={colors.text2}>
+              Only administrators can create or delete custom fields.
+            </AppText>
+          ) : null}
           {customFieldsLoading ? (
             <LoadingState label="Loading custom fields..." />
           ) : customFields.length === 0 ? (
-            <EmptyState title="No custom fields configured" />
+            <EmptyState title="No custom fields configured" detail="Tap Add to create a booking custom field." />
           ) : (
             <View style={{ gap: 10 }}>
               {customFields.map((field) => (
@@ -509,35 +558,123 @@ export default function SettingsScreen() {
                       </AppText>
                     )}
                   </View>
-                  <Button
-                    variant="ghost"
-                    icon={Trash2}
-                    onPress={() => {
-                      Alert.alert("Delete Field", `Delete "${field.name}"?`, [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Delete",
-                          style: "destructive",
-                          onPress: () => deleteCustomField.mutate(field.id),
-                        },
-                      ]);
-                    }}
-                  >
-                    Delete
-                  </Button>
+                  {isAdmin ? (
+                    <Button
+                      variant="ghost"
+                      icon={Trash2}
+                      onPress={() => {
+                        Alert.alert("Delete Field", `Delete "${field.name}"?`, [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: "Delete",
+                            style: "destructive",
+                            onPress: () => deleteCustomField.mutate(field.id),
+                          },
+                        ]);
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  ) : null}
                 </View>
               ))}
             </View>
           )}
         </Section>
       ) : null}
+
+      <AddCustomFieldSheet visible={addFieldOpen} onClose={() => setAddFieldOpen(false)} />
     </Screen>
+  );
+}
+
+const FIELD_TYPES = ["string", "number", "boolean", "date", "enum", "multi_select"] as const;
+
+function AddCustomFieldSheet({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const createCustomField = useCreateCustomField();
+  const [name, setName] = useState("");
+  const [key, setKey] = useState("");
+  const [type, setType] = useState<(typeof FIELD_TYPES)[number]>("string");
+  const [optionsText, setOptionsText] = useState("");
+  const [required, setRequired] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    const trimmedName = name.trim();
+    const autoKey = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    const trimmedKey = key.trim() || autoKey;
+    if (!trimmedName) { setError("Field name is required."); return; }
+    if (!trimmedKey) { setError("Field key is required."); return; }
+    const options =
+      (type === "enum" || type === "multi_select") && optionsText.trim()
+        ? optionsText.split(",").map((o) => o.trim()).filter(Boolean)
+        : undefined;
+    setError(null);
+    try {
+      await createCustomField.mutateAsync({
+        name: trimmedName,
+        key: trimmedKey,
+        type,
+        options,
+        required,
+      });
+      setName(""); setKey(""); setType("string"); setOptionsText(""); setRequired(false);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create custom field.");
+    }
+  };
+
+  return (
+    <BottomSheet visible={visible} title="Add Custom Field" onClose={onClose}>
+      <Field label="Field name">
+        <Input
+          value={name}
+          onChangeText={(v) => {
+            setName(v);
+            setKey(v.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
+          }}
+          placeholder="e.g. Event Type"
+        />
+      </Field>
+      <Field label="Field key (editable)">
+        <Input value={key} onChangeText={setKey} placeholder="e.g. event_type" autoCapitalize="none" />
+      </Field>
+      <Field label="Type">
+        <View style={styles.choiceWrap}>
+          {FIELD_TYPES.map((t) => (
+            <ChoiceChip key={t} label={t} active={type === t} onPress={() => setType(t)} />
+          ))}
+        </View>
+      </Field>
+      {(type === "enum" || type === "multi_select") ? (
+        <Field label="Options (comma-separated)">
+          <Input value={optionsText} onChangeText={setOptionsText} placeholder="Indoor, Outdoor, Hybrid" />
+        </Field>
+      ) : null}
+      <Field label="Required">
+        <View style={styles.choiceWrap}>
+          <ChoiceChip label="Yes" active={required} onPress={() => setRequired(true)} />
+          <ChoiceChip label="No" active={!required} onPress={() => setRequired(false)} />
+        </View>
+      </Field>
+      {error ? <AppText variant="small" color={colors.destructive}>{error}</AppText> : null}
+      <Button disabled={createCustomField.isPending} onPress={handleSubmit}>
+        {createCustomField.isPending ? "Creating..." : "Create Custom Field"}
+      </Button>
+    </BottomSheet>
   );
 }
 
 const VALUE_TYPES = ["boolean", "rating_5", "rating_10", "percentage"] as const;
 
-function PerformanceMetricsPanel() {
+function PerformanceMetricsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [category, setCategory] = useState<"internal" | "client_feedback">("internal");
   const { data: metrics = [], isLoading, isError, refetch } = usePerformanceMetrics();
   const toggleMetric = useToggleMetricActive();
@@ -552,6 +689,7 @@ function PerformanceMetricsPanel() {
   const [addError, setAddError] = useState<string | null>(null);
 
   const toggleActive = (id: string, isActive: boolean) => {
+    if (!isAdmin) return;
     toggleMetric.mutate({ id, isActive: !isActive });
   };
 
@@ -594,11 +732,18 @@ function PerformanceMetricsPanel() {
       icon={ClipboardCheck}
       aside="Evaluation criteria"
       action={
-        <Button variant="ghost" icon={Plus} onPress={() => setAddOpen(true)}>
-          Add
-        </Button>
+        isAdmin ? (
+          <Button variant="ghost" icon={Plus} onPress={() => setAddOpen(true)}>
+            Add
+          </Button>
+        ) : undefined
       }
     >
+      {!isAdmin ? (
+        <AppText variant="subtitle" color={colors.text2}>
+          Only administrators can create or toggle performance metrics.
+        </AppText>
+      ) : null}
       <SegmentedTabs tabs={categories} value={category} onChange={setCategory} />
       <View style={{ gap: 10 }}>
         {filtered.map((metric) => (
@@ -616,8 +761,13 @@ function PerformanceMetricsPanel() {
               accessibilityRole="switch"
               accessibilityState={{ checked: metric.isActive }}
               accessibilityLabel={metric.label}
+              disabled={!isAdmin}
               onPress={() => toggleActive(metric.id, metric.isActive)}
-              style={[styles.toggle, metric.isActive ? styles.toggleOn : null]}
+              style={[
+                styles.toggle,
+                metric.isActive ? styles.toggleOn : null,
+                !isAdmin ? { opacity: 0.55 } : null,
+              ]}
             >
               <View style={[styles.knob, metric.isActive ? styles.knobOn : null]} />
             </Pressable>

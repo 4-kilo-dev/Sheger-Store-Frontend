@@ -5,6 +5,7 @@ export type WidgetId =
   | "quick-actions"
   | "featured-booking"
   | "equipment-pool"
+  | "pending-tasks"
   | "recent-bookings"
   | "booking-queues"
   | "screen-availability"

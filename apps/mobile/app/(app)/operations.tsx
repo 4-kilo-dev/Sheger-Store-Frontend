@@ -1,15 +1,34 @@
+import { router } from "expo-router";
+import { to } from "@/utils/routes";
+import { AlertCircle, RotateCcw, Truck, User, Users } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import { AppText, Button, ErrorState, Input, LoadingState, Screen, Section } from "@/components/ui";
+import { Pressable, StyleSheet, View } from "react-native";
+import { StatusBadge } from "@/components/status";
+import { AppText, ErrorState, Input, LoadingState, Screen, Section } from "@/components/ui";
 import { useBookings } from "@/hooks/useOperations";
-import { colors } from "@/theme/tokens";
+import { colors, radius } from "@/theme/tokens";
 import type { Booking, BookingStatus } from "@/types/domain";
 import { Search } from "lucide-react-native";
 
-const COLUMNS: { title: string; statuses: BookingStatus[]; color: string }[] = [
-  { title: "Needs Dispatch", statuses: ["ACCEPTED", "PREPARATION"], color: colors.payment.ADVANCE },
-  { title: "Active On-Site", statuses: ["ONSITE"], color: colors.status.ACCEPTED },
-  { title: "Needs Retrieval", statuses: ["COMPLETED", "PARTIALLY_RETURNED"], color: colors.destructive },
+const COLUMNS: { title: string; statuses: BookingStatus[]; color: string; emptyMsg: string }[] = [
+  {
+    title: "Needs Dispatch",
+    statuses: ["ACCEPTED", "PREPARATION"],
+    color: colors.payment.ADVANCE,
+    emptyMsg: "No bookings awaiting dispatch.",
+  },
+  {
+    title: "Active On-Site",
+    statuses: ["ONSITE"],
+    color: colors.status.ACCEPTED,
+    emptyMsg: "No active on-site deployments.",
+  },
+  {
+    title: "Needs Retrieval",
+    statuses: ["COMPLETED", "PARTIALLY_RETURNED"],
+    color: "#6366f1",
+    emptyMsg: "No gear awaiting warehouse return.",
+  },
 ];
 
 export default function OperationsScreen() {
@@ -50,7 +69,7 @@ export default function OperationsScreen() {
         <AppText variant="eyebrow">Field Operations</AppText>
         <AppText variant="title">Operations Board</AppText>
         <AppText variant="subtitle">
-          Live view of dispatch, on-site, and retrieval status.
+          Oversee crew dispatch, monitor active deployments, and coordinate gear returns.
         </AppText>
       </View>
 
@@ -61,7 +80,7 @@ export default function OperationsScreen() {
             value={search}
             onChangeText={setSearch}
             placeholder="Search code, client, venue..."
-            style={{ flex: 1 }}
+            style={{ flex: 1, borderWidth: 0, backgroundColor: "transparent", minHeight: 44 }}
           />
         </View>
       </View>
@@ -72,38 +91,29 @@ export default function OperationsScreen() {
           return (
             <View key={col.title} style={styles.column}>
               <View style={[styles.columnHeader, { borderLeftColor: col.color }]}>
-                <AppText variant="eyebrow" style={{ color: col.color }}>
-                  {col.title}
-                </AppText>
-                <AppText variant="data" color={colors.text3}>
-                  {items.length}
-                </AppText>
+                <View style={styles.columnDot} >
+                  <View style={[styles.dot, { backgroundColor: col.color }]} />
+                  <AppText variant="eyebrow" style={{ color: col.color }}>
+                    {col.title}
+                  </AppText>
+                </View>
+                <View style={[styles.countBadge, { backgroundColor: `${col.color}22` }]}>
+                  <AppText variant="data" style={{ color: col.color, fontWeight: "900" }}>
+                    {items.length}
+                  </AppText>
+                </View>
               </View>
               <View style={styles.columnBody}>
                 {items.map((booking) => (
-                  <View key={booking.code} style={styles.card}>
-                    <View style={styles.cardHeader}>
-                      <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
-                        {booking.code}
-                      </AppText>
-                    </View>
-                    <AppText style={{ fontWeight: "800" }}>{booking.client}</AppText>
-                    <AppText variant="small" color={colors.text2}>
-                      {booking.venue}
-                    </AppText>
-                    <AppText variant="small" color={colors.text3}>
-                      {booking.eventDate}
-                    </AppText>
-                    <View style={styles.cardFooter}>
-                      <AppText variant="eyebrow" color={colors.text3}>
-                        {booking.screenType} · {booking.size} sqm
-                      </AppText>
-                    </View>
-                  </View>
+                  <BookingCard key={booking.id} booking={booking} accentColor={col.color} />
                 ))}
                 {items.length === 0 && (
-                  <AppText variant="small" color={colors.text3} style={{ padding: 12, textAlign: "center" }}>
-                    No bookings
+                  <AppText
+                    variant="small"
+                    color={colors.text3}
+                    style={{ padding: 20, textAlign: "center" }}
+                  >
+                    {col.emptyMsg}
                   </AppText>
                 )}
               </View>
@@ -115,16 +125,101 @@ export default function OperationsScreen() {
   );
 }
 
+function BookingCard({ booking, accentColor }: { booking: Booking; accentColor: string }) {
+  const crewCount = (booking.assignments || []).filter(
+    (a) => a.roleContext === "CREW" || a.roleContext === "TECHNICIAN",
+  ).length;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`View booking ${booking.code}`}
+      onPress={() => router.push(to(`/bookings/${booking.code}`))}
+      style={({ pressed }) => [styles.card, { borderLeftColor: accentColor, opacity: pressed ? 0.8 : 1 }]}
+    >
+      {/* Header */}
+      <View style={styles.cardHeader}>
+        <View style={{ flex: 1 }}>
+          <AppText variant="data" style={{ color: accentColor, fontWeight: "900", fontSize: 11 }}>
+            {booking.code}
+          </AppText>
+          <AppText style={{ fontWeight: "800", marginTop: 2 }} numberOfLines={1}>
+            {booking.client}
+          </AppText>
+        </View>
+        <StatusBadge status={booking.status} />
+      </View>
+
+      {/* Meta */}
+      <View style={{ gap: 3, marginTop: 6 }}>
+        <AppText variant="small" color={colors.text2} numberOfLines={1}>
+          📍 {booking.venue || "—"}
+        </AppText>
+        <AppText variant="small" color={colors.text3}>
+          📅 {booking.eventDate}
+        </AppText>
+      </View>
+
+      {/* Context row by status */}
+      {booking.status === "ONSITE" ? (
+        <View style={[styles.contextRow, { borderTopColor: colors.border }]}>
+          <View style={styles.contextItem}>
+            <User size={11} color={accentColor} />
+            <AppText variant="small" color={colors.text2} numberOfLines={1} style={{ flex: 1 }}>
+              {booking.teamLeader || "No lead"}
+            </AppText>
+          </View>
+          <View style={styles.contextItem}>
+            <Truck size={11} color={accentColor} />
+            <AppText variant="small" color={colors.text2} numberOfLines={1} style={{ flex: 1 }}>
+              {booking.driver || "No driver"}
+            </AppText>
+          </View>
+        </View>
+      ) : booking.status === "ACCEPTED" || booking.status === "PREPARATION" ? (
+        <View style={[styles.contextRow, { borderTopColor: colors.border }]}>
+          {crewCount > 0 ? (
+            <View style={styles.contextItem}>
+              <Users size={11} color={accentColor} />
+              <AppText variant="small" color={colors.text2}>
+                {crewCount} crew assigned
+              </AppText>
+            </View>
+          ) : (
+            <View style={styles.contextItem}>
+              <AlertCircle size={11} color={colors.payment.ADVANCE} />
+              <AppText variant="small" style={{ color: colors.payment.ADVANCE, fontWeight: "700" }}>
+                No crew assigned
+              </AppText>
+            </View>
+          )}
+        </View>
+      ) : booking.status === "COMPLETED" || booking.status === "PARTIALLY_RETURNED" ? (
+        <View style={[styles.contextRow, { borderTopColor: colors.border }]}>
+          <View style={styles.contextItem}>
+            <RotateCcw size={11} color={accentColor} />
+            <AppText variant="small" color={colors.text2}>
+              {booking.status === "PARTIALLY_RETURNED"
+                ? "Partial return — awaiting remainder"
+                : "Awaiting warehouse return"}
+            </AppText>
+          </View>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   searchRow: {
-    marginBottom: 16,
+    marginBottom: 4,
   },
   searchWrap: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: radius.lg,
     paddingHorizontal: 12,
     backgroundColor: colors.surface2,
     minHeight: 44,
@@ -136,8 +231,8 @@ const styles = StyleSheet.create({
   column: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    backgroundColor: colors.surface2,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
     overflow: "hidden",
   },
   columnHeader: {
@@ -146,10 +241,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderLeftWidth: 4,
-    borderBottomWidth: 1,
+    borderLeftWidth: 3,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surface2,
+  },
+  columnDot: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  countBadge: {
+    borderRadius: radius.round,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
   columnBody: {
     padding: 10,
@@ -158,18 +268,28 @@ const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
+    borderLeftWidth: 3,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
     padding: 12,
-    gap: 4,
+    gap: 0,
   },
   cardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
     marginBottom: 4,
   },
-  cardFooter: {
-    marginTop: 6,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+  contextRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+  },
+  contextItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
 });
