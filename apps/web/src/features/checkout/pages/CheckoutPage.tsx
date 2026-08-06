@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, Check, CheckCircle2, ChevronDown, ClipboardCheck,
   Package, PackageCheck, Printer, Search, Truck, X,
@@ -9,7 +9,17 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { getBookingsApi, type Booking, type BomItem } from "@/features/bookings/services/bookings.api";
-import { getBookingBomLinesApi, checkoutBookingApi, checkinBookingApi } from "@/features/checkout/services/operations.api";
+import {
+  checkoutBookingApi,
+  checkinBookingApi,
+  getBookingCustodyApi,
+} from "@/features/checkout/services/operations.api";
+import {
+  IdempotencyAttempt,
+  buildCheckinReturns,
+  normalizeCheckoutAssets,
+  type InventoryCondition,
+} from "@/features/checkout/services/operation-payloads";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 
@@ -34,6 +44,10 @@ export function CheckoutPage() {
   const [selectedCode, setSelectedCode] = useState("");
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState(false);
+  const [completedStatus, setCompletedStatus] = useState<string | null>(null);
+  const [poolQuantities, setPoolQuantities] = useState<Record<string, string>>({});
+  const [itemConditions, setItemConditions] = useState<Record<string, InventoryCondition>>({});
+  const checkoutAttempt = useRef(new IdempotencyAttempt());
 
   // Fetch bookings list
   const { data: bookingsList = [] } = useQuery({
@@ -41,21 +55,68 @@ export function CheckoutPage() {
     queryFn: getBookingsApi,
   });
 
-  // Fetch BOM lines for the selected booking
-  const { data: backendBomLines = [] } = useQuery({
-    queryKey: ["bomLines", selectedCode],
-    queryFn: () => getBookingBomLinesApi(selectedCode),
+  const { data: custody = [] } = useQuery({
+    queryKey: ["checkoutCustody", selectedCode],
+    queryFn: () => getBookingCustodyApi(selectedCode),
     enabled: !!selectedCode,
   });
 
   const eligibleBookings = useMemo(() => {
     if (mode === "checkout") {
-      return bookingsList.filter((b) => b.status === "PREPARATION" || b.status === "ACCEPTED" || b.status === "RESERVED" || b.status === "CONFIRMED");
+      return bookingsList.filter((b) => b.status === "PREPARATION" || b.status === "ONSITE");
     }
-    return bookingsList.filter((b) => b.status === "COMPLETED" || b.status === "ONSITE");
+    return bookingsList.filter(
+      (b) =>
+        b.status === "COMPLETED" ||
+        b.status === "ONSITE" ||
+        b.status === "PARTIALLY_RETURNED",
+    );
   }, [mode, bookingsList]);
 
   const selected = eligibleBookings.find((b) => b.code === selectedCode);
+  const operationItems = useMemo(() => {
+    if (!selected) return [];
+    const bomByAsset = new Map<string, BomItem>();
+    for (const item of selected.bomItems) {
+      const key = item.poolId ? `pool:${item.poolId}` : `item:${item.itemId}`;
+      if (!bomByAsset.has(key)) bomByAsset.set(key, item);
+    }
+
+    if (mode === "checkin" || selected.status === "ONSITE") {
+      return custody
+        .map((line) => {
+          const key = line.poolId ? `pool:${line.poolId}` : `item:${line.itemId}`;
+          const source = bomByAsset.get(key);
+          const quantity = Number.parseFloat(
+            mode === "checkin"
+              ? line.outstandingQuantity
+              : line.availableToCheckoutQuantity,
+          );
+          return {
+            id: key,
+            code: source?.code || key,
+            name: source?.name || "Equipment",
+            qty: quantity,
+            poolId: line.poolId || undefined,
+            itemId: line.itemId || undefined,
+            outstandingQuantity: line.outstandingQuantity,
+          };
+        })
+        .filter((item) => item.qty > 0);
+    }
+
+    const aggregated = new Map<string, (typeof selected.bomItems)[number]>();
+    for (const item of selected.bomItems) {
+      const key = item.poolId ? `pool:${item.poolId}` : `item:${item.itemId}`;
+      const existing = aggregated.get(key);
+      if (existing?.poolId) existing.qty += item.qty;
+      else aggregated.set(key, { ...item, id: key });
+    }
+    return [...aggregated.values()].map((item) => ({
+      ...item,
+      outstandingQuantity: String(item.qty),
+    }));
+  }, [custody, mode, selected]);
 
   const toggleItem = (id: string) => {
     setCheckedItems((prev) => {
@@ -67,55 +128,63 @@ export function CheckoutPage() {
 
   const toggleAll = () => {
     if (!selected) return;
-    if (checkedItems.size === selected.bomItems.length) {
+    if (checkedItems.size === operationItems.length) {
       setCheckedItems(new Set());
     } else {
-      setCheckedItems(new Set(selected.bomItems.map((i) => i.id)));
+      setCheckedItems(new Set(operationItems.map((i) => i.id)));
     }
   };
 
   const { mutate: performOperation, isPending } = useMutation({
     mutationFn: async () => {
       if (!selected) return;
+      const selectedItems = operationItems.filter((item) => checkedItems.has(item.id));
       if (mode === "checkout") {
-        const assets = selected.bomItems.map((item) => {
-          const matchedLine = backendBomLines.find(
-            (line) => line.id === item.id || line.item?.name === item.name || line.pool?.name === item.name
-          );
-          if (matchedLine?.itemId) {
-            return {
-              itemId: matchedLine.itemId,
-            };
-          } else {
-            return {
-              poolId: matchedLine?.poolId || null,
-              quantity: String(item.qty),
-            };
-          }
-        });
-        await checkoutBookingApi(selected.code, { assets });
+        const assets = normalizeCheckoutAssets(
+          selectedItems.map((item) =>
+            item.itemId
+              ? { itemId: item.itemId }
+              : {
+                  poolId: item.poolId,
+                  quantity: poolQuantities[item.id] || String(item.qty),
+                },
+          ),
+        );
+        const payload = { assets };
+        await checkoutBookingApi(
+          selected.code,
+          payload,
+          checkoutAttempt.current.keyFor(payload),
+        );
+        return "ONSITE";
       } else {
-        const returns = selected.bomItems.map((item) => {
-          const matchedLine = backendBomLines.find(
-            (line) => line.id === item.id || line.item?.name === item.name || line.pool?.name === item.name
-          );
-          return {
-            poolId: matchedLine?.poolId || null,
-            itemId: matchedLine?.itemId || null,
-            quantityReturned: String(item.qty),
-            condition: "AVAILABLE",
-          };
-        });
-        await checkinBookingApi(selected.code, { returns });
+        const returns = buildCheckinReturns(
+          operationItems.map((item) => ({
+            selected: checkedItems.has(item.id),
+            poolId: item.poolId,
+            itemId: item.itemId,
+            outstandingQuantity: item.outstandingQuantity,
+            quantity: poolQuantities[item.id] || String(item.qty),
+            condition: itemConditions[item.id] || "AVAILABLE",
+          })),
+        );
+        const result = await checkinBookingApi(selected.code, { returns });
+        return result.status;
       }
     },
-    onSuccess: () => {
+    onSuccess: (status) => {
+      checkoutAttempt.current.complete();
       toast.success(mode === "checkout" ? "Check-out completed successfully!" : "Check-in completed successfully!");
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["booking", selectedCode] });
+      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", selectedCode] });
+      setCompletedStatus(status || null);
       setSubmitted(true);
     },
     onError: (err: any) => {
+      if (err?.status >= 400 && err?.status < 500) {
+        checkoutAttempt.current.failDefinitively();
+      }
       toast.error(err.message || "Operation failed");
     },
   });
@@ -127,6 +196,9 @@ export function CheckoutPage() {
   const reset = () => {
     setSelectedCode("");
     setCheckedItems(new Set());
+    setPoolQuantities({});
+    setItemConditions({});
+    setCompletedStatus(null);
     setSubmitted(false);
   };
 
@@ -144,7 +216,9 @@ export function CheckoutPage() {
             {checkedItems.size} items {mode === "checkout" ? "checked out" : "checked in"} for booking <strong style={{ color: "var(--accent)" }}>{selected.code}</strong>.
             {mode === "checkout"
               ? " Materials are now marked as 'Out' with timestamp. The booking status has been advanced to ONSITE."
-              : " All items have been verified and returned to warehouse. The booking status has been marked as DONE."}
+              : completedStatus === "PARTIALLY_RETURNED"
+                ? " The selected items were returned. Remaining custody is still outstanding."
+                : " All checked-out items were returned and the booking is now DONE."}
           </p>
           <div className="mt-6 flex gap-3">
             <button
@@ -265,11 +339,11 @@ export function CheckoutPage() {
                     <span className="label-eyebrow">Bill of Materials — Verify Each Item</span>
                   </div>
                   <button onClick={toggleAll} className="text-[11px] font-semibold" style={{ color: "var(--accent)" }}>
-                    {checkedItems.size === selected.bomItems.length ? "Uncheck All" : "Check All"}
+                    {checkedItems.size === operationItems.length ? "Uncheck All" : "Check All"}
                   </button>
                 </div>
                 <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-                  {selected.bomItems.map((item) => {
+                  {operationItems.map((item) => {
                     const checked = checkedItems.has(item.id);
                     return (
                       <div
@@ -294,8 +368,46 @@ export function CheckoutPage() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="font-mono text-[14px] font-bold">{item.qty}</div>
-                          <div className="text-[9px] uppercase" style={{ color: "var(--text-3)" }}>units</div>
+                          {item.poolId ? (
+                            <input
+                              aria-label={`Quantity for ${item.name}`}
+                              inputMode="decimal"
+                              value={poolQuantities[item.id] ?? String(item.qty)}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) =>
+                                setPoolQuantities((current) => ({
+                                  ...current,
+                                  [item.id]: event.target.value,
+                                }))
+                              }
+                              className="h-8 w-20 rounded border bg-[var(--surface-2)] px-2 text-right font-mono text-[12px]"
+                              style={{ borderColor: "var(--border)" }}
+                            />
+                          ) : mode === "checkin" ? (
+                            <select
+                              aria-label={`Condition for ${item.name}`}
+                              value={itemConditions[item.id] ?? "AVAILABLE"}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) =>
+                                setItemConditions((current) => ({
+                                  ...current,
+                                  [item.id]: event.target.value as InventoryCondition,
+                                }))
+                              }
+                              className="h-8 rounded border bg-[var(--surface-2)] px-2 text-[11px]"
+                              style={{ borderColor: "var(--border)" }}
+                            >
+                              <option value="AVAILABLE">Available</option>
+                              <option value="DAMAGED">Damaged</option>
+                              <option value="LOST">Lost</option>
+                              <option value="UNDER_MAINTENANCE">Maintenance</option>
+                            </select>
+                          ) : (
+                            <div className="font-mono text-[14px] font-bold">1</div>
+                          )}
+                          <div className="text-[9px] uppercase" style={{ color: "var(--text-3)" }}>
+                            {item.poolId ? "units" : "serialized"}
+                          </div>
                         </div>
                       </div>
                     );
@@ -303,13 +415,13 @@ export function CheckoutPage() {
                 </div>
                 <div className="flex items-center justify-between border-t px-4 py-3" style={{ borderColor: "var(--border)" }}>
                   <span className="text-[11px]" style={{ color: "var(--text-2)" }}>
-                    {checkedItems.size} of {selected.bomItems.length} items verified
+                    {checkedItems.size} of {operationItems.length} assets verified
                   </span>
                   <div className="h-1.5 w-32 overflow-hidden rounded-full" style={{ background: "var(--surface-2)" }}>
                     <div
                       className="h-full rounded-full transition-all"
                       style={{
-                        width: `${(checkedItems.size / selected.bomItems.length) * 100}%`,
+                        width: `${operationItems.length > 0 ? (checkedItems.size / operationItems.length) * 100 : 0}%`,
                         background: mode === "checkout" ? "var(--accent)" : "var(--color-bom-returned)",
                       }}
                     />

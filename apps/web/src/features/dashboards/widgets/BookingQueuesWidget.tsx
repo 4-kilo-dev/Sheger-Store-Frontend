@@ -49,12 +49,24 @@ export function BookingQueuesWidget() {
 
   // Filters for Storekeeper
   const skCheckouts = useMemo(() => bookingsList.filter((b) => b.status === "PREPARATION"), [bookingsList]);
-  const skCheckins = useMemo(() => bookingsList.filter((b) => b.status === "COMPLETED"), [bookingsList]);
+  const skCheckins = useMemo(
+    () =>
+      bookingsList.filter(
+        (b) => b.status === "COMPLETED" || b.status === "PARTIALLY_RETURNED",
+      ),
+    [bookingsList],
+  );
 
   // Filters for Ops Officer (OO)
   const ooDispatch = useMemo(() => bookingsList.filter((b) => b.status === "PREPARATION"), [bookingsList]);
   const ooOnsite = useMemo(() => bookingsList.filter((b) => b.status === "ONSITE"), [bookingsList]);
-  const ooCheckinPending = useMemo(() => bookingsList.filter((b) => b.status === "COMPLETED"), [bookingsList]);
+  const ooCheckinPending = useMemo(
+    () =>
+      bookingsList.filter(
+        (b) => b.status === "COMPLETED" || b.status === "PARTIALLY_RETURNED",
+      ),
+    [bookingsList],
+  );
 
   if (isLoading) {
     return (

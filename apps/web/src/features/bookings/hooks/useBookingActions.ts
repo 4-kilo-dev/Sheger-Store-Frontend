@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -11,13 +11,22 @@ import {
   transitionBookingStatusApi,
   recordBookingPaymentApi,
   createAssignmentApi,
+  checkoutReverseApi,
   type Booking,
   type BookingStatus,
 } from "@/features/bookings/services/bookings.api";
 import { isChiefTechnicianRole } from "@/features/bookings/utils/staffRoles";
 import { isDeclinedAssignment } from "@/features/bookings/utils/assignmentHelpers";
 import { getStaffApi } from "@/features/users/services/staff.api";
-import { checkoutBookingApi } from "@/features/checkout/services/operations.api";
+import {
+  checkinBookingApi,
+  checkoutBookingApi,
+  type CheckinReturn,
+} from "@/features/checkout/services/operations.api";
+import {
+  IdempotencyAttempt,
+  normalizeCheckoutAssets,
+} from "@/features/checkout/services/operation-payloads";
 import { uploadBookingAttachmentApi } from "@/features/bookings/services/attachments.api";
 import type { BookingAction } from "@/features/bookings/constants";
 import type { UnfulfilledBomLine } from "@/features/bookings/components/BomFulfillmentConflictModal";
@@ -62,6 +71,7 @@ export function useBookingActions(
   const [selectedTechnicianIds, setSelectedTechnicianIds] = useState<string[]>([]);
   const [checkoutConflicts, setCheckoutConflicts] = useState<UnfulfilledBomLine[]>([]);
   const [showCheckoutConflictModal, setShowCheckoutConflictModal] = useState(false);
+  const checkoutAttempt = useRef(new IdempotencyAttempt());
 
   useEffect(() => {
     if (booking) {
@@ -211,19 +221,22 @@ export function useBookingActions(
       });
 
       // 2. Perform the checkout
-      const assets = booking.bomItems.map((item) => {
-        if (item.itemId) {
-          return { itemId: item.itemId };
-        } else {
-          return {
-            poolId: item.poolId,
-            quantity: String(item.qty),
-          };
-        }
-      });
-      return await checkoutBookingApi(booking.code, { assets });
+      const assets = normalizeCheckoutAssets(
+        booking.bomItems.map((item) =>
+          item.itemId
+            ? { itemId: item.itemId }
+            : { poolId: item.poolId, quantity: String(item.qty) },
+        ),
+      );
+      const payload = { assets };
+      return checkoutBookingApi(
+        booking.code,
+        payload,
+        checkoutAttempt.current.keyFor(payload),
+      );
     },
     onSuccess: () => {
+      checkoutAttempt.current.complete();
       toast.success("Checkout completed successfully! Booking status updated to ONSITE.");
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
@@ -232,6 +245,9 @@ export function useBookingActions(
       setSelectedAction(null);
     },
     onError: (err: any) => {
+      if (err?.status >= 400 && err?.status < 500) {
+        checkoutAttempt.current.failDefinitively();
+      }
       const data = err.data;
       const unfulfilled = (
         data?.unfulfilledLines ??
@@ -243,6 +259,49 @@ export function useBookingActions(
         return;
       }
       toast.error(err.message || "Checkout failed");
+    },
+  });
+
+  const { mutate: performCheckin, isPending: isCheckingIn } = useMutation({
+    mutationFn: async (returns: CheckinReturn[]) => {
+      if (!booking) throw new Error("Booking is undefined");
+      return checkinBookingApi(booking.code, { returns });
+    },
+    onSuccess: (result) => {
+      toast.success(
+        result.status === "DONE"
+          ? "All checked-out inventory was returned."
+          : "Partial return recorded. Remaining custody is still outstanding.",
+      );
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", booking?.code] });
+      queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions", booking?.id] });
+      setShowActionModal(false);
+      setSelectedAction(null);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Check-in failed");
+    },
+  });
+
+  const { mutate: reverseCheckout, isPending: isReversingCheckout } = useMutation({
+    mutationFn: async (reason: string) => {
+      if (!booking) throw new Error("Booking is undefined");
+      return checkoutReverseApi(booking.code, reason);
+    },
+    onSuccess: () => {
+      toast.success("Checkout reversed and custody restored.");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", booking?.code] });
+      queryClient.invalidateQueries({ queryKey: ["booking-snapshots", booking?.id] });
+      queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions", booking?.id] });
+      setShowActionModal(false);
+      setSelectedAction(null);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Checkout reversal failed");
     },
   });
 
@@ -436,6 +495,10 @@ export function useBookingActions(
     submittingDamage,
     performCheckout,
     isCheckingOut,
+    performCheckin,
+    isCheckingIn,
+    reverseCheckout,
+    isReversingCheckout,
     transitionStatus,
     isTransitioning,
     recordPayment,
