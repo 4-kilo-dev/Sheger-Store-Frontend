@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { 
   Banknote, CalendarCheck, Download, Gauge, TrendingUp, BarChart3, 
   Users, Filter, AlertTriangle, Check, ShieldAlert, AlertCircle, RefreshCw
@@ -30,6 +31,33 @@ import {
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
+
+function csvEscape(value: string | number | null | undefined): string {
+  const text = value == null ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function downloadCsv(filename: string, headers: string[], rows: Array<Array<string | number | null | undefined>>) {
+  if (rows.length === 0) {
+    toast.error("Nothing to export for this report");
+    return;
+  }
+  const lines = [
+    headers.map(csvEscape).join(","),
+    ...rows.map((row) => row.map(csvEscape).join(",")),
+  ];
+  const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast.success(`Exported ${rows.length} row${rows.length === 1 ? "" : "s"}`);
+}
 
 const _Route = createFileRoute("/reports")({
   head: () => ({
@@ -182,94 +210,157 @@ export function ReportsPage() {
   // Contextual CSV Exporter
   function handleExportCSV() {
     let headers: string[] = [];
-    let rows: string[][] = [];
-    let filename = `vortex-report-${activeTab}-${new Date().toISOString().slice(0, 10)}.csv`;
+    let rows: Array<Array<string | number | null | undefined>> = [];
+    const filename = `vortex-report-${activeTab}-${new Date().toISOString().slice(0, 10)}.csv`;
 
-    if (activeTab === "revenue_bookings") {
-      headers = ["Booking Code", "Customer", "Location", "Event Date", "Payment Status", "Payment Amount", "CreatedAt"];
-      rows = (bookingsReport?.bookings || []).map((b) => [
-        b.bookingCode, b.customerName, b.eventLocation, b.eventDate, b.paymentStatus, b.paymentAmount, b.createdAt
-      ]);
-    } else if (activeTab === "inventory_health") {
-      headers = ["Category", "Name", "Total Quantity", "Checked Out", "Damaged", "Missing", "Available", "Unit"];
-      inventoryReport.forEach((c) => {
-        c.pools.forEach((p) => {
+    try {
+      if (activeTab === "revenue_bookings") {
+        headers = [
+          "Type",
+          "Booking Code",
+          "Customer",
+          "Location / Agent",
+          "Event / Payment Date",
+          "Status",
+          "Amount",
+          "Payment ID / Created At",
+        ];
+        (revenueReport?.payments || []).forEach((p) => {
           rows.push([
-            c.name, p.name, String(p.totalQuantity), String(p.checkedOutQuantity), 
-            String(p.damagedQuantity), String(p.missingQuantity), String(p.availableQuantity), c.unit
+            "PAYMENT",
+            p.bookingCode || p.bookingId,
+            p.customerName,
+            p.recordedByName,
+            p.createdAt,
+            p.toStatus,
+            p.amount,
+            p.id,
           ]);
         });
-      });
-    } else if (activeTab === "client_directory") {
-      headers = ["Customer Name", "Phone", "Total Bookings", "Completed Bookings", "Revenue Contribution"];
-      rows = customersReport.map((c) => [
-        c.name, c.phone, String(c.totalBookings), String(c.completedBookings), String(c.totalRevenueContributed)
-      ]);
-    } else if (activeTab === "quality_crew") {
-      headers = ["Booking Code", "Client Venue", "Event Date", "Team Size", "Evaluator", "Notes", "Scores"];
-      rows = (evaluationsReport?.evaluations || []).map((e) => [
-        e.bookingCode || e.bookingId, e.clientNameVenue, e.eventDate, String(e.teamSize), e.evaluatorName, e.notes,
-        e.scores.map((s) => `${s.metricLabel}:${s.score}`).join(" | ")
-      ]);
-    } else if (activeTab === "audit_logs") {
-      headers = ["Log Type", "Booking/Entity", "Event Date", "Location", "Value/Amount", "Canceled By / Crew Count", "Canceled At / Status", "Details / Reason"];
-      
-      // Merge upcoming forecast and cancellation details into single audit report
-      canceledReport.forEach((c) => {
-        rows.push([
-          "CANCELLATION", c.bookingCode || c.id, c.eventDate, c.eventLocation, c.paymentAmount, c.canceledBy, c.canceledAt, c.reason
+        (bookingsReport?.bookings || []).forEach((b) => {
+          rows.push([
+            "BOOKING",
+            b.bookingCode,
+            b.customerName,
+            b.eventLocation,
+            b.eventDate,
+            b.paymentStatus || b.status,
+            b.paymentAmount,
+            b.createdAt,
+          ]);
+        });
+      } else if (activeTab === "inventory_health") {
+        headers = ["Category", "Name", "Total Quantity", "Checked Out", "Damaged", "Missing", "Available", "Unit"];
+        inventoryReport.forEach((c) => {
+          c.pools.forEach((p) => {
+            rows.push([
+              c.name,
+              p.name,
+              p.totalQuantity,
+              p.checkedOutQuantity,
+              p.damagedQuantity,
+              p.missingQuantity,
+              p.availableQuantity,
+              c.unit,
+            ]);
+          });
+        });
+      } else if (activeTab === "client_directory") {
+        headers = ["Customer Name", "Phone", "Total Bookings", "Completed Bookings", "Revenue Contribution"];
+        rows = customersReport.map((c) => [
+          c.name,
+          c.phone,
+          c.totalBookings,
+          c.completedBookings,
+          c.totalRevenueContributed,
         ]);
-      });
-      upcomingReport.forEach((u) => {
-        rows.push([
-          "UPCOMING", u.bookingCode || u.id, u.eventDate, u.eventLocation, "-", String(u.assignedCrewCount), u.status, u.hasBom ? "BOM Ready" : "BOM Missing"
+      } else if (activeTab === "quality_crew") {
+        headers = ["Booking Code", "Client Venue", "Event Date", "Team Size", "Evaluator", "Notes", "Scores"];
+        rows = (evaluationsReport?.evaluations || []).map((e) => [
+          e.bookingCode || e.bookingId,
+          e.clientNameVenue,
+          e.eventDate,
+          e.teamSize,
+          e.evaluatorName,
+          e.notes,
+          e.scores.map((s) => `${s.metricLabel}:${s.score}`).join(" | "),
         ]);
-      });
-    } else if (activeTab === "staff_work_sheets") {
-      headers = [
-        "Type",
-        "Name",
-        "Email",
-        "Bookings / Trips",
-        "Sqm / Approved",
-        "Rejected",
-        "Pending",
-        "Duration (min)",
-      ];
-      freelancerWorkload.forEach((row) => {
-        rows.push([
-          "FREELANCER",
-          row.name,
-          row.email || "",
-          String(row.bookingsCount),
-          String(row.sqmCovered),
-          "",
-          "",
-          "",
-        ]);
-      });
-      driverTripsReport.forEach((row) => {
-        rows.push([
-          "DRIVER",
-          row.name,
-          row.email || "",
-          String(row.tripsCount),
-          String(row.approvedCount),
-          String(row.rejectedCount),
-          String(row.pendingCount),
-          String(row.totalDurationMinutes),
-        ]);
-      });
-    }
+      } else if (activeTab === "audit_logs") {
+        headers = [
+          "Log Type",
+          "Booking/Entity",
+          "Event Date",
+          "Location",
+          "Value/Amount",
+          "Canceled By / Crew Count",
+          "Canceled At / Status",
+          "Details / Reason",
+        ];
+        canceledReport.forEach((c) => {
+          rows.push([
+            "CANCELLATION",
+            c.bookingCode || c.id,
+            c.eventDate,
+            c.eventLocation,
+            c.paymentAmount,
+            c.canceledBy,
+            c.canceledAt,
+            c.reason,
+          ]);
+        });
+        upcomingReport.forEach((u) => {
+          rows.push([
+            "UPCOMING",
+            u.bookingCode || u.id,
+            u.eventDate,
+            u.eventLocation,
+            "-",
+            u.assignedCrewCount,
+            u.status,
+            u.hasBom ? "BOM Ready" : "BOM Missing",
+          ]);
+        });
+      } else if (activeTab === "staff_work_sheets") {
+        headers = [
+          "Type",
+          "Name",
+          "Email",
+          "Bookings / Trips",
+          "Sqm / Approved",
+          "Rejected",
+          "Pending",
+          "Duration (min)",
+        ];
+        freelancerWorkload.forEach((row) => {
+          rows.push([
+            "FREELANCER",
+            row.name,
+            row.email || "",
+            row.bookingsCount,
+            row.sqmCovered,
+            "",
+            "",
+            "",
+          ]);
+        });
+        driverTripsReport.forEach((row) => {
+          rows.push([
+            "DRIVER",
+            row.name,
+            row.email || "",
+            row.tripsCount,
+            row.approvedCount,
+            row.rejectedCount,
+            row.pendingCount,
+            row.totalDurationMinutes,
+          ]);
+        });
+      }
 
-    const csvContent = [headers.join(","), ...rows.map((r) => r.map((val) => `"${val.replace(/"/g, '""')}"`).join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+      downloadCsv(filename, headers, rows);
+    } catch (err: any) {
+      toast.error(err?.message || "Could not export CSV");
+    }
   }
 
   // Clear all filters
@@ -302,6 +393,7 @@ export function ReportsPage() {
         <div className="flex items-center gap-2">
           {isTabLoading && <RefreshCw className="h-4 w-4 animate-spin text-zinc-500" />}
           <Button
+            type="button"
             onClick={handleExportCSV}
             variant="outline"
             size="sm"
