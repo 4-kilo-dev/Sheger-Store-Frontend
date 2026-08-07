@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { AlertTriangle, ArrowUpDown, Boxes, Filter, PackageCheck, Search, ShieldAlert, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowUpDown, Boxes, Filter, PackageCheck, Pencil, Search, ShieldAlert, Wrench } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { FilterDropdown, SortButton } from "@/components/filter-dropdown";
@@ -8,11 +8,15 @@ import { useQuery } from "@tanstack/react-query";
 import {
   INVENTORY_CATEGORIES,
   type InventoryCondition,
+  type InventoryItem,
   getCombinedInventoryApi,
 } from "@/features/inventory/services/inventory.api";
 import { AddInventoryModal } from "@/features/inventory/components/AddInventoryModal";
+import { EditInventoryModal } from "@/features/inventory/components/EditInventoryModal";
+import { ManageCategoriesModal } from "@/features/inventory/components/ManageCategoriesModal";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 const _Route = createFileRoute("/inventory/")({
   head: () => ({
@@ -33,9 +37,12 @@ const conditionColor: Record<InventoryCondition, string> = {
 const ALL_CONDITIONS: InventoryCondition[] = ["GOOD", "SERVICE DUE", "DAMAGED"];
 
 export function InventoryPage() {
+  const { formatDate } = useDateFormatter();
   const { can } = usePermissions();
   const canManage = can(PERMISSION.INVENTORY_MANAGE);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showCategoriesModal, setShowCategoriesModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [category, setCategory] = useState<string>("All");
   const [query, setQuery] = useState("");
 
@@ -92,15 +99,20 @@ export function InventoryPage() {
 
   return (
     <AppShell>
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-5 flex flex-col gap-3 sm:gap-4">
         <div>
           <div className="label-eyebrow mb-1">Warehouse Control</div>
           <h1 className="text-[20px] sm:text-[24px] font-bold tracking-tight">Inventory</h1>
         </div>
         {canManage && (
-          <Button size="sm" onClick={() => setShowAddModal(true)}>
-            <Boxes /> Add Inventory Item
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 self-start">
+            <Button size="sm" variant="outline" onClick={() => setShowCategoriesModal(true)}>
+              Manage Categories
+            </Button>
+            <Button size="sm" onClick={() => setShowAddModal(true)}>
+              <Boxes /> Add Inventory Item
+            </Button>
+          </div>
         )}
       </div>
 
@@ -185,19 +197,30 @@ export function InventoryPage() {
         <table className="w-full text-[12px]">
           <thead className="bg-surface-2">
             <tr>
-              {["Asset / Item", "Category", "Location", "Stock allocation", "Available", "Condition", "Next service"].map(
-                (h) => (
-                  <th key={h} className="border-b border-border px-4 py-3 text-left label-eyebrow">
-                    {h}
-                  </th>
-                )
-              )}
+              {[
+                "Asset / Item",
+                "Category",
+                "Location",
+                "Stock allocation",
+                "Available",
+                "Condition",
+                "Next service",
+                ...(canManage ? ["Actions"] : []),
+              ].map((h) => (
+                <th key={h} className="border-b border-border px-4 py-3 text-left label-eyebrow">
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-[13px]" style={{ color: "var(--text-3)" }}>
+                <td
+                  colSpan={canManage ? 8 : 7}
+                  className="px-4 py-12 text-center text-[13px]"
+                  style={{ color: "var(--text-3)" }}
+                >
                   No items match your current filters.
                 </td>
               </tr>
@@ -205,7 +228,7 @@ export function InventoryPage() {
               rows.map((item) => {
                 const utilized = item.total > 0 ? ((item.reserved + item.onsite) / item.total) * 100 : 0;
                 return (
-                  <tr key={item.id} className="border-b border-border transition hover:bg-surface-2 last:border-0">
+                  <tr key={`${item.entityKind}-${item.entityId}`} className="border-b border-border transition hover:bg-surface-2 last:border-0">
                     <td className="px-4 py-3">
                       <Link to="/inventory/$itemId" params={{ itemId: item.id }} className="font-semibold hover:text-accent">
                         {item.name}
@@ -237,7 +260,20 @@ export function InventoryPage() {
                         {item.condition}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-text-2">{item.nextService}</td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-text-2">{formatDate(item.nextService)}</td>
+                    {canManage && (
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem(item)}
+                          className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition hover:border-[var(--accent)]"
+                          style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+                          title="Edit or delete"
+                        >
+                          <Pencil className="h-3 w-3" /> Edit
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })
@@ -251,6 +287,15 @@ export function InventoryPage() {
       </div>
 
       <AddInventoryModal open={showAddModal} onClose={() => setShowAddModal(false)} />
+      <EditInventoryModal
+        open={!!editingItem}
+        item={editingItem}
+        onClose={() => setEditingItem(null)}
+      />
+      <ManageCategoriesModal
+        open={showCategoriesModal}
+        onClose={() => setShowCategoriesModal(false)}
+      />
     </AppShell>
   );
 }

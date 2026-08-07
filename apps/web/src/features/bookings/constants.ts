@@ -89,11 +89,11 @@ export const BOOKING_ACTION_UI: Record<string, BookingActionUI> = {
     "destructive"
   ),
 
-  // Reverse / undo edges
-  "booking.unconfirm": ui("booking.confirm", "Revert to Reserved", Undo2, "outline"),
-  "booking.unassign": ui("assignment.assign_technician", "Revert to Confirmed", Undo2, "outline"),
-  "booking.revert_accept": ui("assignment.accept", "Revert to Assigned", Undo2, "outline"),
-  "booking.revert_preparation": ui("bom.create", "Revert to Accepted", Undo2, "outline"),
+  // Reverse / undo edges — keep distinct action ids so forms (payment / assign) do not attach
+  "booking.unconfirm": ui("booking.unconfirm", "Revert to Reserved", Undo2, "outline"),
+  "booking.unassign": ui("booking.unassign", "Revert to Confirmed", Undo2, "outline"),
+  "booking.revert_accept": ui("booking.revert_accept", "Revert to Assigned", Undo2, "outline"),
+  "booking.revert_preparation": ui("booking.revert_preparation", "Revert to Accepted", Undo2, "outline"),
 
   // Permission-key fallbacks (when actionId missing or unknown)
   "assignment.assign_technician": ui(

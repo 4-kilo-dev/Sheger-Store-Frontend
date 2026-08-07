@@ -10,13 +10,23 @@ function toIso(value: string): string {
 export function getBookingRentalWindow(
   booking: Pick<Booking, "rentalStart" | "rentalEnd" | "assemblyDate" | "dismantleDate" | "eventDate">
 ): { from: string; to: string } | null {
-  const start = booking.rentalStart || booking.assemblyDate || booking.eventDate;
-  const end = booking.rentalEnd || booking.dismantleDate || booking.eventDate;
+  // Prefer assembly → dismantle (ops window); fall back to rental / event dates.
+  const start =
+    booking.assemblyDate || booking.rentalStart || booking.eventDate;
+  const end =
+    booking.dismantleDate || booking.rentalEnd || booking.eventDate;
   if (!start || !end) return null;
 
   const from = new Date(toIso(start));
   const to = new Date(toIso(end));
-  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) return null;
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
+
+  // Same instant (common when only eventDate is set) → treat as through end of that day.
+  if (from.getTime() === to.getTime()) {
+    to.setHours(23, 59, 59, 999);
+  }
+
+  if (from > to) return null;
 
   return { from: from.toISOString(), to: to.toISOString() };
 }
@@ -51,4 +61,6 @@ export interface PoolAvailabilityEntry {
   available: number;
   total: number;
   loading: boolean;
+  /** Warehouse total from pool.totalQuantity (not windowed). */
+  stock?: number;
 }

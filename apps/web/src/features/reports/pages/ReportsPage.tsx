@@ -91,6 +91,24 @@ export function ReportsPage() {
     queryFn: () => getRevenueReportApi({ startDate, endDate }),
   });
 
+  const revenueBookingCount = useMemo(() => {
+    if (typeof revenueReport?.uniqueBookingCount === "number") {
+      return revenueReport.uniqueBookingCount;
+    }
+    const ids = new Set(
+      (revenueReport?.payments || []).map((p) => p.bookingId).filter(Boolean),
+    );
+    return ids.size;
+  }, [revenueReport]);
+
+  const averageBookingValue = useMemo(() => {
+    if (typeof revenueReport?.averageBookingValue === "number") {
+      return Math.round(revenueReport.averageBookingValue);
+    }
+    const total = revenueReport?.totalRevenue || 0;
+    return revenueBookingCount > 0 ? Math.round(total / revenueBookingCount) : 0;
+  }, [revenueReport, revenueBookingCount]);
+
   const { data: customersReport = [], isLoading: loadingCustomers } = useQuery({
     queryKey: ["reports-customers"],
     queryFn: () => getCustomersReportApi(),
@@ -400,7 +418,7 @@ export function ReportsPage() {
                   {loadingRevenue ? "..." : `ETB ${(revenueReport?.totalRevenue || 0).toLocaleString()}`}
                 </div>
                 <div className="mt-1 text-[11px]" style={{ color: "var(--text-3)" }}>
-                  Aggregated lifetime payments
+                  {startDate || endDate ? "Payments in selected date range" : "Aggregated lifetime payments"}
                 </div>
               </div>
 
@@ -410,10 +428,10 @@ export function ReportsPage() {
                   <CalendarCheck className="h-4 w-4" style={{ color: "var(--accent)" }} />
                 </div>
                 <div className="mt-3 text-[22px] font-bold">
-                  {loadingBookings ? "..." : bookingsReport?.totalCount}
+                  {loadingRevenue ? "..." : revenueBookingCount}
                 </div>
                 <div className="mt-1 text-[11px]" style={{ color: "var(--text-3)" }}>
-                  Matched bookings by filter
+                  Bookings with payments in range
                 </div>
               </div>
 
@@ -423,10 +441,10 @@ export function ReportsPage() {
                   <TrendingUp className="h-4 w-4" style={{ color: "var(--accent)" }} />
                 </div>
                 <div className="mt-3 text-[22px] font-bold">
-                  {loadingBookings ? "..." : `ETB ${Math.round((bookingsReport?.totalBookingAmountValue || 0) / (bookingsReport?.totalCount || 1)).toLocaleString()}`}
+                  {loadingRevenue ? "..." : `ETB ${averageBookingValue.toLocaleString()}`}
                 </div>
                 <div className="mt-1 text-[11px]" style={{ color: "var(--text-3)" }}>
-                  Per booking transaction value
+                  Logged revenue ÷ paying bookings
                 </div>
               </div>
             </div>
@@ -555,7 +573,7 @@ export function ReportsPage() {
                                 {style.label}
                               </span>
                             </td>
-                            <td className="px-4 py-2.5 text-[11px] font-mono text-zinc-400">{new Date(p.createdAt).toLocaleDateString()}</td>
+                            <td className="px-4 py-2.5 text-[11px] font-mono text-zinc-400">{formatDate(p.createdAt)}</td>
                             <td className="px-4 py-2.5 text-zinc-400">{p.recordedByName}</td>
                           </tr>
                         );
@@ -849,7 +867,7 @@ export function ReportsPage() {
 
                       <div className="text-[10px] text-zinc-500 font-mono mt-1 border-t pt-2 flex items-center justify-between" style={{ borderColor: "var(--border)" }}>
                         <span>Logged By: {c.canceledBy}</span>
-                        <span>Date Canceled: {new Date(c.canceledAt).toLocaleDateString()}</span>
+                        <span>Date Canceled: {formatDate(c.canceledAt)}</span>
                       </div>
                     </div>
                   ))

@@ -110,6 +110,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
 
   const isAssignTechnicianAction =
     selectedAction.id === "assignment.assign_technician" ||
+    selectedAction.id === "booking.assign" ||
     selectedAction.requiresForm === "assign";
 
   const assignableStaff = staff.filter((s) => isAssignableTechnician(s.role));
@@ -150,8 +151,12 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
 
   const stagehandLeaderName = booking.teamLeader || "— Not assigned —";
   const screenTypeLabel = booking.screenType || "—";
-  const screenSizeLabel = booking.size > 0 ? `${booking.size} sqm` : "—";
-  const computedTotal = dailyRate > 0 && rentedDays > 0 ? dailyRate * rentedDays : 0;
+  const screenSize = booking.size > 0 ? booking.size : 0;
+  const screenSizeLabel = screenSize > 0 ? `${screenSize} sqm` : "—";
+  const computedTotal =
+    dailyRate > 0 && rentedDays > 0 && screenSize > 0
+      ? screenSize * dailyRate * rentedDays
+      : 0;
 
   return (
     <div
@@ -220,6 +225,20 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                     className="text-[11px] font-semibold"
                     style={{ color: "var(--text-2)" }}
                   >
+                    Screen Size (sqm)
+                    <input
+                      type="text"
+                      readOnly
+                      value={screenSize > 0 ? String(screenSize) : "—"}
+                      className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px] opacity-80"
+                      style={{ borderColor: "var(--border)" }}
+                      title="Set at booking intake / technical holds"
+                    />
+                  </label>
+                  <label
+                    className="text-[11px] font-semibold"
+                    style={{ color: "var(--text-2)" }}
+                  >
                     Number of Days
                     <input
                       type="text"
@@ -227,7 +246,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                       value={rentedDays > 0 ? String(rentedDays) : "—"}
                       className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px] opacity-80"
                       style={{ borderColor: "var(--border)" }}
-                      title="Set at booking intake with event dates"
+                      title="Set at booking intake"
                     />
                   </label>
                   <label
@@ -239,7 +258,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                       type="number"
                       value={dailyRate || ""}
                       onChange={(e) => setDailyRate(parseFloat(e.target.value) || 0)}
-                      placeholder="e.g. 60000"
+                      placeholder="e.g. 5000"
                       className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px]"
                       style={{ borderColor: "var(--border)" }}
                     />
@@ -255,6 +274,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                       value={computedTotal > 0 ? computedTotal.toLocaleString() : "—"}
                       className="mt-1 h-9 w-full rounded-md border bg-[var(--surface-2)] px-2 font-mono text-[12px] opacity-80"
                       style={{ borderColor: "var(--border)" }}
+                      title="Screen size × days × daily rate"
                     />
                   </label>
                   {paymentType === "advance" && (
@@ -288,7 +308,10 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                         <strong>ETB {(computedTotal - advancePayment).toLocaleString()} remaining.</strong>
                       </span>
                     ) : (
-                      <span>Enter the daily rate (after materials are confirmed) and advance amount to preview the payment split.</span>
+                      <span>
+                        Computed total = screen size × days × daily rate. Enter the daily rate and
+                        advance amount to preview the payment split.
+                      </span>
                     )
                   ) : computedTotal >= 1000 ? (
                     <span>
@@ -296,18 +319,26 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                       <strong>ETB {computedTotal.toLocaleString()}</strong> as paid, leaving no balance.
                     </span>
                   ) : (
-                    <span>Enter the daily rate to compute the contract total (days × rate).</span>
+                    <span>Enter the daily rate to compute the contract total (size × days × rate).</span>
                   )}
+                </div>
+              )}
+            {showPaymentCapture &&
+              screenSize <= 0 && (
+                <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>Screen size (sqm) is required — set it on the booking before confirming.</span>
                 </div>
               )}
             {showPaymentCapture &&
               rentedDays <= 0 && (
                 <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
                   <AlertCircle className="h-3.5 w-3.5" />
-                  <span>This booking has no number of days set — update the booking schedule first.</span>
+                  <span>This booking has no number of days set — update the booking intake first.</span>
                 </div>
               )}
             {showPaymentCapture &&
+              screenSize > 0 &&
               rentedDays > 0 &&
               (computedTotal < 1000 || dailyRate <= 0) && (
                 <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
@@ -317,7 +348,8 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
               )}
             {showPaymentCapture &&
               paymentType === "advance" &&
-              advancePayment > computedTotal && computedTotal >= 1000 && (
+              advancePayment > computedTotal &&
+              computedTotal >= 1000 && (
                 <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
                   <AlertCircle className="h-3.5 w-3.5" />
                   <span>Advance Payment can't be greater than total payment.</span>
@@ -335,15 +367,15 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
             {isAssignTechnicianAction && (
               <div className="mt-3 space-y-2">
                 <p className="text-[11px]" style={{ color: "var(--text-2)" }}>
-                  Select one or more technicians. Chief technicians are included in this list.
+                  Select the technician crew for this booking. Uncheck someone to remove them;
+                  check someone new to add them.
                 </p>
                 <StaffMultiSelect
                   options={assignableStaff.map((s) => ({
                     id: s.id,
                     label: `${s.name}${isChiefTechnicianRole(s.role) ? " (Chief Technician)" : ""}${
-                      alreadyAssignedTechIds.has(s.id) ? " — already assigned" : ""
+                      alreadyAssignedTechIds.has(s.id) ? " — currently assigned" : ""
                     }`,
-                    disabled: alreadyAssignedTechIds.has(s.id),
                   }))}
                   selectedIds={selectedTechnicianIds}
                   onChange={setSelectedTechnicianIds}
@@ -684,8 +716,12 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
               }
               assignTechnicians(selectedTechnicianIds);
             } else if (showPaymentCapture) {
+              if (screenSize <= 0) {
+                toast.error("Screen size (sqm) is required before confirming.");
+                return;
+              }
               if (rentedDays <= 0) {
-                toast.error("This booking has no number of days set — update the booking schedule first.");
+                toast.error("This booking has no number of days set — update the booking intake first.");
                 return;
               }
               if (computedTotal < 1000 || dailyRate <= 0) {
@@ -707,6 +743,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                   totalAmount: computedTotal,
                   pricingDailyRate: dailyRate,
                   pricingRentedDays: rentedDays,
+                  pricingScreenSize: screenSize,
                 });
               } else {
                 confirmBookingWithPayment({
@@ -715,6 +752,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                   totalAmount: computedTotal,
                   pricingDailyRate: dailyRate,
                   pricingRentedDays: rentedDays,
+                  pricingScreenSize: screenSize,
                 });
               }
             } else {
@@ -736,9 +774,10 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
             (selectedAction.requiresReason && cancellationReason.trim().length < 10) ||
             (isAssignTechnicianAction && selectedTechnicianIds.length === 0) ||
             (showPaymentCapture &&
-              (computedTotal < 1000 ||
+              (screenSize <= 0 ||
                 dailyRate <= 0 ||
                 rentedDays <= 0 ||
+                computedTotal < 1000 ||
                 (paymentType === "advance" && advancePayment > computedTotal) ||
                 (paymentType === "advance" && advancePayment <= 0))) ||
             (isCheckinAction && !hasCheckinItemsSelected)

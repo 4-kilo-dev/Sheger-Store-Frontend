@@ -9,6 +9,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { createBookingApi, getCustomFieldDefinitionsApi } from "@/features/bookings/services/bookings.api";
 import { DatePicker } from "@/components/ui/date-picker";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 const _Route = createFileRoute("/bookings/new")({
   head: () => ({
@@ -30,12 +31,14 @@ const STEPS = [
 export function NewBooking() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { formatDateTime } = useDateFormatter();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     client: "", contactPerson: "", contactPhone: "",
     venue: "", assemblyDate: "", eventDate: "", dismantleDate: "",
     rentedDays: 1,
     itemServiceSpec: "", size: "",
+    rentedDays: 1,
     notes: "",
     customFields: {} as Record<string, any>,
   });
@@ -304,7 +307,7 @@ export function NewBooking() {
                 />
               </Field>
               <p className="text-[11px]" style={{ color: "var(--text-3)" }}>
-                Billable rental days for pricing. Independent of the assembly / event / dismantle window.
+                Billable rental days for pricing (used with screen size × daily rate at confirm).
               </p>
 
               {getStepErrors(1).length > 0 && (
@@ -468,9 +471,9 @@ export function NewBooking() {
                   ["Client", form.client || "—"],
                   ["Contact", `${form.contactPerson || "—"} · ${form.contactPhone || "—"}`],
                   ["Venue", form.venue || "—"],
-                  ["Assembly Date", form.assemblyDate ? form.assemblyDate.replace("T", " ") : "—"],
-                  ["Event Date", form.eventDate ? form.eventDate.replace("T", " ") : "—"],
-                  ["Dismantle Date", form.dismantleDate ? form.dismantleDate.replace("T", " ") : "—"],
+                  ["Assembly Date", form.assemblyDate ? formatDateTime(form.assemblyDate) : "—"],
+                  ["Event Date", form.eventDate ? formatDateTime(form.eventDate) : "—"],
+                  ["Dismantle Date", form.dismantleDate ? formatDateTime(form.dismantleDate) : "—"],
                   ["Number of Days", form.rentedDays > 0 ? String(form.rentedDays) : "—"],
                   ["Screen Size (sqm)", form.size ? `${form.size} sqm` : "—"],
                   ["Required Spec", form.itemServiceSpec || "—"],
@@ -539,11 +542,15 @@ export function NewBooking() {
               <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3 text-[11px]" style={{ borderColor: "var(--border)" }}>
                 <div>
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Assembly</div>
-                  <div className="font-mono font-semibold">{form.assemblyDate ? form.assemblyDate.replace("T", " ") : "—"}</div>
+                  <div className="font-mono font-semibold">{form.assemblyDate ? formatDateTime(form.assemblyDate) : "—"}</div>
                 </div>
                 <div>
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Event</div>
-                  <div className="font-mono font-semibold">{form.eventDate ? form.eventDate.replace("T", " ") : "—"}</div>
+                  <div className="font-mono font-semibold">{form.eventDate ? formatDateTime(form.eventDate) : "—"}</div>
+                </div>
+                <div className="col-span-2">
+                  <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Number of Days</div>
+                  <div className="font-semibold">{form.rentedDays > 0 ? form.rentedDays : "—"}</div>
                 </div>
                 <div className="col-span-2">
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Number of Days</div>

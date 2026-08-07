@@ -12,6 +12,7 @@ import {
   type NotificationType,
   type NotificationPriority,
 } from "@/features/notifications/services/notifications.api";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 const _Route = createFileRoute("/notifications")({
   head: () => ({
@@ -43,6 +44,7 @@ const PRIORITY_STYLES: Record<NotificationPriority, { color: string; bg: string 
 
 export function NotificationsPage() {
   const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications();
+  const { formatDateTime } = useDateFormatter();
   const [tab, setTab] = useState<TabKey>("All");
 
   const filtered = useMemo(() => {
@@ -166,7 +168,7 @@ export function NotificationsPage() {
                             )}
                           </div>
                           <time className="shrink-0 text-[10px] font-mono" style={{ color: "var(--text-3)" }}>
-                            {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {formatDateTime(n.createdAt)}
                           </time>
                         </div>
                         <p className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-2)" }}>{n.detail || n.message}</p>

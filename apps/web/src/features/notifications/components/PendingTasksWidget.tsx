@@ -2,10 +2,12 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useNotifications } from "../context/NotificationsContext";
 import { resolveNotificationDisplay } from "../services/notifications.api";
 import { ClipboardList, AlertTriangle, ArrowRight, ShieldAlert, Check } from "lucide-react";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 export function PendingTasksWidget() {
   const navigate = useNavigate();
   const { pendingTasks, isLoading, markAsRead } = useNotifications();
+  const { formatDate } = useDateFormatter();
 
   const getPriorityStyle = (priority: string) => {
     switch (priority) {
@@ -78,7 +80,7 @@ export function PendingTasksWidget() {
 
                 <div className="flex items-center justify-between border-t pt-2" style={{ borderColor: "var(--border)" }}>
                   <span className="font-mono text-[9px]" style={{ color: "var(--text-3)" }}>
-                    {new Date(t.createdAt).toLocaleDateString()}
+                    {formatDate(t.createdAt)}
                   </span>
                   
                   <button

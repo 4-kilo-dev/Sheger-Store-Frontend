@@ -17,13 +17,19 @@ function parseSqm(value: string): number {
 }
 
 /** Derive display fields from backend spec without inventing CTO defaults at intake. */
+function formatArrangementLabel(value?: string | null): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
 function parseBookingScreenFields(b: {
   itemServiceSpec?: string | null;
   arrangementDetails?: string | null;
   screenAreaSqm?: number | string | null;
+  customFields?: Record<string, any> | null;
 }) {
   const spec = (b.itemServiceSpec || "").trim();
-  const arrangement = (b.arrangementDetails || "").trim();
   const specParts = spec ? spec.split(" - ").map((part) => part.trim()) : [];
 
   let screenType = "";
@@ -40,6 +46,20 @@ function parseBookingScreenFields(b: {
 
   const backendSize = Number(b.screenAreaSqm);
   if (Number.isFinite(backendSize) && backendSize > 0) size = backendSize;
+
+  const fromCustom =
+    b.customFields?.hanging_or_sitting ??
+    b.customFields?.arrangement ??
+    b.customFields?.arrangement_details;
+  let arrangement = formatArrangementLabel(b.arrangementDetails || fromCustom);
+
+  // Legacy specs sometimes encoded arrangement as a trailing token (hanging/sitting).
+  if (!arrangement && specParts.length >= 3) {
+    const maybeArrangement = specParts[specParts.length - 1];
+    if (/^(hanging|sitting)$/i.test(maybeArrangement)) {
+      arrangement = formatArrangementLabel(maybeArrangement);
+    }
+  }
 
   return {
     screenType: screenType as ScreenType | "",
@@ -153,11 +173,15 @@ function parseNumericField(value: string | number | null | undefined): number | 
   return Number.isFinite(n) ? n : undefined;
 }
 
+/** Format an instant as local `YYYY-MM-DDTHH:mm` (not UTC-sliced ISO). */
 function normalizeBookingDateTime(value?: string | null): string {
   if (!value) return "";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0, 16);
+  // Using UTC slice(0,16) strips the Z and re-parses as local, shifting the
+  // calendar day in UTC+ offsets (e.g. EAT) and breaking week filters.
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 function mapBackendBookingToFrontend(b: any): Booking {
@@ -265,7 +289,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
     vehicleText: b.vehicleText || "",
     vehiclePlate: b.vehiclePlate || "",
     mealBudget,
-    createdAt: b.createdAt ? b.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+    createdAt: b.createdAt || new Date().toISOString(),
     statusHistory,
     itemServiceSpec: intakeSpec,
     assignments: b.assignments || [],
@@ -337,6 +361,12 @@ export async function createBookingApi(form: any): Promise<any> {
   if (form.rentedDays != null && form.rentedDays > 0) {
     bookingPayload.rentedDays = form.rentedDays;
   }
+  if (hasValidSize) {
+    bookingPayload.screenAreaSqm = String(screenSize);
+  }
+
+  // 3. Create booking — daily rate / payment are set later at RESERVED → CONFIRMED
+  const booking = await client.post<any>("/api/bookings", bookingPayload);
 
   // 3. Create booking — daily rate / payment are set later at RESERVED → CONFIRMED
   const booking = await client.post<any>("/api/bookings", bookingPayload);
@@ -385,7 +415,7 @@ export async function recordBookingPaymentApi(bookingId: string, toStatus: strin
 export interface PaymentSummary {
   /** Amount paid so far (advance deposit or full total). */
   paid: number;
-  /** Contract total from dailyRate × rentedDays (`paymentAmount`). */
+  /** Contract total from screen size × days × daily rate (`paymentAmount`). */
   total: number | null;
   /** Remaining balance, or `null` when total is unknown. */
   remaining: number | null;
