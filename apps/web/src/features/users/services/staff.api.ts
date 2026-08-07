@@ -41,12 +41,33 @@ export async function removeRolePermissionApi(roleId: string, permissionId: stri
 }
 
 export async function getStaffApi(): Promise<StaffMember[]> {
-  const users = await client.get<any[]>("/api/users");
+  const [users, bookings] = await Promise.all([
+    client.get<any[]>("/api/users"),
+    client.get<any[]>("/api/bookings").catch(() => [] as any[]),
+  ]);
+
+  const jobsByUser = new Map<string, number>();
+  const onsiteUsers = new Set<string>();
+  for (const b of bookings || []) {
+    const activeBooking = !["CANCELED", "DONE"].includes(String(b.status || ""));
+    for (const a of b.assignments || []) {
+      if (a.status === "DECLINED") continue;
+      const uid = a.userId || a.user?.id;
+      if (!uid) continue;
+      if (activeBooking) {
+        jobsByUser.set(uid, (jobsByUser.get(uid) || 0) + 1);
+      }
+      if (b.status === "ONSITE") {
+        onsiteUsers.add(uid);
+      }
+    }
+  }
+
   return users.map((u) => {
     const roleObj = u.role || (u.roles && u.roles[0]) || null;
     const roleName = roleObj?.displayName || "Staff";
     const roleKey = roleObj?.key || undefined;
-    
+
     const initials = u.name
       .split(" ")
       .map((n: string) => n[0])
@@ -54,16 +75,20 @@ export async function getStaffApi(): Promise<StaffMember[]> {
       .toUpperCase()
       .slice(0, 2);
 
+    const jobs = jobsByUser.get(u.id) || 0;
+    let status: StaffMember["status"] = u.active ? "ACTIVE" : "OFF DUTY";
+    if (u.active && onsiteUsers.has(u.id)) status = "ONSITE";
+
     return {
       id: u.id,
       name: u.name,
       role: roleName,
       roleKey,
-      team: u.team || "Operations",
+      team: u.team?.trim() || "—",
       phone: u.phone || "",
-      status: u.active ? "ACTIVE" : "OFF DUTY",
-      jobs: u.jobs || 0,
-      capacity: u.capacity || 30,
+      status,
+      jobs,
+      capacity: Math.max(jobs, 5),
       initials: initials || "?",
       joinedDate: u.createdAt ? u.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
       isFreelancer: Boolean(u.isFreelancer),
@@ -94,6 +119,7 @@ export async function createStaffApi(payload: any): Promise<StaffMember> {
     password: payload.password,
     roleId: matchedRole.id,
     isFreelancer: Boolean(payload.isFreelancer),
+    team: String(payload.team || "").trim() || undefined,
   };
 
   // 3. Post to users
@@ -111,11 +137,11 @@ export async function createStaffApi(payload: any): Promise<StaffMember> {
     id: newUser.id,
     name: newUser.name,
     role: matchedRole.displayName,
-    team: payload.team || "Operations",
+    team: newUser.team || payload.team || "—",
     phone: newUser.phone || "",
     status: "ACTIVE",
     jobs: 0,
-    capacity: 30,
+    capacity: 5,
     initials: initials || "?",
     joinedDate: new Date().toISOString().slice(0, 10),
     isFreelancer: Boolean(newUser.isFreelancer ?? payload.isFreelancer),

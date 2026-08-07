@@ -45,6 +45,11 @@ export const MOCK_INVENTORY: InventoryItem[] = [
 export const INVENTORY_CATEGORIES = ["All", "LED Panels", "Processors", "Power", "Rigging", "Cables", "Audio"] as const;
 
 import { client } from "@/lib/api/client";
+import {
+  getInventoryReportApi,
+  type InventoryReportPool,
+  type InventoryReportRecord,
+} from "@/features/reports/services/reports.api";
 
 export interface InventoryCategory {
   id: string;
@@ -162,18 +167,54 @@ export async function deactivateInventoryCategoryApi(id: string): Promise<Invent
   return updateInventoryCategoryApi(id, { isActive: false });
 }
 
+function mapItemCondition(condition?: string): {
+  condition: InventoryCondition;
+  availability: InventoryAvailability;
+  available: number;
+  damaged: number;
+} {
+  if (condition === "DAMAGED" || condition === "LOST" || condition === "RETIRED") {
+    return { condition: "DAMAGED", availability: "RESERVED", available: 0, damaged: 1 };
+  }
+  if (condition === "UNDER_MAINTENANCE") {
+    return { condition: "SERVICE DUE", availability: "RESERVED", available: 0, damaged: 0 };
+  }
+  return { condition: "GOOD", availability: "AVAILABLE", available: 1, damaged: 0 };
+}
+
+function purchasedOrUnknown(purchasedAt?: string | null): string {
+  return purchasedAt ? purchasedAt.slice(0, 10) : "—";
+}
+
 export async function getCombinedInventoryApi(): Promise<InventoryItem[]> {
-  const [categories, pools, items] = await Promise.all([
+  const [categories, pools, items, report] = await Promise.all([
     getInventoryCategoriesApi(),
     getInventoryPoolsApi(),
     getInventoryItemsApi(),
+    getInventoryReportApi().catch(() => [] as InventoryReportRecord[]),
   ]);
 
   const categoryMap = new Map(categories.map((c) => [c.id, c]));
+  const poolStats = new Map<string, InventoryReportPool>();
+  for (const cat of report) {
+    for (const p of cat.pools || []) {
+      if (p.poolId) poolStats.set(p.poolId, p);
+    }
+  }
 
   const mappedPools: InventoryItem[] = pools.map((p) => {
     const cat = categoryMap.get(p.categoryId);
-    const totalQty = parseInt(p.totalQuantity || "0");
+    const totalQty = Number.parseFloat(String(p.totalQuantity || "0")) || 0;
+    const stats = poolStats.get(p.id);
+    const onsite = stats?.checkedOutQuantity ?? 0;
+    const damaged = stats?.damagedQuantity ?? 0;
+    const available = stats?.availableQuantity ?? Math.max(0, totalQty - onsite - damaged);
+    const reserved = Math.max(0, totalQty - available - onsite - damaged);
+    const availability: InventoryAvailability =
+      onsite > 0 ? "ONSITE" : reserved > 0 ? "RESERVED" : "AVAILABLE";
+    const condition: InventoryCondition =
+      damaged > 0 && available === 0 ? "DAMAGED" : damaged > 0 ? "SERVICE DUE" : "GOOD";
+
     return {
       id: p.sku || p.id,
       entityId: p.id,
@@ -181,25 +222,26 @@ export async function getCombinedInventoryApi(): Promise<InventoryItem[]> {
       categoryId: p.categoryId,
       name: p.name,
       category: cat?.name || "Bulk Pool",
-      model: "VV Standard",
+      model: cat?.unit ? `Unit: ${cat.unit}` : "Bulk pool",
       total: totalQty,
-      available: totalQty,
-      reserved: 0,
-      onsite: 0,
-      damaged: 0,
-      condition: "GOOD" as const,
-      availability: "AVAILABLE" as const,
-      location: "Main Warehouse",
+      available,
+      reserved,
+      onsite,
+      damaged,
+      condition,
+      availability,
+      location: onsite > 0 ? "Onsite / checked out" : "Warehouse",
       notes: p.notes || undefined,
       sku: p.sku || undefined,
-      lastService: new Date().toISOString().slice(0, 10),
-      nextService: new Date().toISOString().slice(0, 10),
+      lastService: "—",
+      nextService: "—",
     };
   });
 
   const mappedItems: InventoryItem[] = items.map((i) => {
     const cat = categoryMap.get(i.categoryId);
-    const isDamaged = i.condition === "DAMAGED";
+    const base = mapItemCondition(i.condition);
+
     return {
       id: i.assetTag || i.id,
       entityId: i.id,
@@ -207,21 +249,21 @@ export async function getCombinedInventoryApi(): Promise<InventoryItem[]> {
       categoryId: i.categoryId,
       name: i.name,
       category: cat?.name || "Serialized Asset",
-      model: "VV Serialized",
+      model: i.serialNumber ? `S/N ${i.serialNumber}` : "Serialized",
       total: 1,
-      available: isDamaged ? 0 : 1,
-      reserved: 0,
+      available: base.available,
+      reserved: base.available === 0 && base.damaged === 0 ? 1 : 0,
       onsite: 0,
-      damaged: isDamaged ? 1 : 0,
-      condition: (isDamaged ? "DAMAGED" : "GOOD") as InventoryCondition,
-      availability: (isDamaged ? "RESERVED" : "AVAILABLE") as InventoryAvailability,
-      location: "Main Warehouse",
+      damaged: base.damaged,
+      condition: base.condition,
+      availability: base.availability,
+      location: "Warehouse",
       notes: i.notes || undefined,
       assetTag: i.assetTag || undefined,
       serialNumber: i.serialNumber || undefined,
       itemCondition: i.condition,
-      lastService: i.purchasedAt ? i.purchasedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
-      nextService: new Date().toISOString().slice(0, 10),
+      lastService: purchasedOrUnknown(i.purchasedAt),
+      nextService: "—",
     };
   });
 
@@ -229,63 +271,10 @@ export async function getCombinedInventoryApi(): Promise<InventoryItem[]> {
 }
 
 export async function getInventoryItemDetailApi(id: string): Promise<InventoryItem> {
-  const items = await getInventoryItemsApi();
-  const itemMatch = items.find((i) => i.assetTag === id || i.id === id);
-  if (itemMatch) {
-    const isDamaged = itemMatch.condition === "DAMAGED";
-    return {
-      id: itemMatch.assetTag || itemMatch.id,
-      entityId: itemMatch.id,
-      entityKind: "item",
-      categoryId: itemMatch.categoryId,
-      name: itemMatch.name,
-      category: "Serialized Asset",
-      model: "VV Serialized",
-      total: 1,
-      available: isDamaged ? 0 : 1,
-      reserved: 0,
-      onsite: 0,
-      damaged: isDamaged ? 1 : 0,
-      condition: isDamaged ? "DAMAGED" : "GOOD",
-      availability: isDamaged ? "RESERVED" : "AVAILABLE",
-      location: "Main Warehouse",
-      notes: itemMatch.notes || undefined,
-      assetTag: itemMatch.assetTag || undefined,
-      serialNumber: itemMatch.serialNumber || undefined,
-      itemCondition: itemMatch.condition,
-      lastService: itemMatch.purchasedAt ? itemMatch.purchasedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
-      nextService: new Date().toISOString().slice(0, 10),
-    };
-  }
-
-  const pools = await getInventoryPoolsApi();
-  const poolMatch = pools.find((p) => p.sku === id || p.id === id);
-  if (poolMatch) {
-    const totalQty = parseInt(poolMatch.totalQuantity || "0");
-    return {
-      id: poolMatch.sku || poolMatch.id,
-      entityId: poolMatch.id,
-      entityKind: "pool",
-      categoryId: poolMatch.categoryId,
-      name: poolMatch.name,
-      category: "Bulk Pool",
-      model: "VV Standard",
-      total: totalQty,
-      available: totalQty,
-      reserved: 0,
-      onsite: 0,
-      damaged: 0,
-      condition: "GOOD",
-      availability: "AVAILABLE",
-      location: "Main Warehouse",
-      notes: poolMatch.notes || undefined,
-      sku: poolMatch.sku || undefined,
-      lastService: new Date().toISOString().slice(0, 10),
-      nextService: new Date().toISOString().slice(0, 10),
-    };
-  }
-
-  throw new Error(`Inventory item not found for id ${id}`);
+  const all = await getCombinedInventoryApi();
+  const match = all.find((row) => row.id === id || row.entityId === id || row.sku === id || row.assetTag === id);
+  if (!match) throw new Error(`Inventory item not found for id ${id}`);
+  return match;
 }
 
 export async function getPoolAvailabilityApi(poolId: string, from: string, to: string): Promise<any> {

@@ -34,17 +34,15 @@ export function useFileUpload(booking: Booking | undefined) {
       let uploadUrl = "";
       let objectKey = "";
 
-      try {
-        const res = await getUploadUrlApi(booking.id, {
-          fileName: file.name,
-          fileType: file.type || "application/octet-stream",
-        });
-        uploadUrl = res.uploadUrl;
-        objectKey = res.objectKey;
-      } catch (e) {
-        const mockUuid = Math.random().toString(36).substr(2, 9);
-        uploadUrl = `mock://vortex-s3.local/attachments/${booking.code}/${mockUuid}_${file.name}`;
-        objectKey = `attachments/${booking.code}/${mockUuid}_${file.name}`;
+      const res = await getUploadUrlApi(booking.id, {
+        fileName: file.name,
+        fileType: file.type || "application/octet-stream",
+      });
+      uploadUrl = res.uploadUrl;
+      objectKey = res.objectKey;
+
+      if (!uploadUrl || uploadUrl.startsWith("mock://")) {
+        throw new Error("File storage is unavailable. Check S3/MinIO configuration and try again.");
       }
 
       try {
@@ -52,14 +50,9 @@ export function useFileUpload(booking: Booking | undefined) {
           setUploadProgress(percent);
         });
       } catch (err) {
-        console.warn("Direct S3 upload failed (likely MinIO is offline). Falling back to mock S3 simulator.", err);
-        const mockUuid = Math.random().toString(36).substr(2, 9);
-        const fallbackUrl = `mock://vortex-s3.local/attachments/${booking.code}/${mockUuid}_${file.name}`;
-        objectKey = `attachments/${booking.code}/${mockUuid}_${file.name}`;
-
-        await uploadFileDirectApi(fallbackUrl, file, (percent) => {
-          setUploadProgress(percent);
-        });
+        throw new Error(
+          "Upload failed — file storage may be offline. Check S3/MinIO and try again.",
+        );
       }
 
       return await confirmUploadApi(booking.id, {
@@ -97,10 +90,14 @@ export function useFileUpload(booking: Booking | undefined) {
   const handleDownload = async (att: Attachment) => {
     try {
       const { downloadUrl } = await getDownloadUrlApi(att.id);
-      if (downloadUrl && downloadUrl !== "#") {
-        window.open(downloadUrl, "_blank", "noopener,noreferrer");
-      } else {
+      if (!downloadUrl || downloadUrl === "#" || downloadUrl.startsWith("mock://")) {
         toast.error("Unable to generate preview/download URL");
+        return;
+      }
+      const win = window.open(downloadUrl, "_blank");
+      if (!win) {
+        // Popup blocked — navigate current tab as fallback
+        window.location.assign(downloadUrl);
       }
     } catch {
       toast.error("Failed to fetch download token");

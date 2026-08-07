@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, MoreHorizontal } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import type { BookingAction } from "@/features/bookings/constants";
 
 interface BookingActionBarProps {
@@ -50,12 +50,6 @@ export function BookingActionBar({
             {act.label}
           </button>
         ))}
-        <button
-          className="flex h-8 w-8 items-center justify-center rounded-md border"
-          style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
       </div>
     </div>
   );

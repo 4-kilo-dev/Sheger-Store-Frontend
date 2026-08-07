@@ -26,7 +26,7 @@ export function StatsOverviewWidget() {
   const { data: inventoryList = [] } = useQuery({
     queryKey: ["inventory"],
     queryFn: getCombinedInventoryApi,
-    enabled: ["admin", "supervisor", "storekeeper"].includes(role),
+    enabled: ["admin", "supervisor", "storekeeper", "oo", "ops_officer"].includes(role),
   });
 
   // 1. Calculations for Admin/Supervisor
@@ -89,8 +89,9 @@ export function StatsOverviewWidget() {
   const ccrStats = useMemo(() => {
     const reserved = bookingsList.filter((b) => b.status === "RESERVED").length;
     const unpaid = bookingsList.filter((b) => b.payment === "UNPAID" || b.payment === "ADVANCE").length;
-    const confirmedToday = bookingsList.filter((b) => b.status === "CONFIRMED").length;
-    return { reserved, unpaid, confirmedToday };
+    // List API has no statusHistory — show open CONFIRMED count (not "today")
+    const confirmedOpen = bookingsList.filter((b) => b.status === "CONFIRMED").length;
+    return { reserved, unpaid, confirmedOpen };
   }, [bookingsList]);
 
   // 3. Calculations for CTO
@@ -105,17 +106,30 @@ export function StatsOverviewWidget() {
   const skStats = useMemo(() => {
     const onsite = bookingsList.filter((b) => b.status === "ONSITE").length;
     const completed = bookingsList.filter((b) => b.status === "COMPLETED").length;
-    const checkedOut = bookingsList.reduce((s, b) => s + (b.bomItems ? b.bomItems.filter((i) => i.status === "Checked Out").length : 0), 0);
+    const damageQueue = bookingsList.reduce(
+      (s, b) => s + (b.bomItems ? b.bomItems.filter((i) => /damage/i.test(String(i.status))).length : 0),
+      0,
+    );
+    // Fall back to open damage-ish inventory count when BOM lines don't carry damage status
+    const inventoryDamaged = inventoryList.reduce((s, i) => s + (i.damaged || 0), 0);
     const totalReserved = bookingsList.reduce((s, b) => s + (b.bomItems ? b.bomItems.filter((i) => i.status === "Reserved").length : 0), 0);
-    return { onsite, completed, damaged: checkedOut, totalAvail: totalReserved };
-  }, [bookingsList]);
+    return {
+      onsite,
+      completed,
+      damaged: damageQueue > 0 ? damageQueue : inventoryDamaged,
+      totalAvail: totalReserved,
+    };
+  }, [bookingsList, inventoryList]);
 
   // 5. Calculations for Operations Officer
   const ooStats = useMemo(() => {
     const readyToDispatch = bookingsList.filter((b) => b.status === "PREPARATION").length;
     const onsite = bookingsList.filter((b) => b.status === "ONSITE").length;
     const completed = bookingsList.filter((b) => b.status === "COMPLETED").length;
-    return { readyToDispatch, onsite, completed };
+    const mealBudgetsActive = bookingsList.filter(
+      (b) => b.status === "ONSITE" && Number(b.mealBudget || 0) > 0,
+    ).length;
+    return { readyToDispatch, onsite, completed, mealBudgetsActive };
   }, [bookingsList]);
 
   // 6. Calculations for Technician / Stagehand / Freelancer
@@ -160,7 +174,7 @@ export function StatsOverviewWidget() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatCard label="Awaiting confirmation" value={ccrStats.reserved} note="Reservations that need payment to proceed" icon={Phone} />
         <StatCard label="Payment follow-ups" value={ccrStats.unpaid} note="Unpaid or partially paid bookings" icon={DollarSign} />
-        <StatCard label="Confirmed today" value={ccrStats.confirmedToday} note="Bookings locked in so far today" icon={CalendarCheck} />
+        <StatCard label="Confirmed" value={ccrStats.confirmedOpen} note="Open confirmed bookings awaiting assignment" icon={CalendarCheck} />
       </div>
     );
   }
@@ -180,7 +194,7 @@ export function StatsOverviewWidget() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <StatCard label="Materials out" value={skStats.onsite} note="Active check-outs" icon={Package} />
         <StatCard label="Pending return" value={skStats.completed} note="Waiting for check-in" icon={PackageCheck} />
-        <StatCard label="Damage queue" value={skStats.damaged} note="Needs inspection" icon={Wrench} />
+        <StatCard label="Damaged units" value={skStats.damaged} note="From inventory damage counts" icon={Wrench} />
         <StatCard label="Reserved items" value={skStats.totalAvail} note="Upcoming bookings" icon={ClipboardCheck} />
       </div>
     );
@@ -192,7 +206,7 @@ export function StatsOverviewWidget() {
         <StatCard label="Ready to dispatch" value={ooStats.readyToDispatch} icon={Truck} />
         <StatCard label="Active onsite" value={ooStats.onsite} icon={RadioTower} />
         <StatCard label="Pending check-in" value={ooStats.completed} icon={PackageCheck} />
-        <StatCard label="Meal budgets active" value={ooStats.onsite} icon={Utensils} />
+        <StatCard label="Meal budgets active" value={ooStats.mealBudgetsActive} icon={Utensils} />
       </div>
     );
   }

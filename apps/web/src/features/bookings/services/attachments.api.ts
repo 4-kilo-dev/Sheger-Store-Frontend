@@ -210,27 +210,22 @@ export async function uploadBookingAttachmentApi(
   let uploadUrl = "";
   let objectKey = "";
 
-  try {
-    const res = await getUploadUrlApi(bookingId, {
-      fileName: file.name,
-      fileType: file.type || "application/octet-stream",
-      ...related,
-    });
-    uploadUrl = res.uploadUrl;
-    objectKey = res.objectKey;
-  } catch {
-    const mockUuid = Math.random().toString(36).slice(2, 11);
-    uploadUrl = `mock://vortex-s3.local/attachments/${bookingId}/${mockUuid}_${file.name}`;
-    objectKey = `attachments/${bookingId}/${mockUuid}_${file.name}`;
+  const res = await getUploadUrlApi(bookingId, {
+    fileName: file.name,
+    fileType: file.type || "application/octet-stream",
+    ...related,
+  });
+  uploadUrl = res.uploadUrl;
+  objectKey = res.objectKey;
+
+  if (!uploadUrl || uploadUrl.startsWith("mock://")) {
+    throw new Error("File storage is unavailable. Check S3/MinIO configuration and try again.");
   }
 
   try {
     await uploadFileDirectApi(uploadUrl, file, onProgress ?? (() => {}));
   } catch {
-    const mockUuid = Math.random().toString(36).slice(2, 11);
-    const fallbackUrl = `mock://vortex-s3.local/attachments/${bookingId}/${mockUuid}_${file.name}`;
-    objectKey = `attachments/${bookingId}/${mockUuid}_${file.name}`;
-    await uploadFileDirectApi(fallbackUrl, file, onProgress ?? (() => {}));
+    throw new Error("Upload failed — file storage may be offline. Check S3/MinIO and try again.");
   }
 
   return confirmUploadApi(bookingId, {
