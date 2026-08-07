@@ -103,20 +103,34 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
           createBomLineApi(booking.id, { poolId: it.poolId, quantity: String(it.quantity) })
         )
       );
-      const failedIdx = results
-        .map((r, i) => (r.status === "rejected" ? i : -1))
-        .filter((i) => i >= 0);
-      return { failedIdx };
+      const failed = results
+        .map((r, i) =>
+          r.status === "rejected"
+            ? {
+                index: i,
+                message:
+                  (r.reason as any)?.message ||
+                  (typeof r.reason === "string" ? r.reason : "Request failed"),
+              }
+            : null,
+        )
+        .filter((x): x is { index: number; message: string } => x != null);
+      return { failed };
     },
-    onSuccess: ({ failedIdx }, items) => {
+    onSuccess: ({ failed }, items) => {
       queryClient.invalidateQueries({ queryKey: ["booking", booking.code] });
       queryClient.invalidateQueries({ queryKey: ["pool-availability"] });
-      if (failedIdx.length === 0) {
+      if (failed.length === 0) {
         toast.success(`Added ${items.length} item${items.length === 1 ? "" : "s"} to BOM`);
         setStaged([]);
       } else {
-        const failedPoolIds = new Set(failedIdx.map((i) => items[i].poolId));
-        toast.error(`${failedIdx.length} of ${items.length} items failed to add. Please retry those.`);
+        const failedPoolIds = new Set(failed.map((f) => items[f.index].poolId));
+        const detail = failed[0]?.message;
+        toast.error(
+          failed.length === items.length && detail
+            ? detail
+            : `${failed.length} of ${items.length} items failed to add${detail ? `: ${detail}` : ""}. Please retry those.`,
+        );
         setStaged((prev) => prev.filter((s) => failedPoolIds.has(s.poolId)));
       }
     },

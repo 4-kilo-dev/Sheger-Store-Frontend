@@ -5,60 +5,193 @@ export type BookingStatus =
 
 export type PaymentStatus = "PAID" | "ADVANCE" | "UNPAID";
 
-export type ScreenType = "P2.97" | "P4" | "P5" | "P2.97-New" | "P3.91 INDOOR" | "P3.91 OUTDOOR";
+export type ScreenType = "P2.97" | "P4" | "P5" | "P2.97-New" | "P3.91 INDOOR" | "P3.91 OUTDOOR" | string;
 
-const KNOWN_SCREEN_TYPES = new Set<string>([
-  "P2.97", "P4", "P5", "P2.97-New", "P3.91 INDOOR", "P3.91 OUTDOOR",
-]);
+const KNOWN_SCREEN_TYPES = [
+  "P3.91 OUTDOOR",
+  "P3.91 INDOOR",
+  "P2.97-New",
+  "P2.97",
+  "P4",
+  "P5",
+] as const;
 
 function parseSqm(value: string): number {
   const parsed = Number.parseFloat(value.replace(/sqm/i, "").trim());
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-/** Derive display fields from backend spec without inventing CTO defaults at intake. */
+const MOUNT_STYLE_RE = /^(hanging|sitting)$/i;
+const DIMENSION_RE =
+  /(\d+(?:\.\d+)?)\s*[wW]\s*[x×]\s*(\d+(?:\.\d+)?)\s*[hH]?/i;
+
+function isMountStyle(value?: string | null): boolean {
+  return MOUNT_STYLE_RE.test(String(value ?? "").trim());
+}
+
+/** Normalize layout to `(4wx3h)`. Returns "" for empty / mount-style enums. */
 function formatArrangementLabel(value?: string | null): string {
   const raw = String(value ?? "").trim();
-  if (!raw) return "";
+  if (!raw || isMountStyle(raw)) return "";
+
+  const dim = raw.match(
+    /^\(?\s*(\d+(?:\.\d+)?)\s*[wW]\s*[x×]\s*(\d+(?:\.\d+)?)\s*[hH]?\s*\)?$/,
+  );
+  if (dim) return `(${dim[1]}wx${dim[2]}h)`;
+
+  const loose = raw.match(DIMENSION_RE);
+  if (loose) return `(${loose[1]}wx${loose[2]}h)`;
+
+  return raw;
+}
+
+function formatMountStyleLabel(value?: string | null): string {
+  const raw = String(value ?? "").trim();
+  if (!isMountStyle(raw)) return "";
   return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
+function looksLikeDimension(value?: string | null): boolean {
+  return DIMENSION_RE.test(String(value ?? "").trim());
+}
+
+function isScreenTypeToken(value: string): boolean {
+  const text = value.trim();
+  if (!text) return false;
+  if (KNOWN_SCREEN_TYPES.some((k) => k.toUpperCase() === text.toUpperCase())) return true;
+  return Boolean(extractPitchLabel(text));
+}
+
+/** Pull a displayable screen type from free-text intake / CTO hold specs. */
+function extractScreenType(spec: string): string {
+  const text = spec.trim();
+  if (!text) return "";
+
+  for (const known of KNOWN_SCREEN_TYPES) {
+    if (text.toUpperCase().includes(known.toUpperCase())) return known;
+  }
+
+  // "45sqm of P3.9 Outdoor LED Panel" (CTO technical holds)
+  const ofMatch = text.match(/\d+(?:\.\d+)?\s*sqm\s+of\s+(.+)$/i);
+  if (ofMatch) {
+    const name = ofMatch[1].trim();
+    for (const known of KNOWN_SCREEN_TYPES) {
+      if (name.toUpperCase().includes(known.toUpperCase())) return known;
+    }
+    const fromName = extractPitchLabel(name);
+    if (fromName) return fromName;
+    if (!looksLikeDimension(name) && !isMountStyle(name)) return name;
+  }
+
+  const fromSpec = extractPitchLabel(text);
+  if (fromSpec) return fromSpec;
+
+  const firstPart = text.split(" - ")[0]?.trim() || "";
+  if (
+    firstPart &&
+    !/sqm/i.test(firstPart) &&
+    !/^intake:/i.test(firstPart) &&
+    !looksLikeDimension(firstPart) &&
+    !isMountStyle(firstPart)
+  ) {
+    return firstPart;
+  }
+  return "";
+}
+
+function extractPitchLabel(text: string): string {
+  const m = text.match(
+    /P\s*(\d+(?:\.\d+)?)\s*(?:-\s*)?(New)?\s*(Indoor|Outdoor)?/i,
+  );
+  if (!m) return "";
+  let pitch = m[1];
+  // Common warehouse naming: P3.9 ↔ P3.91
+  if (pitch === "3.9") pitch = "3.91";
+  if (pitch === "2.9") pitch = "2.97";
+  const isNew = Boolean(m[2]);
+  const env = m[3] ? m[3].toUpperCase() : "";
+
+  if (pitch === "2.97" && isNew) return "P2.97-New";
+  if (pitch === "3.91" && env) return `P3.91 ${env}`;
+  if (pitch === "2.97") return "P2.97";
+  if (pitch === "4") return "P4";
+  if (pitch === "5") return "P5";
+  return `P${pitch}${env ? ` ${env}` : ""}`;
+}
+
+/** Derive display fields from backend spec without inventing CTO defaults at intake. */
 function parseBookingScreenFields(b: {
   itemServiceSpec?: string | null;
   arrangementDetails?: string | null;
+  arrangement_details?: string | null;
   screenAreaSqm?: number | string | null;
   customFields?: Record<string, any> | null;
 }) {
   const spec = (b.itemServiceSpec || "").trim();
   const specParts = spec ? spec.split(" - ").map((part) => part.trim()) : [];
+  const custom = b.customFields || {};
 
-  let screenType = "";
   let size = 0;
-
   const sqmPart = specParts.find((part) => /sqm/i.test(part));
   if (sqmPart) size = parseSqm(sqmPart);
-
-  const firstPart = specParts[0] || "";
-  if (KNOWN_SCREEN_TYPES.has(firstPart)) {
-    screenType = firstPart;
-    if (!size && specParts[1]) size = parseSqm(specParts[1]);
+  // Also handle "45sqm of …" without " - " separators
+  if (!size) {
+    const inlineSqm = spec.match(/(\d+(?:\.\d+)?)\s*sqm/i);
+    if (inlineSqm) size = parseSqm(inlineSqm[1]);
   }
 
   const backendSize = Number(b.screenAreaSqm);
   if (Number.isFinite(backendSize) && backendSize > 0) size = backendSize;
 
-  const fromCustom =
-    b.customFields?.hanging_or_sitting ??
-    b.customFields?.arrangement ??
-    b.customFields?.arrangement_details;
-  let arrangement = formatArrangementLabel(b.arrangementDetails || fromCustom);
+  const screenType = extractScreenType(spec);
 
-  // Legacy specs sometimes encoded arrangement as a trailing token (hanging/sitting).
-  if (!arrangement && specParts.length >= 3) {
-    const maybeArrangement = specParts[specParts.length - 1];
-    if (/^(hanging|sitting)$/i.test(maybeArrangement)) {
-      arrangement = formatArrangementLabel(maybeArrangement);
+  // Layout text candidates (preferred). Mount style is a separate fallback.
+  const layoutCandidates: Array<string | null | undefined> = [
+    b.arrangementDetails,
+    b.arrangement_details,
+    typeof custom.arrangement_details === "string" ? custom.arrangement_details : null,
+    typeof custom.screen_arrangement === "string" ? custom.screen_arrangement : null,
+    typeof custom.screen_specification === "string" ? custom.screen_specification : null,
+    typeof custom.arrangement === "string" && !isMountStyle(custom.arrangement)
+      ? custom.arrangement
+      : null,
+    // Full intake/CTO text may embed "4wx3h" alongside other tokens
+    spec,
+    ...specParts.filter(
+      (part) =>
+        !isMountStyle(part) &&
+        !/sqm/i.test(part) &&
+        !isScreenTypeToken(part),
+    ),
+  ];
+
+  let arrangement = "";
+  // 1) Prefer explicit WxH dimensions wherever they appear
+  for (const candidate of layoutCandidates) {
+    if (!looksLikeDimension(candidate)) continue;
+    const formatted = formatArrangementLabel(candidate);
+    if (formatted) {
+      arrangement = formatted;
+      break;
     }
+  }
+  // 2) Otherwise use free-text layout fields (not screen type / mount style)
+  if (!arrangement) {
+    for (const candidate of layoutCandidates) {
+      if (candidate == null || candidate === spec) continue; // avoid dumping full CTO hold blurbs
+      const formatted = formatArrangementLabel(candidate);
+      if (formatted && !isScreenTypeToken(formatted)) {
+        arrangement = formatted;
+        break;
+      }
+    }
+  }
+  // 3) Legacy rows only stored hanging/sitting — still surface that so the column isn't blank
+  if (!arrangement) {
+    arrangement =
+      formatMountStyleLabel(custom.hanging_or_sitting) ||
+      formatMountStyleLabel(custom.arrangement) ||
+      formatMountStyleLabel(specParts[specParts.length - 1]);
   }
 
   return {
@@ -336,10 +469,7 @@ export async function createBookingApi(form: any): Promise<any> {
 
   const screenSize = form.size !== "" && form.size != null ? Number(form.size) : undefined;
   const hasValidSize = screenSize !== undefined && Number.isFinite(screenSize) && screenSize >= 0;
-  const specText = form.itemServiceSpec?.trim();
-  const itemServiceSpec = specText && hasValidSize
-    ? `${specText} - ${screenSize}sqm`
-    : specText || (hasValidSize ? `Screen - ${screenSize}sqm` : undefined);
+  const arrangementText = String(form.arrangement ?? form.itemServiceSpec ?? "").trim();
 
   const bookingPayload: Record<string, unknown> = {
     customerId: customer.id,
@@ -352,11 +482,14 @@ export async function createBookingApi(form: any): Promise<any> {
     assemblyEnd: assemblyEndStr,
     disassemblyStart: dismantleDateStr,
     disassemblyEnd: dismantleDateStr,
-    itemServiceSpec,
     itemServiceType: "Rental",
     notes: form.notes || form.ctoNotes || "",
     customFields: form.customFields || {},
   };
+
+  if (arrangementText) {
+    bookingPayload.arrangementDetails = arrangementText;
+  }
 
   if (form.rentedDays != null && form.rentedDays > 0) {
     bookingPayload.rentedDays = form.rentedDays;

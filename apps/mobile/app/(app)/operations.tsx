@@ -10,12 +10,33 @@ import { colors, radius } from "@/theme/tokens";
 import type { Booking, BookingStatus } from "@/types/domain";
 import { Search } from "lucide-react-native";
 
-const COLUMNS: { title: string; statuses: BookingStatus[]; color: string; emptyMsg: string }[] = [
+function parseDay(value?: string | null): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function isUpcomingOrToday(booking: Booking, now = new Date()): boolean {
+  const day = parseDay(booking.assemblyDate) || parseDay(booking.eventDate);
+  if (!day) return true;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return day.getTime() >= today.getTime();
+}
+
+const COLUMNS: {
+  title: string;
+  statuses: BookingStatus[];
+  upcomingOnly?: boolean;
+  color: string;
+  emptyMsg: string;
+}[] = [
   {
     title: "Needs Dispatch",
     statuses: ["ACCEPTED", "PREPARATION"],
+    upcomingOnly: true,
     color: colors.payment.ADVANCE,
-    emptyMsg: "No bookings awaiting dispatch.",
+    emptyMsg: "No upcoming bookings awaiting dispatch.",
   },
   {
     title: "Active On-Site",
@@ -87,7 +108,9 @@ export default function OperationsScreen() {
 
       <View style={styles.board}>
         {COLUMNS.map((col) => {
-          const items = filtered.filter((b) => col.statuses.includes(b.status));
+          const items = filtered
+            .filter((b) => col.statuses.includes(b.status))
+            .filter((b) => (col.upcomingOnly ? isUpcomingOrToday(b) : true));
           return (
             <View key={col.title} style={styles.column}>
               <View style={[styles.columnHeader, { borderLeftColor: col.color }]}>

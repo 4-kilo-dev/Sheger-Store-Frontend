@@ -37,8 +37,8 @@ export function NewBooking() {
     client: "", contactPerson: "", contactPhone: "",
     venue: "", assemblyDate: "", eventDate: "", dismantleDate: "",
     rentedDays: 1,
-    itemServiceSpec: "", size: "",
-    rentedDays: 1,
+    size: "",
+    arrangement: "",
     notes: "",
     customFields: {} as Record<string, any>,
   });
@@ -338,11 +338,11 @@ export function NewBooking() {
                     className={inputCls}
                   />
                 </Field>
-                <Field label="Screen Specification (Text Description)">
+                <Field label="Arrangement">
                   <input
-                    value={form.itemServiceSpec}
-                    onChange={(e) => set("itemServiceSpec", e.target.value)}
-                    placeholder="e.g. P3.9 Outdoor LED panel"
+                    value={form.arrangement}
+                    onChange={(e) => set("arrangement", e.target.value)}
+                    placeholder="e.g. 4wx3h"
                     className={inputCls}
                   />
                 </Field>
@@ -476,7 +476,7 @@ export function NewBooking() {
                   ["Dismantle Date", form.dismantleDate ? formatDateTime(form.dismantleDate) : "—"],
                   ["Number of Days", form.rentedDays > 0 ? String(form.rentedDays) : "—"],
                   ["Screen Size (sqm)", form.size ? `${form.size} sqm` : "—"],
-                  ["Required Spec", form.itemServiceSpec || "—"],
+                  ["Arrangement", form.arrangement || "—"],
 
                   ["Intake Notes", form.notes || "—"],
                   ...Object.entries(form.customFields).map(([key, val]) => {
@@ -561,8 +561,8 @@ export function NewBooking() {
                   <div className="font-semibold">{form.size ? `${form.size} sqm` : "—"}</div>
                 </div>
                 <div className="col-span-2">
-                  <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Required Spec</div>
-                  <div className="font-semibold">{form.itemServiceSpec || "—"}</div>
+                  <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Arrangement</div>
+                  <div className="font-semibold">{form.arrangement || "—"}</div>
                 </div>
               </div>
             </div>

@@ -129,9 +129,10 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
         bookingPayload.itemServiceSpec = validAllocations
           .map((a) => {
             const p = screenPools.find((sp) => sp.id === a.poolId);
-            return `${a.quantity}sqm of ${p ? p.name : "LED Screen"}`;
+            const name = p ? p.name : "LED Screen";
+            return `${name} - ${a.quantity}sqm`;
           })
-          .join(", ");
+          .join("; ");
         bookingPayload.screenAreaSqm = validAllocations.reduce(
           (sum, a) => sum + (Number.parseFloat(String(a.quantity)) || 0),
           0,

@@ -22,7 +22,10 @@ export type PackingSlipInput = {
   status?: string;
   assignees?: string[];
   stageHand?: string;
-  bomItems: Array<Pick<BomItem, "code" | "name" | "qty" | "status"> | { code?: string; name: string; qty: number; status?: string }>;
+  bomItems: Array<
+    | Pick<BomItem, "code" | "name" | "qty" | "status">
+    | { code?: string; name: string; qty: number; status?: string }
+  >;
 };
 
 export function bookingToPackingSlip(b: Booking): PackingSlipInput {
@@ -52,7 +55,9 @@ export function printPackingSlip(
     throw new Error("Add at least one BOM item before printing a packing slip");
   }
 
-  const fmt = options?.formatDate ?? ((v?: string | null) => (v ? String(v).slice(0, 16).replace("T", " ") : "—"));
+  const fmt =
+    options?.formatDate ??
+    ((v?: string | null) => (v ? String(v).slice(0, 16).replace("T", " ") : "—"));
   const totalUnits = booking.bomItems.reduce((sum, i) => sum + (Number(i.qty) || 0), 0);
   const printedAt = new Date().toLocaleString();
 
@@ -68,6 +73,15 @@ export function printPackingSlip(
       </tr>`,
     )
     .join("");
+
+  const screenLine =
+    [booking.screenType, booking.size ? `${booking.size} sqm` : "", booking.arrangement]
+      .filter(Boolean)
+      .join(" · ") || "—";
+  const crewLine =
+    [...(booking.assignees || []), booking.stageHand ? `Stage: ${booking.stageHand}` : ""]
+      .filter(Boolean)
+      .join(", ") || "—";
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -112,16 +126,8 @@ export function printPackingSlip(
     <div><span>Event</span><strong>${escapeHtml(fmt(booking.eventDate))}</strong></div>
     <div><span>Dismantle</span><strong>${escapeHtml(fmt(booking.dismantleDate))}</strong></div>
     <div><span>Status</span><strong>${escapeHtml(booking.status || "—")}</strong></div>
-    <div><span>Screen</span><strong>${escapeHtml(
-      [booking.screenType, booking.size ? `${booking.size} sqm` : "", booking.arrangement]
-        .filter(Boolean)
-        .join(" · ") || "—",
-    )}</strong></div>
-    <div><span>Crew</span><strong>${escapeHtml(
-      [...(booking.assignees || []), booking.stageHand ? `Stage: ${booking.stageHand}` : ""]
-        .filter(Boolean)
-        .join(", ") || "—",
-    )}</strong></div>
+    <div><span>Screen</span><strong>${escapeHtml(screenLine)}</strong></div>
+    <div><span>Crew</span><strong>${escapeHtml(crewLine)}</strong></div>
   </div>
 
   <table>
@@ -158,11 +164,13 @@ export function printPackingSlip(
 </body>
 </html>`;
 
-  const win = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+  // Blob URL: `window.open(..., "noopener")` returns null in modern browsers and broke print.
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank");
   if (!win) {
-    throw new Error("Pop-up blocked — allow pop-ups to print the packing slip");
+    URL.revokeObjectURL(url);
+    throw new Error("Pop-up blocked — allow pop-ups for this site to print the packing slip");
   }
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
