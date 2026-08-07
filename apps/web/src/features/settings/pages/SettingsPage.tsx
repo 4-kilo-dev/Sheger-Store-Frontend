@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { BellRing, Building2, Languages, LockKeyhole, Save, Shield, UsersRound, Check, X, ClipboardCheck, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Globe2, Save, UsersRound, Check, X, ClipboardCheck, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useState, useEffect, Fragment } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useActiveProfile } from "@/hooks/use-active-profile";
-import { useCalendarSystem, useDateFormatter } from "@/context/CalendarSystemContext";
+import { useCalendarSystem } from "@/context/CalendarSystemContext";
+import { getSettingsApi, updateSettingsApi } from "@/features/settings/services/settings.api";
 import {
   listPerformanceMetricsApi,
   createPerformanceMetricApi,
@@ -32,7 +33,7 @@ const _Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
       { title: "Settings · Vortex Visual" },
-      { name: "description", content: "Configure Vortex Visual operations, alerts, language, and access." },
+      { name: "description", content: "Configure Vortex Visual operations, regional defaults, and access." },
     ],
   }),
   component: SettingsPage,
@@ -40,56 +41,67 @@ const _Route = createFileRoute("/settings")({
 
 const panels = [
   { icon: UsersRound, label: "Roles & permissions" },
-  { icon: Languages, label: "Language" },
+  { icon: Globe2, label: "Regional" },
   { icon: ClipboardCheck, label: "Performance Metrics" },
   { icon: SlidersHorizontal, label: "Custom Fields" },
 ];
 
-const inputCls = "mt-2 h-10 w-full rounded-md border bg-[var(--surface-2)] px-3 text-[13px] outline-none focus:border-[var(--accent)]";
+const CURRENCY_OPTIONS = [
+  { value: "ETB", label: "ETB — Ethiopian Birr" },
+  { value: "USD", label: "USD — US Dollar" },
+] as const;
 
-function Toggle({ on, label }: { on: boolean; label: string }) {
-  const [enabled, setEnabled] = useState(on);
-  return (
-    <button
-      onClick={() => setEnabled(!enabled)}
-      className="flex items-center justify-between rounded-md border px-4 py-3 transition hover:border-[var(--accent)]"
-      style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
-    >
-      <span className="text-[12px] font-medium">{label}</span>
-      <div
-        className="flex h-5 w-9 items-center rounded-full px-0.5 transition"
-        style={{ background: enabled ? "var(--accent)" : "var(--border)" }}
-      >
-        <div
-          className="h-4 w-4 rounded-full transition-transform"
-          style={{
-            background: enabled ? "var(--accent-foreground)" : "var(--surface)",
-            transform: enabled ? "translateX(16px)" : "translateX(0)",
-          }}
-        />
-      </div>
-    </button>
-  );
-}
+const TIMEZONE_OPTIONS = [
+  { value: "Africa/Addis_Ababa", label: "Africa/Addis_Ababa (EAT +03:00)" },
+  { value: "UTC", label: "UTC" },
+] as const;
+
+const inputCls = "mt-2 h-10 w-full rounded-md border bg-[var(--surface-2)] px-3 text-[13px] outline-none focus:border-[var(--accent)]";
 
 export function SettingsPage() {
   const { calendarSystem, numeralsSystem, commitSettings } = useCalendarSystem();
-  const { formatDate } = useDateFormatter();
   const [active, setActive] = useState("Roles & permissions");
 
   const [tempCalendarSystem, setTempCalendarSystem] = useState(calendarSystem);
   const [tempNumeralsSystem, setTempNumeralsSystem] = useState(numeralsSystem);
+  const [tempCurrency, setTempCurrency] = useState("ETB");
+  const [tempTimezone, setTempTimezone] = useState("Africa/Addis_Ababa");
   const [savingSettings, setSavingSettings] = useState(false);
+
+  const { data: systemSettings } = useQuery({
+    queryKey: ["system-settings"],
+    queryFn: getSettingsApi,
+  });
 
   useEffect(() => {
     setTempCalendarSystem(calendarSystem);
     setTempNumeralsSystem(numeralsSystem);
   }, [calendarSystem, numeralsSystem]);
 
+  useEffect(() => {
+    if (!systemSettings) return;
+    if (systemSettings.currency === "ETB" || systemSettings.currency === "USD") {
+      setTempCurrency(systemSettings.currency);
+    }
+    if (
+      systemSettings.timezone === "Africa/Addis_Ababa" ||
+      systemSettings.timezone === "UTC"
+    ) {
+      setTempTimezone(systemSettings.timezone);
+    }
+  }, [systemSettings]);
+
+  const queryClient = useQueryClient();
+
   const handleSaveChanges = async () => {
     setSavingSettings(true);
     try {
       await commitSettings(tempCalendarSystem, tempNumeralsSystem);
+      await updateSettingsApi({
+        currency: tempCurrency,
+        timezone: tempTimezone,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["system-settings"] });
       toast.success("Settings saved successfully!");
     } catch (e) {
       toast.error("Failed to save settings. Please try again.");
@@ -114,13 +126,34 @@ export function SettingsPage() {
     }).format(date);
   };
 
+  const formatPreviewTime = (date: Date) => {
+    try {
+      return new Intl.DateTimeFormat("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: tempTimezone,
+        timeZoneName: "short",
+      }).format(date);
+    } catch {
+      return new Intl.DateTimeFormat("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(date);
+    }
+  };
+
+  const currencyPreview =
+    tempCurrency === "USD"
+      ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(125000)
+      : new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" }).format(125000);
+
   return (
     <AppShell>
       <div className="mb-6 flex items-end justify-between gap-4">
         <div>
           <div className="label-eyebrow mb-1">Administration</div>
           <h1 className="text-[24px] font-bold tracking-tight">Settings</h1>
-          <p className="mt-1 text-[12px] text-text-2">Company defaults, role permissions, notifications, and language preferences.</p>
+          <p className="mt-1 text-[12px] text-text-2">Company defaults, role permissions, and regional preferences.</p>
         </div>
       </div>
 
@@ -153,21 +186,37 @@ export function SettingsPage() {
 
 
 
-          {active === "Language" && (
-            <Section title="Language & Regional" aside="Localization">
+          {active === "Regional" && (
+            <Section title="Regional defaults" aside="Localization">
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="text-[12px] font-semibold">
-                  Display language
-                  <select className={inputCls} style={{ borderColor: "var(--border)" }}>
-                    <option>English</option>
-                    <option>አማርኛ (Amharic)</option>
+                  Currency
+                  <select
+                    value={tempCurrency}
+                    onChange={(e) => setTempCurrency(e.target.value)}
+                    className={inputCls}
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    {CURRENCY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="text-[12px] font-semibold">
-                  Currency
-                  <select className={inputCls} style={{ borderColor: "var(--border)" }}>
-                    <option>ETB — Ethiopian Birr</option>
-                    <option>USD — US Dollar</option>
+                  Timezone
+                  <select
+                    value={tempTimezone}
+                    onChange={(e) => setTempTimezone(e.target.value)}
+                    className={inputCls}
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    {TIMEZONE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="text-[12px] font-semibold">
@@ -195,21 +244,14 @@ export function SettingsPage() {
                     <option value="geez">Ge'ez (፩, ፪, ፫...)</option>
                   </select>
                 </label>
-                <label className="text-[12px] font-semibold">
-                  Timezone
-                  <select className={inputCls} style={{ borderColor: "var(--border)" }}>
-                    <option>Africa/Addis_Ababa (EAT +03:00)</option>
-                    <option>UTC</option>
-                  </select>
-                </label>
               </div>
               <div className="mt-5 rounded-md border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
                 <div className="label-eyebrow mb-2">Preview</div>
                 <div className="grid grid-cols-2 gap-3 text-[12px]">
                   <div><span style={{ color: "var(--text-3)" }}>Date:</span> {formatPreviewDate(new Date())}</div>
-                  <div><span style={{ color: "var(--text-3)" }}>Currency:</span> ETB 125,000</div>
-                  <div><span style={{ color: "var(--text-3)" }}>Time:</span> 11:38 EAT</div>
-                  <div><span style={{ color: "var(--text-3)" }}>Language:</span> English</div>
+                  <div><span style={{ color: "var(--text-3)" }}>Currency:</span> {currencyPreview}</div>
+                  <div><span style={{ color: "var(--text-3)" }}>Time:</span> {formatPreviewTime(new Date())}</div>
+                  <div><span style={{ color: "var(--text-3)" }}>Timezone:</span> {tempTimezone}</div>
                 </div>
               </div>
             </Section>
@@ -226,7 +268,7 @@ export function SettingsPage() {
           )}
 
           {/* Save button */}
-          {active === "Language" && (
+          {active === "Regional" && (
             <div className="flex justify-end">
               <button
                 onClick={handleSaveChanges}

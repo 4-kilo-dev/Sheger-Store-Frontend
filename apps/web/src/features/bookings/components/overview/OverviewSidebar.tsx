@@ -5,6 +5,7 @@ import { Section } from "@/features/bookings/components/shared/Section";
 import { KV } from "@/features/bookings/components/shared/KV";
 import { getPaymentSummary, type Booking } from "@/features/bookings/services/bookings.api";
 import type { BookingCapabilities } from "@/features/bookings/hooks/useBookingCapabilities";
+import { useSystemCurrency } from "@/hooks/use-system-currency";
 
 export function OverviewSidebar({
   b,
@@ -14,6 +15,7 @@ export function OverviewSidebar({
   caps: BookingCapabilities;
 }) {
   const { formatDate, formatDateTime } = useDateFormatter();
+  const { formatMoney } = useSystemCurrency();
 
   const assemblyDisplay = b.assemblyDate || b.rentalStart;
   const dismantleDisplay = b.dismantleDate || b.rentalEnd;
@@ -39,17 +41,17 @@ export function OverviewSidebar({
         return (
           <Section title="Financial" icon={DollarSign}>
             {b.dailyRate != null && b.dailyRate > 0 && (
-              <KV label="Daily Rate" value={`ETB ${b.dailyRate.toLocaleString()}`} mono />
+              <KV label="Daily Rate" value={formatMoney(b.dailyRate)} mono />
             )}
-            <KV label="Paid" value={`ETB ${summary.paid.toLocaleString()}`} mono />
+            <KV label="Paid" value={formatMoney(summary.paid)} mono />
             <KV
               label="Total"
-              value={summary.total === null ? "—" : `ETB ${summary.total.toLocaleString()}`}
+              value={summary.total === null ? "—" : formatMoney(summary.total)}
               mono
             />
             <KV
               label="Balance"
-              value={summary.remaining === null ? "Pending" : `ETB ${summary.remaining.toLocaleString()}`}
+              value={summary.remaining === null ? "Pending" : formatMoney(summary.remaining)}
               mono
             />
             <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border)" }}>

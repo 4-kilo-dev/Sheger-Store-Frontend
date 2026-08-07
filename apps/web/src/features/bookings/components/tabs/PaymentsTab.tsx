@@ -13,6 +13,7 @@ import {
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { useSystemCurrency } from "@/hooks/use-system-currency";
 
 type PaymentType = "advance" | "fully_paid";
 
@@ -20,6 +21,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
   const { formatDate } = useDateFormatter();
+  const { currency, formatMoney } = useSystemCurrency();
   const canManagePayment = can(PERMISSION.PAYMENT_MANAGE);
 
   const summary = getPaymentSummary(b);
@@ -100,7 +102,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
           <Section title="Pricing" icon={DollarSign}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                Daily Rate (ETB)
+                Daily Rate ({currency})
                 <input
                   type="number"
                   min={0}
@@ -123,7 +125,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
                 />
               </label>
               <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                Computed Total (ETB)
+                Computed Total ({currency})
                 <input
                   type="text"
                   readOnly
@@ -196,7 +198,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
                       {t.m}
                     </td>
                     <td className="py-3 text-right font-mono font-semibold">
-                      ETB {t.a.toLocaleString()}
+                      {formatMoney(t.a)}
                     </td>
                   </tr>
                 ))}
@@ -208,15 +210,15 @@ export function PaymentsTab({ b }: { b: Booking }) {
       <div className="col-span-4">
         <Section title="Summary" icon={DollarSign}>
           {b.dailyRate != null && b.dailyRate > 0 && (
-            <KV label="Daily Rate" value={`ETB ${b.dailyRate.toLocaleString()}`} mono />
+            <KV label="Daily Rate" value={formatMoney(b.dailyRate)} mono />
           )}
           {b.rentedDays != null && b.rentedDays > 0 && (
             <KV label="Number of Days" value={String(b.rentedDays)} mono />
           )}
-          <KV label="Paid" value={`ETB ${summary.paid.toLocaleString()}`} mono />
+          <KV label="Paid" value={formatMoney(summary.paid)} mono />
           <KV
             label="Total"
-            value={summary.total === null ? "—" : `ETB ${summary.total.toLocaleString()}`}
+            value={summary.total === null ? "—" : formatMoney(summary.total)}
             mono
           />
           <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border)" }}>
@@ -225,7 +227,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
               value={
                 summary.remaining === null
                   ? "Pending"
-                  : `ETB ${summary.remaining.toLocaleString()}`
+                  : formatMoney(summary.remaining)
               }
               mono
             />
@@ -271,7 +273,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
               </label>
 
               <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                Amount (ETB)
+                Amount ({currency})
                 <input
                   type="number"
                   value={amount || ""}
@@ -285,7 +287,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
               {!amountValid && amount > 0 && (
                 <div className="text-[11px] font-semibold text-destructive flex items-center gap-1.5">
                   <AlertCircle className="h-3.5 w-3.5" />
-                  <span>Minimum payment amount is ETB 1,000.</span>
+                  <span>Minimum payment amount is {currency} 1,000.</span>
                 </div>
               )}
             </div>
@@ -294,7 +296,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
               <button
                 onClick={() => {
                   if (!amountValid) {
-                    toast.error("Minimum payment amount is ETB 1,000");
+                    toast.error(`Minimum payment amount is ${currency} 1,000`);
                     return;
                   }
                   recordPayment();

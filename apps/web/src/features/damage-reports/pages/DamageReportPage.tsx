@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -10,16 +10,6 @@ import {
   getInventoryPoolsApi,
 } from "@/features/inventory/services/inventory.api";
 import { getBookingsApi, createDamageReportApi } from "@/features/bookings/services/bookings.api";
-
-const _Route = createFileRoute("/damage-report")({
-  head: () => ({
-    meta: [
-      { title: "Damage Report · Vortex Visual" },
-      { name: "description", content: "Log damaged rental equipment for warehouse inspection and repair." },
-    ],
-  }),
-  component: DamageReportPage,
-});
 
 type AssetOption = {
   key: string;
@@ -34,14 +24,16 @@ type AssetOption = {
 export function DamageReportPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const search = useSearch({ from: "/damage-report" });
   const [submitted, setSubmitted] = useState(false);
   const [assetKey, setAssetKey] = useState("");
-  const [bookingCode, setBookingCode] = useState("");
+  const [bookingCode, setBookingCode] = useState(search.booking || "");
   const [quantity, setQuantity] = useState("1");
   const [reportType, setReportType] = useState<"DAMAGE" | "MISSING">("DAMAGE");
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState("Minor · usable with caution");
   const [discovered, setDiscovered] = useState("Warehouse inspection");
+  const [assetPrefillApplied, setAssetPrefillApplied] = useState(false);
 
   const fieldClass =
     "mt-1.5 h-10 w-full rounded-md border border-border bg-surface-2 px-3 text-[12px] outline-none focus:border-accent";
@@ -93,10 +85,29 @@ export function DamageReportPage() {
   }, [pools, items]);
 
   useEffect(() => {
-    if (!assetKey && assetOptions.length > 0) {
-      setAssetKey(assetOptions[0].key);
+    if (!assetOptions.length || assetPrefillApplied) return;
+
+    const preferredKey = search.poolId
+      ? `pool:${search.poolId}`
+      : search.itemId
+        ? `item:${search.itemId}`
+        : "";
+
+    if (preferredKey && assetOptions.some((o) => o.key === preferredKey)) {
+      setAssetKey(preferredKey);
+      setAssetPrefillApplied(true);
+      return;
     }
-  }, [assetKey, assetOptions]);
+
+    if (!assetKey) {
+      setAssetKey(assetOptions[0].key);
+      setAssetPrefillApplied(true);
+    }
+  }, [assetOptions, assetKey, assetPrefillApplied, search.poolId, search.itemId]);
+
+  useEffect(() => {
+    if (search.booking) setBookingCode(search.booking);
+  }, [search.booking]);
 
   const selected = assetOptions.find((o) => o.key === assetKey);
 

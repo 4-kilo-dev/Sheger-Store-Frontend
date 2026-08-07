@@ -3,6 +3,7 @@ import { StatusBadge, PaymentBadge } from "@/components/status-badge";
 import { StatusStepper } from "@/components/status-stepper";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useSystemCurrency } from "@/hooks/use-system-currency";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import type { Booking } from "@/features/bookings/services/bookings.api";
 
@@ -13,6 +14,7 @@ interface BookingHeaderProps {
 export function BookingHeader({ booking }: BookingHeaderProps) {
   const { formatDate } = useDateFormatter();
   const { can } = usePermissions();
+  const { formatMoney } = useSystemCurrency();
   const showContractValue = can(PERMISSION.PAYMENT_MANAGE);
 
   return (
@@ -66,11 +68,11 @@ export function BookingHeader({ booking }: BookingHeaderProps) {
           <div className="text-right">
             <div className="label-eyebrow">Total Contract Value</div>
             <div className="mt-1 font-mono text-[24px] font-bold">
-              ETB {(booking.paymentAmount ?? booking.amount ?? 0).toLocaleString()}
+              {formatMoney(booking.paymentAmount ?? booking.amount ?? 0)}
             </div>
             {booking.dailyRate != null && booking.rentedDays != null && booking.dailyRate > 0 && (
               <div className="mt-1 text-[11px]" style={{ color: "var(--text-3)" }}>
-                ETB {booking.dailyRate.toLocaleString()} × {booking.rentedDays} day
+                {formatMoney(booking.dailyRate)} × {booking.rentedDays} day
                 {booking.rentedDays === 1 ? "" : "s"}
               </div>
             )}

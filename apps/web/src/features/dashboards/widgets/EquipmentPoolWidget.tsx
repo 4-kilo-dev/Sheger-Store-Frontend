@@ -13,16 +13,17 @@ export function EquipmentPoolWidget() {
 
   const stats = useMemo(() => {
     if (inventoryList.length === 0) {
-      return { total: 100, available: 60, reserved: 20, onsite: 20 };
+      return { total: 0, available: 0, reserved: 0, onsite: 0 };
     }
     const total = inventoryList.reduce((a, i) => a + (i.total || 0), 0);
     const available = inventoryList.reduce((a, i) => a + (i.available || 0), 0);
     const onsite = inventoryList.reduce((a, i) => a + (i.onsite || 0), 0);
-    const reserved = Math.max(0, total - available - onsite);
-    return { total: total || 100, available, reserved, onsite };
+    const reserved = inventoryList.reduce((a, i) => a + (i.reserved || 0), 0);
+    return { total, available, reserved, onsite };
   }, [inventoryList]);
 
-  const percentageAvailable = Math.round((stats.available / stats.total) * 100);
+  const percentageAvailable =
+    stats.total > 0 ? Math.round((stats.available / stats.total) * 100) : 0;
 
   if (isLoading) {
     return (
@@ -46,7 +47,7 @@ export function EquipmentPoolWidget() {
               fill="none"
               stroke="var(--color-bom-returned)"
               strokeWidth="3"
-              strokeDasharray={`${(stats.available / stats.total) * 88} 88`}
+              strokeDasharray={`${stats.total > 0 ? (stats.available / stats.total) * 88 : 0} 88`}
               strokeLinecap="round"
             />
           </svg>

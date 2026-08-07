@@ -168,9 +168,32 @@ export function printPackingSlip(
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const win = window.open(url, "_blank");
-  if (!win) {
-    URL.revokeObjectURL(url);
-    throw new Error("Pop-up blocked — allow pop-ups for this site to print the packing slip");
+  if (win) {
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return;
   }
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+  // Popup blocked — print via a hidden iframe (no new tab required).
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("title", "Packing slip print");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.src = url;
+  const cleanup = () => {
+    iframe.remove();
+    URL.revokeObjectURL(url);
+  };
+  iframe.onload = () => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } finally {
+      window.setTimeout(cleanup, 60_000);
+    }
+  };
+  document.body.appendChild(iframe);
 }

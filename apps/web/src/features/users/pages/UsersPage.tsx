@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Search, UserCheck, Users, Radio, BriefcaseBusiness, Phone, Calendar } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
@@ -6,6 +6,7 @@ import { STAFF_ROLES, staffMatchesRoleFilter } from "@/features/checkout/service
 import { AddStaffModal } from "../components/AddStaffModal";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStaffApi, resetPasswordApi, toggleUserActiveApi, setStaffFreelancerApi } from "@/features/users/services/staff.api";
+import { getBookingsApi } from "@/features/bookings/services/bookings.api";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { toast } from "sonner";
@@ -41,6 +42,14 @@ export function StaffPage() {
     queryKey: ["staff"],
     queryFn: getStaffApi,
     enabled: canViewStaff,
+  });
+
+  const canViewBookings =
+    can(PERMISSION.BOOKING_VIEW_ALL) || can(PERMISSION.BOOKING_VIEW_ASSIGNED);
+  const { data: bookingsList = [] } = useQuery({
+    queryKey: ["bookings"],
+    queryFn: getBookingsApi,
+    enabled: canViewBookings,
   });
 
   const { mutate: resetPassword } = useMutation({
@@ -104,12 +113,19 @@ export function StaffPage() {
     [query, roleFilter, staffList],
   );
 
-  const counts = useMemo(() => ({
-    total: staffList.length,
-    active: staffList.filter((s) => s.status === "ACTIVE").length,
-    onsite: staffList.filter((s) => s.status === "ONSITE").length,
-    openAssignments: 7,
-  }), [staffList]);
+  const counts = useMemo(() => {
+    const openAssignments = bookingsList.filter(
+      (b) =>
+        (b.status === "CONFIRMED" || b.status === "ASSIGNED") &&
+        (!b.assignees || b.assignees.length === 0),
+    ).length;
+    return {
+      total: staffList.length,
+      active: staffList.filter((s) => s.status === "ACTIVE").length,
+      onsite: staffList.filter((s) => s.status === "ONSITE").length,
+      openAssignments,
+    };
+  }, [staffList, bookingsList]);
 
   return (
     <AppShell>
@@ -191,9 +207,8 @@ export function StaffPage() {
       {/* Staff Cards Grid */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {rows.map((p) => {
-          const workloadPct = Math.round((p.jobs / p.capacity) * 100);
           return (
-            <div key={p.name} className="group rounded-lg border p-4 transition hover:border-[var(--accent)]" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+            <div key={p.id || p.name} className="group rounded-lg border p-4 transition hover:border-[var(--accent)]" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full text-[12px] font-bold" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
@@ -231,18 +246,23 @@ export function StaffPage() {
                 </div>
               </div>
 
-              {/* Workload bar */}
+              {/* Workload — active assignments from live bookings */}
               <div className="mt-3">
                 <div className="mb-1.5 flex items-center justify-between text-[10px]">
-                  <span style={{ color: "var(--text-3)" }}>Workload</span>
-                  <span className="font-mono font-semibold" style={{ color: workloadPct > 80 ? "var(--destructive)" : "var(--accent)" }}>{p.jobs}/{p.capacity} jobs ({workloadPct}%)</span>
+                  <span style={{ color: "var(--text-3)" }}>Active assignments</span>
+                  <span
+                    className="font-mono font-semibold"
+                    style={{ color: p.jobs >= 5 ? "var(--destructive)" : "var(--accent)" }}
+                  >
+                    {p.jobs} job{p.jobs === 1 ? "" : "s"}
+                  </span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-2)" }}>
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
-                      width: `${Math.min(workloadPct, 100)}%`,
-                      background: workloadPct > 80 ? "var(--destructive)" : "var(--accent)",
+                      width: `${Math.min((p.jobs / 5) * 100, 100)}%`,
+                      background: p.jobs >= 5 ? "var(--destructive)" : "var(--accent)",
                     }}
                   />
                 </div>
@@ -287,7 +307,16 @@ export function StaffPage() {
                   <Calendar className="mr-1 inline h-3 w-3" />
                   Joined {formatDate(p.joinedDate)}
                 </span>
-                <button className="font-semibold cursor-pointer" style={{ color: "var(--accent)" }}>Assign to Booking →</button>
+                <Link
+                  to="/bookings"
+                  className="font-semibold cursor-pointer hover:underline"
+                  style={{ color: "var(--accent)" }}
+                  onClick={() =>
+                    toast.message(`Assign ${p.name} from a CONFIRMED booking’s Assign Technician / Crew action`)
+                  }
+                >
+                  Assign to Booking →
+                </Link>
               </div>
             </div>
           );
