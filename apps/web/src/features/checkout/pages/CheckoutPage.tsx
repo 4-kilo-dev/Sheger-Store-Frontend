@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, Check, CheckCircle2, ChevronDown, ClipboardCheck,
   Package, PackageCheck, Printer, Search, Truck, X,
@@ -10,8 +10,92 @@ import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { getBookingsApi, type Booking, type BomItem } from "@/features/bookings/services/bookings.api";
 import { getBookingBomLinesApi, checkoutBookingApi, checkinBookingApi } from "@/features/checkout/services/operations.api";
+import { bookingToPackingSlip, printPackingSlip } from "@/features/bookings/utils/printPackingSlip";
 import { useAuthUser } from "@/hooks/use-auth-user";
-import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { useCalendarSystem, useDateFormatter, type CalendarSystem } from "@/context/CalendarSystemContext";
+
+/** Backend checkout only allows PREPARATION (→ ONSITE) or additional ONSITE out. */
+const CHECKOUT_STATUSES = new Set(["PREPARATION", "ONSITE"]);
+/** Gear is out / partially returned — eligible for warehouse check-in. */
+const CHECKIN_STATUSES = new Set(["ONSITE", "COMPLETED", "PARTIALLY_RETURNED"]);
+
+function parseDay(value?: string | null): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function calendarYearMonth(date: Date, calendarSystem: CalendarSystem): { year: number; month: number } {
+  const locale =
+    calendarSystem === "ethiopic" ? "en-US-u-ca-ethiopic-nu-latn" : "en-US";
+  const parts = new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "numeric",
+  }).formatToParts(date);
+  const year = Number(parts.find((p) => p.type === "year")?.value);
+  const month = Number(parts.find((p) => p.type === "month")?.value);
+  return { year, month };
+}
+
+function compareYearMonth(
+  a: { year: number; month: number },
+  b: { year: number; month: number },
+): number {
+  if (a.year !== b.year) return a.year - b.year;
+  return a.month - b.month;
+}
+
+/** Check-out list: today→end of current calendar month (excludes past + next month). */
+function isUpcomingThisMonth(
+  booking: Booking,
+  calendarSystem: CalendarSystem,
+  now = new Date(),
+): boolean {
+  const day = parseDay(booking.assemblyDate) || parseDay(booking.eventDate);
+  if (!day) return false;
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (day < today) return false;
+
+  const nowYm = calendarYearMonth(now, calendarSystem);
+  const bookingYm = calendarYearMonth(day, calendarSystem);
+  return nowYm.year === bookingYm.year && nowYm.month === bookingYm.month;
+}
+
+/**
+ * Check-in list: materials due back this month or overdue (past months),
+ * excluding jobs that only start next month+.
+ */
+function isDueForCheckinThisMonth(
+  booking: Booking,
+  calendarSystem: CalendarSystem,
+  now = new Date(),
+): boolean {
+  const day =
+    parseDay(booking.dismantleDate) ||
+    parseDay(booking.eventDate) ||
+    parseDay(booking.assemblyDate);
+  if (!day) return false;
+
+  const nowYm = calendarYearMonth(now, calendarSystem);
+  const bookingYm = calendarYearMonth(day, calendarSystem);
+  // Same month or earlier (overdue) — not next month / future months
+  return compareYearMonth(bookingYm, nowYm) <= 0;
+}
+
+function isEventPassedOrComplete(booking: Booking, now = new Date()): boolean {
+  if (booking.status === "COMPLETED" || booking.status === "PARTIALLY_RETURNED") {
+    return true;
+  }
+  const day =
+    parseDay(booking.eventDate) ||
+    parseDay(booking.dismantleDate) ||
+    parseDay(booking.assemblyDate);
+  if (!day) return false;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return day <= today;
+}
 
 const _Route = createFileRoute("/checkout")({
   head: () => ({
@@ -28,6 +112,7 @@ type Mode = "checkout" | "checkin";
 export function CheckoutPage() {
   const queryClient = useQueryClient();
   const authUser = useAuthUser();
+  const { calendarSystem } = useCalendarSystem();
   const { formatDateTime } = useDateFormatter();
   const userRole = authUser?.role?.toLowerCase() || "";
   const [mode, setMode] = useState<Mode>("checkout");
@@ -50,12 +135,41 @@ export function CheckoutPage() {
 
   const eligibleBookings = useMemo(() => {
     if (mode === "checkout") {
-      return bookingsList.filter((b) => b.status === "PREPARATION" || b.status === "ACCEPTED" || b.status === "RESERVED" || b.status === "CONFIRMED");
+      return bookingsList
+        .filter(
+          (b) =>
+            CHECKOUT_STATUSES.has(b.status) &&
+            isUpcomingThisMonth(b, calendarSystem),
+        )
+        .sort((a, b) => (a.assemblyDate || "").localeCompare(b.assemblyDate || ""));
     }
-    return bookingsList.filter((b) => b.status === "COMPLETED" || b.status === "ONSITE");
-  }, [mode, bookingsList]);
+    return bookingsList
+      .filter(
+        (b) =>
+          CHECKIN_STATUSES.has(b.status) &&
+          isDueForCheckinThisMonth(b, calendarSystem),
+      )
+      .sort((a, b) =>
+        (a.dismantleDate || a.eventDate || "").localeCompare(
+          b.dismantleDate || b.eventDate || "",
+        ),
+      );
+  }, [mode, bookingsList, calendarSystem]);
+
+  useEffect(() => {
+    if (selectedCode && !eligibleBookings.some((b) => b.code === selectedCode)) {
+      setSelectedCode("");
+      setCheckedItems(new Set());
+    }
+  }, [eligibleBookings, selectedCode]);
 
   const selected = eligibleBookings.find((b) => b.code === selectedCode);
+  const storekeeperAwaitingEvent =
+    mode === "checkin" &&
+    !!selected &&
+    selected.status === "ONSITE" &&
+    userRole === "storekeeper" &&
+    !isEventPassedOrComplete(selected);
 
   const toggleItem = (id: string) => {
     setCheckedItems((prev) => {
@@ -251,7 +365,9 @@ export function CheckoutPage() {
               </select>
               {eligibleBookings.length === 0 && (
                 <p className="mt-2 text-[11px]" style={{ color: "var(--text-3)" }}>
-                  No bookings eligible for {mode === "checkout" ? "check-out" : "check-in"} at this time.
+                  {mode === "checkout"
+                    ? "No PREPARATION/ONSITE bookings upcoming this month for check-out."
+                    : "No returns due. Check-in lists ONSITE / COMPLETED / partially returned bookings for this month or overdue."}
                 </p>
               )}
             </div>
@@ -413,7 +529,7 @@ export function CheckoutPage() {
 
               {selected && (
                 <div className="space-y-2">
-                  {mode === "checkin" && selected.status === "ONSITE" && userRole === "storekeeper" && (
+                  {storekeeperAwaitingEvent && (
                     <div className="rounded-lg border p-3.5 text-[12px] font-semibold leading-relaxed" style={{ borderColor: "var(--color-status-onsite)", background: "color-mix(in oklab, var(--color-status-onsite) 10%, var(--surface))", color: "var(--color-status-onsite)" }}>
                       Gear is on-site. Awaiting event completion and warehouse return.
                     </div>
@@ -421,9 +537,9 @@ export function CheckoutPage() {
                   <button
                     onClick={handleSubmit}
                     disabled={
-                      checkedItems.size === 0 || 
-                      isPending || 
-                      (mode === "checkin" && selected.status === "ONSITE" && userRole === "storekeeper")
+                      checkedItems.size === 0 ||
+                      isPending ||
+                      storekeeperAwaitingEvent
                     }
                     className="flex w-full items-center justify-center gap-2 rounded-md py-3 text-[13px] font-bold transition hover:brightness-110 disabled:opacity-40"
                     style={{
@@ -435,7 +551,19 @@ export function CheckoutPage() {
                     {isPending ? "Processing..." : (mode === "checkout" ? "Confirm Check-Out" : "Confirm Check-In")}
                   </button>
                   <button
-                    className="flex w-full items-center justify-center gap-2 rounded-md border py-2.5 text-[12px] font-semibold transition hover:border-[var(--accent)]"
+                    type="button"
+                    onClick={() => {
+                      if (!selected) return;
+                      try {
+                        printPackingSlip(bookingToPackingSlip(selected), {
+                          formatDate: (value) => (value ? formatDateTime(value) : "—"),
+                        });
+                      } catch (err: any) {
+                        toast.error(err?.message || "Could not print packing slip");
+                      }
+                    }}
+                    disabled={!selected || selected.bomItems.length === 0}
+                    className="flex w-full items-center justify-center gap-2 rounded-md border py-2.5 text-[12px] font-semibold transition hover:border-[var(--accent)] disabled:opacity-40"
                     style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
                   >
                     <Printer className="h-3.5 w-3.5" /> Print Packing Slip

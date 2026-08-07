@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -8,7 +8,10 @@ import {
   type Booking,
 } from "@/features/bookings/services/bookings.api";
 import { getInventoryPoolsApi } from "@/features/inventory/services/inventory.api";
-import { useBookingPoolAvailability } from "@/features/bookings/hooks/useBookingPoolAvailability";
+import {
+  readPoolStock,
+  useBookingPoolAvailability,
+} from "@/features/bookings/hooks/useBookingPoolAvailability";
 import { getAvailabilityStatus } from "@/features/bookings/utils/bookingAvailability";
 
 export interface StagedBomItem {
@@ -45,10 +48,21 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
     enabled,
   });
 
+  const focusPoolIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (selectedPoolId) ids.add(selectedPoolId);
+    staged.forEach((s) => ids.add(s.poolId));
+    (booking.bomItems || []).forEach((line) => {
+      if (line.poolId) ids.add(line.poolId);
+    });
+    return [...ids];
+  }, [selectedPoolId, staged, booking.bomItems]);
+
   const { availabilityByPoolId, isLoading: availabilityLoading } = useBookingPoolAvailability(
     booking,
     pools,
-    enabled
+    enabled,
+    focusPoolIds
   );
 
   const selectedAvailability = selectedPoolId ? availabilityByPoolId[selectedPoolId] : undefined;
@@ -63,6 +77,7 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
     onSuccess: () => {
       toast.success("BOM quantity updated");
       queryClient.invalidateQueries({ queryKey: ["booking", booking.code] });
+      queryClient.invalidateQueries({ queryKey: ["pool-availability"] });
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to update quantity");
@@ -74,6 +89,7 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
     onSuccess: () => {
       toast.success("Item removed from BOM");
       queryClient.invalidateQueries({ queryKey: ["booking", booking.code] });
+      queryClient.invalidateQueries({ queryKey: ["pool-availability"] });
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to remove item");
@@ -94,6 +110,7 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
     },
     onSuccess: ({ failedIdx }, items) => {
       queryClient.invalidateQueries({ queryKey: ["booking", booking.code] });
+      queryClient.invalidateQueries({ queryKey: ["pool-availability"] });
       if (failedIdx.length === 0) {
         toast.success(`Added ${items.length} item${items.length === 1 ? "" : "s"} to BOM`);
         setStaged([]);
@@ -108,10 +125,11 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
     },
   });
 
+  /** Dropdown label: warehouse stock (always from pool total). */
   const getPoolAvailabilityLabel = (poolId: string) => {
-    const entry = availabilityByPoolId[poolId];
-    if (!entry || entry.loading || availabilityLoading) return null;
-    return entry.available;
+    const pool = pools.find((p: any) => p.id === poolId);
+    const stock = readPoolStock(pool);
+    return stock > 0 ? stock : null;
   };
 
   const stageSelected = () => {

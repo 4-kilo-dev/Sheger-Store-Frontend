@@ -1,6 +1,7 @@
 import { Download, Trash2 } from "lucide-react";
 import { formatBytes, getFileIcon } from "@/features/bookings/utils";
 import type { Attachment } from "@/features/bookings/services/attachments.api";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 interface FileCardProps {
   attachment: Attachment;
@@ -16,6 +17,7 @@ export function FileCard({
   onDelete,
   layout = "row",
 }: FileCardProps) {
+  const { formatDate } = useDateFormatter();
   const f = attachment;
 
   if (layout === "card") {
@@ -39,7 +41,7 @@ export function FileCard({
           >
             <div>{formatBytes(f.fileSizeBytes)}</div>
             <div>Uploaded by {f.uploaderName || "User"}</div>
-            <div>{new Date(f.createdAt).toLocaleDateString()}</div>
+            <div>{formatDate(f.createdAt)}</div>
           </div>
         </div>
 
@@ -82,7 +84,7 @@ export function FileCard({
         </div>
         <div className="text-[10px]" style={{ color: "var(--text-3)" }}>
           {formatBytes(f.fileSizeBytes)} ·{" "}
-          {new Date(f.createdAt).toLocaleDateString()}
+          {formatDate(f.createdAt)}
         </div>
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

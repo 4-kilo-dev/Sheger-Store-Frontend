@@ -55,6 +55,10 @@ export interface RevenuePaymentRecord {
 
 export interface RevenueReportResponse {
   totalRevenue: number;
+  /** Distinct bookings that have at least one payment in the filtered window. */
+  uniqueBookingCount?: number;
+  /** totalRevenue / uniqueBookingCount (0 when no bookings). */
+  averageBookingValue?: number;
   statusCounts: Record<string, number>;
   monthlyRevenue: Record<string, number>;
   payments: RevenuePaymentRecord[];
@@ -254,6 +258,8 @@ const MOCK_INVENTORY_REPORT: InventoryReportRecord[] = [
 
 const MOCK_REVENUE_REPORT: RevenueReportResponse = {
   totalRevenue: 6722000,
+  uniqueBookingCount: 30,
+  averageBookingValue: 224066.66666666666,
   statusCounts: {
     "paid": 18,
     "advance": 9,

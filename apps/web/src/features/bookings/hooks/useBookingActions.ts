@@ -11,6 +11,7 @@ import {
   transitionBookingStatusApi,
   recordBookingPaymentApi,
   createAssignmentApi,
+  deleteAssignmentApi,
   type Booking,
   type BookingStatus,
 } from "@/features/bookings/services/bookings.api";
@@ -41,7 +42,8 @@ export function useBookingActions(
   const [paymentType, setPaymentType] = useState<"advance" | "fully_paid">("advance");
   const [paymentMethod, setPaymentMethod] = useState("Bank Transfer");
   const [advancePayment, setAdvancePayment] = useState(0);
-  const [fullPayment, setfullPayment] = useState(0);
+  const [dailyRate, setDailyRate] = useState(0);
+  const [rentedDays, setRentedDays] = useState(0);
 
   const [checkoutDriver, setCheckoutDriver] = useState("");
   const [checkoutVehiclePlate, setCheckoutVehiclePlate] = useState("");
@@ -64,20 +66,18 @@ export function useBookingActions(
 
   useEffect(() => {
     if (booking) {
-      const paid = booking.paymentAmount ?? 0;
+      setDailyRate(booking.dailyRate ?? 0);
+      setRentedDays(booking.rentedDays ?? 0);
 
-      if (booking.payment === "PAID" && paid > 0) {
-        setfullPayment(paid);
+      if (booking.payment === "PAID") {
         setPaymentType("fully_paid");
-        setAdvancePayment(paid);
+        setAdvancePayment(booking.advanceAmount ?? booking.paymentAmount ?? 0);
       } else if (booking.payment === "ADVANCE") {
         setPaymentType("advance");
-        setAdvancePayment(paid > 0 ? paid : 0);
-        setfullPayment(0);
+        setAdvancePayment(booking.advanceAmount ?? 0);
       } else {
         setPaymentType("advance");
         setAdvancePayment(0);
-        setfullPayment(booking.amount > 0 ? booking.amount : 0);
       }
     }
   }, [booking]);
@@ -98,13 +98,20 @@ export function useBookingActions(
   }, [canFetchStaff]);
 
   useEffect(() => {
-    if (
+    const isAssign =
       selectedAction?.id === "assignment.assign_technician" ||
-      selectedAction?.requiresForm === "assign"
-    ) {
-      setSelectedTechnicianIds([]);
-    }
-  }, [selectedAction?.id, selectedAction?.requiresForm]);
+      selectedAction?.id === "booking.assign" ||
+      selectedAction?.requiresForm === "assign";
+    if (!isAssign || !booking) return;
+
+    const currentTechIds = (booking.assignments || [])
+      .filter(
+        (a: any) => a.roleContext === "TECHNICIAN" && !isDeclinedAssignment(a),
+      )
+      .map((a: any) => a.userId as string)
+      .filter(Boolean);
+    setSelectedTechnicianIds(currentTechIds);
+  }, [selectedAction?.id, selectedAction?.requiresForm, booking]);
 
   const myTechnicianAssignment = useMemo(() => {
     if (!booking?.assignments || !authUser?.id) return null;
@@ -289,23 +296,27 @@ export function useBookingActions(
   const { mutate: assignTechnicians, isPending: isAssigningTechnicians } = useMutation({
     mutationFn: async (techIds: string[]) => {
       if (!booking) throw new Error("Booking is undefined");
-
-      const staffById = new Map(staff.map((s) => [s.id, s]));
-      const alreadyAssigned = new Set(
-        (booking.assignments || [])
-          .filter(
-            (a: any) =>
-              a.roleContext === "TECHNICIAN" &&
-              !isDeclinedAssignment(a)
-          )
-          .map((a: any) => a.userId)
-      );
-
-      const toAssign = techIds.filter((id) => !alreadyAssigned.has(id));
-      if (toAssign.length === 0) {
-        throw new Error("All selected technicians are already assigned to this booking");
+      if (techIds.length === 0) {
+        throw new Error("Select at least one technician");
       }
 
+      const staffById = new Map(staff.map((s) => [s.id, s]));
+      const activeTechAssignments = (booking.assignments || []).filter(
+        (a: any) => a.roleContext === "TECHNICIAN" && !isDeclinedAssignment(a),
+      );
+      const alreadyAssigned = new Set(
+        activeTechAssignments.map((a: any) => a.userId as string),
+      );
+      const selected = new Set(techIds);
+
+      // Remove technicians that were unchecked (allows changing the assigned crew)
+      for (const assignment of activeTechAssignments) {
+        if (!selected.has(assignment.userId)) {
+          await deleteAssignmentApi(assignment.id);
+        }
+      }
+
+      const toAssign = techIds.filter((id) => !alreadyAssigned.has(id));
       for (const techId of toAssign) {
         const member = staffById.get(techId);
         await createAssignmentApi(booking.id, {
@@ -316,7 +327,7 @@ export function useBookingActions(
       }
     },
     onSuccess: () => {
-      toast.success("Technician assignment completed!");
+      toast.success("Technician assignment updated!");
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions", booking?.id] });
@@ -334,12 +345,26 @@ export function useBookingActions(
       toPaymentStatus,
       amount,
       totalAmount,
+      pricingDailyRate,
+      pricingRentedDays,
+      pricingScreenSize,
     }: {
       toPaymentStatus: string;
       amount: number;
       totalAmount: number;
+      pricingDailyRate: number;
+      pricingRentedDays: number;
+      pricingScreenSize: number;
     }) => {
       if (!booking) throw new Error("Booking is undefined");
+
+      const pricingUpdate: Record<string, unknown> = {};
+      if (pricingDailyRate > 0) pricingUpdate.dailyRate = String(pricingDailyRate);
+      if (pricingRentedDays > 0) pricingUpdate.rentedDays = pricingRentedDays;
+      if (pricingScreenSize > 0) pricingUpdate.screenAreaSqm = String(pricingScreenSize);
+      if (Object.keys(pricingUpdate).length > 0) {
+        await updateBookingApi(booking.id, pricingUpdate);
+      }
 
       const needsNewPayment =
         booking.payment === "UNPAID" ||
@@ -381,8 +406,10 @@ export function useBookingActions(
     setPaymentMethod,
     advancePayment,
     setAdvancePayment,
-    fullPayment,
-    setfullPayment,
+    dailyRate,
+    setDailyRate,
+    rentedDays,
+    setRentedDays,
     checkoutDriver,
     setCheckoutDriver,
     checkoutVehiclePlate,

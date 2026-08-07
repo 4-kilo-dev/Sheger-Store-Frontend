@@ -17,13 +17,19 @@ function parseSqm(value: string): number {
 }
 
 /** Derive display fields from backend spec without inventing CTO defaults at intake. */
+function formatArrangementLabel(value?: string | null): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
 function parseBookingScreenFields(b: {
   itemServiceSpec?: string | null;
   arrangementDetails?: string | null;
   screenAreaSqm?: number | string | null;
+  customFields?: Record<string, any> | null;
 }) {
   const spec = (b.itemServiceSpec || "").trim();
-  const arrangement = (b.arrangementDetails || "").trim();
   const specParts = spec ? spec.split(" - ").map((part) => part.trim()) : [];
 
   let screenType = "";
@@ -40,6 +46,20 @@ function parseBookingScreenFields(b: {
 
   const backendSize = Number(b.screenAreaSqm);
   if (Number.isFinite(backendSize) && backendSize > 0) size = backendSize;
+
+  const fromCustom =
+    b.customFields?.hanging_or_sitting ??
+    b.customFields?.arrangement ??
+    b.customFields?.arrangement_details;
+  let arrangement = formatArrangementLabel(b.arrangementDetails || fromCustom);
+
+  // Legacy specs sometimes encoded arrangement as a trailing token (hanging/sitting).
+  if (!arrangement && specParts.length >= 3) {
+    const maybeArrangement = specParts[specParts.length - 1];
+    if (/^(hanging|sitting)$/i.test(maybeArrangement)) {
+      arrangement = formatArrangementLabel(maybeArrangement);
+    }
+  }
 
   return {
     screenType: screenType as ScreenType | "",
@@ -82,6 +102,9 @@ export interface Booking {
   payment: PaymentStatus;
   amount: number;
   paymentAmount?: number;
+  dailyRate?: number;
+  rentedDays?: number;
+  advanceAmount?: number;
   ctoNotes: string;
   bomItems: BomItem[];
   teamLeader: string;
@@ -144,11 +167,21 @@ export const STATUS_ORDER: BookingStatus[] = [
 import { client } from "@/lib/api/client";
 import { assignBomLineCodes } from "@/features/bookings/utils/bomLineCodes";
 
+function parseNumericField(value: string | number | null | undefined): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = typeof value === "number" ? value : parseFloat(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** Format an instant as local `YYYY-MM-DDTHH:mm` (not UTC-sliced ISO). */
 function normalizeBookingDateTime(value?: string | null): string {
   if (!value) return "";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0, 16);
+  // Using UTC slice(0,16) strips the Z and re-parses as local, shifting the
+  // calendar day in UTC+ offsets (e.g. EAT) and breaking week filters.
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 function mapBackendBookingToFrontend(b: any): Booking {
@@ -244,7 +277,10 @@ function mapBackendBookingToFrontend(b: any): Booking {
     status: (b.status || "RESERVED") as BookingStatus,
     payment,
     amount: typeof b.paymentAmount === "number" ? b.paymentAmount : parseFloat(b.paymentAmount || "0"),
-    paymentAmount: typeof b.paymentAmount === "number" ? b.paymentAmount : (b.paymentAmount ? parseFloat(b.paymentAmount) : undefined),
+    paymentAmount: parseNumericField(b.paymentAmount),
+    dailyRate: parseNumericField(b.dailyRate),
+    rentedDays: b.rentedDays ?? undefined,
+    advanceAmount: parseNumericField(b.advanceAmount),
     ctoNotes: b.ctoConsultationNotes || "",
     bomItems: bomItems,
     teamLeader: teamLeader,
@@ -253,7 +289,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
     vehicleText: b.vehicleText || "",
     vehiclePlate: b.vehiclePlate || "",
     mealBudget,
-    createdAt: b.createdAt ? b.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+    createdAt: b.createdAt || new Date().toISOString(),
     statusHistory,
     itemServiceSpec: intakeSpec,
     assignments: b.assignments || [],
@@ -305,14 +341,13 @@ export async function createBookingApi(form: any): Promise<any> {
     ? `${specText} - ${screenSize}sqm`
     : specText || (hasValidSize ? `Screen - ${screenSize}sqm` : undefined);
 
-  const bookingPayload = {
+  const bookingPayload: Record<string, unknown> = {
     customerId: customer.id,
     eventDate: eventDateStr,
     eventLocation: form.venue || "TBD",
     deliveryDate: assemblyStartStr,
     rentalStart: eventDateStr,
     rentalEnd: dismantleDateStr,
-    rentedDays: 1,
     assemblyStart: assemblyStartStr,
     assemblyEnd: assemblyEndStr,
     disassemblyStart: dismantleDateStr,
@@ -323,20 +358,15 @@ export async function createBookingApi(form: any): Promise<any> {
     customFields: form.customFields || {},
   };
 
-  // 3. Create booking
-  const booking = await client.post<any>("/api/bookings", bookingPayload);
-
-  // 4. Record initial payment if amount is set
-  if (form.amount > 0) {
-    try {
-      await client.post(`/api/bookings/${booking.id}/payment`, {
-        toStatus: form.paymentTerms === "PAID" ? "fully_paid" : "advance",
-        amount: String(form.amount),
-      });
-    } catch (e) {
-      console.error("Failed to record initial booking payment", e);
-    }
+  if (form.rentedDays != null && form.rentedDays > 0) {
+    bookingPayload.rentedDays = form.rentedDays;
   }
+  if (hasValidSize) {
+    bookingPayload.screenAreaSqm = String(screenSize);
+  }
+
+  // 3. Create booking — daily rate / payment are set later at RESERVED → CONFIRMED
+  const booking = await client.post<any>("/api/bookings", bookingPayload);
 
   return booking;
 }
@@ -380,32 +410,31 @@ export async function recordBookingPaymentApi(bookingId: string, toStatus: strin
 }
 
 export interface PaymentSummary {
-  /** Amount recorded against the booking so far. */
+  /** Amount paid so far (advance deposit or full total). */
   paid: number;
-  /**
-   * Contract total. `null` when unknown — the backend has no separate
-   * contract-total field and overwrites paymentAmount with the latest payment,
-   * so a true total is only known once fully paid.
-   */
+  /** Contract total from screen size × days × daily rate (`paymentAmount`). */
   total: number | null;
-  /** Remaining balance, or `null` when the total is unknown. */
+  /** Remaining balance, or `null` when total is unknown. */
   remaining: number | null;
 }
 
-/**
- * Honest payment figures from the fields the API actually exposes
- * (`payment` status + `paymentAmount`). No `/2` guessing. A real ledger
- * (contract vs paid vs balance across multiple payments) needs backend changes.
- */
+/** Payment figures from paymentAmount (total), advanceAmount (deposit), and payment status. */
 export function getPaymentSummary(b: Booking): PaymentSummary {
-  const recorded = b.paymentAmount ?? b.amount ?? 0;
+  const totalRaw = b.paymentAmount ?? b.amount;
+  const total = totalRaw != null && totalRaw > 0 ? totalRaw : null;
+
   if (b.payment === "PAID") {
-    return { paid: recorded, total: recorded, remaining: 0 };
+    return { paid: total ?? 0, total, remaining: 0 };
   }
   if (b.payment === "ADVANCE") {
-    return { paid: recorded, total: null, remaining: null };
+    const paid = b.advanceAmount ?? 0;
+    return {
+      paid,
+      total,
+      remaining: total != null ? Math.max(0, total - paid) : null,
+    };
   }
-  return { paid: 0, total: null, remaining: null };
+  return { paid: 0, total, remaining: total };
 }
 
 export async function updateBookingApi(bookingId: string, payload: any): Promise<any> {

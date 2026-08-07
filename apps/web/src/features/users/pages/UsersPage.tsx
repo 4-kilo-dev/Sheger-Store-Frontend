@@ -9,6 +9,7 @@ import { getStaffApi, resetPasswordApi, toggleUserActiveApi, setStaffFreelancerA
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { toast } from "sonner";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 const _Route = createFileRoute("/staff")({
   head: () => ({
@@ -31,6 +32,7 @@ export function StaffPage() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<(typeof STAFF_ROLES)[number]>("All");
   const { can } = usePermissions();
+  const { formatDate } = useDateFormatter();
   const canViewStaff = can(PERMISSION.USER_VIEW);
   const canManageStaff = can(PERMISSION.USER_MANAGE);
   const queryClient = useQueryClient();
@@ -283,7 +285,7 @@ export function StaffPage() {
               <div className="mt-3 flex items-center justify-between border-t pt-3 text-[10px]" style={{ borderColor: "var(--border)" }}>
                 <span style={{ color: "var(--text-3)" }}>
                   <Calendar className="mr-1 inline h-3 w-3" />
-                  Joined {p.joinedDate}
+                  Joined {formatDate(p.joinedDate)}
                 </span>
                 <button className="font-semibold cursor-pointer" style={{ color: "var(--accent)" }}>Assign to Booking →</button>
               </div>

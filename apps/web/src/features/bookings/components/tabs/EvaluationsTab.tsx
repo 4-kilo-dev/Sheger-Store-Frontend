@@ -11,6 +11,7 @@ import {
 } from "@/features/bookings/components/shared/ScoreRenderer";
 import type { Booking } from "@/features/bookings/services/bookings.api";
 import type { useBookingEvaluations } from "@/features/bookings/hooks/useBookingEvaluations";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 interface EvaluationsTabProps {
   b: Booking;
@@ -18,6 +19,7 @@ interface EvaluationsTabProps {
 }
 
 export function EvaluationsTab({ b, evaluations }: EvaluationsTabProps) {
+  const { formatDate } = useDateFormatter();
   const {
     canSubmitEval,
     showWebhookModal,
@@ -77,7 +79,7 @@ export function EvaluationsTab({ b, evaluations }: EvaluationsTabProps) {
                     <strong style={{ color: "var(--foreground)" }}>{internalEval.evaluatorId}</strong>
                   </span>
                   <span className="font-mono">
-                    {new Date(internalEval.createdAt).toLocaleDateString()}
+                    {formatDate(internalEval.createdAt)}
                   </span>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-[12px]">
@@ -181,7 +183,7 @@ export function EvaluationsTab({ b, evaluations }: EvaluationsTabProps) {
                     <strong style={{ color: "var(--foreground)" }}>{clientEval.respondentName}</strong>
                   </span>
                   <span className="font-mono">
-                    {new Date(clientEval.submittedAt).toLocaleDateString()}
+                    {formatDate(clientEval.submittedAt)}
                   </span>
                 </div>
                 <div className="mt-1 text-[10px]" style={{ color: "var(--text-3)" }}>

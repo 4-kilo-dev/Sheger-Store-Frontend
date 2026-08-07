@@ -1,16 +1,79 @@
 import { createFileRoute, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Plus, Filter, ArrowUpDown, MoreVertical } from "lucide-react";
+import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { FilterDropdown, SortButton } from "@/components/filter-dropdown";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
-import { useQuery } from "@tanstack/react-query";
-import { getBookingsApi, STATUS_ORDER, STATUS_LABELS, type Booking, type PaymentStatus, type ScreenType } from "@/features/bookings/services/bookings.api";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  getBookingsApi,
+  transitionBookingStatusApi,
+  STATUS_ORDER,
+  STATUS_LABELS,
+  type Booking,
+  type BookingStatus,
+  type PaymentStatus,
+  type ScreenType,
+} from "@/features/bookings/services/bookings.api";
 import { getStaffApi } from "@/features/users/services/staff.api";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
+
+const BULK_STATUS_TARGETS: BookingStatus[] = [
+  ...STATUS_ORDER,
+  "CANCELED",
+  "PARTIALLY_RETURNED",
+];
+
+function csvEscape(value: string | number | null | undefined): string {
+  const raw = value == null ? "" : String(value);
+  if (/[",\n]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`;
+  return raw;
+}
+
+function downloadCsv(filename: string, headers: string[], rows: string[][]) {
+  const lines = [headers, ...rows].map((row) => row.map(csvEscape).join(","));
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function runBulkTransitions(
+  codes: string[],
+  toStatus: BookingStatus,
+  reason: string,
+  override = false,
+): Promise<{ ok: string[]; failed: { code: string; message: string }[] }> {
+  const ok: string[] = [];
+  const failed: { code: string; message: string }[] = [];
+  for (const code of codes) {
+    try {
+      await transitionBookingStatusApi(code, toStatus, reason, override);
+      ok.push(code);
+    } catch (err: any) {
+      failed.push({
+        code,
+        message: err?.message || err?.error || "Transition failed",
+      });
+    }
+  }
+  return { ok, failed };
+}
 
 const _Route = createFileRoute("/bookings/")({
   head: () => ({
@@ -28,27 +91,49 @@ const ALL_STATUSES = STATUS_ORDER.map((s) => STATUS_LABELS[s]);
 const ALL_SCREEN_TYPES: ScreenType[] = ["P2.97", "P2.97-New", "P3.91 INDOOR", "P3.91 OUTDOOR", "P4", "P5"];
 const ALL_PAYMENTS: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
 
-/** Calendar-day bounds for week tabs (Sun–Sat). */
+/** Calendar-day bounds for week tabs (Mon–Sun, local timezone). */
 function getWeekBounds(weeksAgo = 0): { start: Date; end: Date } {
   const now = new Date();
-  const start = new Date(now);
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = start.getDay(); // 0 = Sunday
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  start.setDate(start.getDate() + mondayOffset - weeksAgo * 7);
   start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - start.getDay() - weeksAgo * 7);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   end.setHours(23, 59, 59, 999);
   return { start, end };
 }
 
+function parseBookingInstant(value?: string | null): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** This/Last Week = event date falls on a day inside the week (not rental-window overlap). */
+function bookingEventInWeek(b: Booking, start: Date, end: Date): boolean {
+  const event = parseBookingInstant(b.eventDate);
+  if (!event) return false;
+  return event >= start && event <= end;
+}
+
 export function BookingsIndex() {
   const { formatDate } = useDateFormatter();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const authUser = useAuthUser();
   const { can } = usePermissions();
   /** Assigned-scope actors (no view_all) get the simplified assignments list. */
   const isAssignedScopeOnly =
     !can(PERMISSION.BOOKING_VIEW_ALL) && can(PERMISSION.BOOKING_VIEW_ASSIGNED);
   const canCreateBooking = can(PERMISSION.BOOKING_CREATE);
+  const canCancel =
+    can(PERMISSION.BOOKING_CANCEL) || can(PERMISSION.BOOKING_CANCEL_OVERRIDE);
+  const canChangeStatus =
+    can(PERMISSION.BOOKING_CONFIRM) ||
+    can(PERMISSION.BOOKING_EDIT) ||
+    canCancel;
   const searchParams = useRouterState({ select: (s) => s.location.search }) as any;
   const query = searchParams.q || "";
   const setQuery = (val: string) => {
@@ -59,12 +144,110 @@ export function BookingsIndex() {
   };
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkModal, setBulkModal] = useState<"status" | "cancel" | null>(null);
+  const [bulkStatus, setBulkStatus] = useState<BookingStatus>("CONFIRMED");
+  const [bulkReason, setBulkReason] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   // Query bookings from backend
   const { data: bookingsList = [] } = useQuery({
     queryKey: ["bookings"],
     queryFn: getBookingsApi,
   });
+
+  const selectedBookings = useMemo(
+    () => bookingsList.filter((b) => selected.has(b.code)),
+    [bookingsList, selected],
+  );
+
+  function handleExportSelected() {
+    if (selectedBookings.length === 0) {
+      toast.error("Select at least one booking to export");
+      return;
+    }
+    const headers = [
+      "Code",
+      "Client",
+      "Assembly",
+      "Event",
+      "Venue",
+      "Screen Type",
+      "Size",
+      "Arrangement",
+      "Assignees",
+      "Stage Hand",
+      "Payment",
+      "Status",
+      "Amount",
+    ];
+    const rows = selectedBookings.map((b) => [
+      b.code,
+      b.client,
+      b.assemblyDate,
+      b.eventDate,
+      b.venue,
+      b.screenType,
+      String(b.size),
+      b.arrangement || "",
+      (b.assignees || []).join("; "),
+      b.stageHand || "",
+      b.payment,
+      b.status,
+      String(b.amount ?? ""),
+    ]);
+    downloadCsv(
+      `bookings-export-${new Date().toISOString().slice(0, 10)}.csv`,
+      headers,
+      rows,
+    );
+    toast.success(`Exported ${selectedBookings.length} booking${selectedBookings.length === 1 ? "" : "s"}`);
+  }
+
+  async function handleBulkSubmit() {
+    if (!bulkModal || selectedBookings.length === 0) return;
+    const reason = bulkReason.trim();
+    if (reason.length < 10) {
+      toast.error("Reason must be at least 10 characters");
+      return;
+    }
+
+    const toStatus: BookingStatus = bulkModal === "cancel" ? "CANCELED" : bulkStatus;
+    const override =
+      bulkModal === "cancel" && can(PERMISSION.BOOKING_CANCEL_OVERRIDE);
+    const codes = selectedBookings.map((b) => b.code);
+
+    setBulkBusy(true);
+    try {
+      const { ok, failed } = await runBulkTransitions(codes, toStatus, reason, override);
+      await queryClient.invalidateQueries({ queryKey: ["bookings"] });
+
+      if (ok.length > 0) {
+        toast.success(
+          bulkModal === "cancel"
+            ? `Canceled ${ok.length} booking${ok.length === 1 ? "" : "s"}`
+            : `Updated ${ok.length} booking${ok.length === 1 ? "" : "s"} to ${STATUS_LABELS[toStatus]}`,
+        );
+      }
+      if (failed.length > 0) {
+        const preview = failed
+          .slice(0, 3)
+          .map((f) => `${f.code}: ${f.message}`)
+          .join("; ");
+        toast.error(
+          `${failed.length} failed${preview ? ` — ${preview}` : ""}${failed.length > 3 ? "…" : ""}`,
+        );
+      }
+      if (failed.length === 0) {
+        setSelected(new Set());
+        setBulkModal(null);
+        setBulkReason("");
+      } else if (ok.length > 0) {
+        setSelected(new Set(failed.map((f) => f.code)));
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   const { data: staffList = [] } = useQuery({
     queryKey: ["staff"],
@@ -84,8 +267,8 @@ export function BookingsIndex() {
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [paymentFilter, setPaymentFilter] = useState<Set<string>>(new Set());
 
-  // Sort
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  // Sort — newest created first by default
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -99,17 +282,11 @@ export function BookingsIndex() {
     if (tab === "Upcoming") r = r.filter((b) => new Date(b.assemblyDate) > new Date());
     if (tab === "This Week") {
       const { start, end } = getWeekBounds(0);
-      r = r.filter((b) => {
-        const d = new Date(b.eventDate);
-        return !Number.isNaN(d.getTime()) && d >= start && d <= end;
-      });
+      r = r.filter((b) => bookingEventInWeek(b, start, end));
     }
     if (tab === "Last Week") {
       const { start, end } = getWeekBounds(1);
-      r = r.filter((b) => {
-        const d = new Date(b.eventDate);
-        return !Number.isNaN(d.getTime()) && d >= start && d <= end;
-      });
+      r = r.filter((b) => bookingEventInWeek(b, start, end));
     }
     if (tab === "Assigned to Me") r = r.filter((b) => b.assignees.includes(authUser?.name || ""));
 
@@ -135,9 +312,9 @@ export function BookingsIndex() {
     // Payment filter
     if (paymentFilter.size > 0) r = r.filter((b) => paymentFilter.has(b.payment));
 
-    // Sort by assembly date
+    // Newest created first by default
     r.sort((a, b) => {
-      const cmp = a.assemblyDate.localeCompare(b.assemblyDate);
+      const cmp = (a.createdAt || "").localeCompare(b.createdAt || "");
       return sortDir === "asc" ? cmp : -cmp;
     });
 
@@ -344,9 +521,12 @@ export function BookingsIndex() {
         <div className="ml-auto">
           <SortButton
             icon={<ArrowUpDown className="h-3.5 w-3.5" />}
-            label="Assembly Date"
+            label="Created"
             direction={sortDir}
-            onToggle={() => setSortDir((d) => d === "asc" ? "desc" : "asc")}
+            onToggle={() => {
+              setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+              setPage(1);
+            }}
           />
         </div>
       </div>
@@ -358,13 +538,134 @@ export function BookingsIndex() {
             {selected.size} selected
           </span>
           <div className="flex gap-2 text-[12px]">
-            <button className="rounded-md border px-2.5 py-1" style={{ borderColor: "var(--border)" }}>Change Status</button>
-            <button className="rounded-md border px-2.5 py-1" style={{ borderColor: "var(--border)" }}>Export</button>
-            <button className="rounded-md border px-2.5 py-1" style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}>Cancel Selected</button>
+            {canChangeStatus && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkStatus("CONFIRMED");
+                  setBulkReason("");
+                  setBulkModal("status");
+                }}
+                className="rounded-md border px-2.5 py-1"
+                style={{ borderColor: "var(--border)" }}
+              >
+                Change Status
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleExportSelected}
+              className="rounded-md border px-2.5 py-1"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Export
+            </button>
+            {canCancel && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkReason("");
+                  setBulkModal("cancel");
+                }}
+                className="rounded-md border px-2.5 py-1"
+                style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
+              >
+                Cancel Selected
+              </button>
+            )}
           </div>
         </div>
       )}
 
+      <Dialog
+        open={bulkModal !== null}
+        onOpenChange={(open) => {
+          if (!open && !bulkBusy) {
+            setBulkModal(null);
+            setBulkReason("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {bulkModal === "cancel" ? "Cancel selected bookings" : "Change status"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-[12px]">
+            <p style={{ color: "var(--text-2)" }}>
+              {selectedBookings.length} booking{selectedBookings.length === 1 ? "" : "s"}:{" "}
+              {selectedBookings
+                .slice(0, 5)
+                .map((b) => b.code)
+                .join(", ")}
+              {selectedBookings.length > 5 ? "…" : ""}
+            </p>
+            {bulkModal === "status" && (
+              <label className="block font-semibold">
+                Target status
+                <select
+                  value={bulkStatus}
+                  onChange={(e) => setBulkStatus(e.target.value as BookingStatus)}
+                  className="mt-1.5 h-9 w-full rounded-md border bg-[var(--surface-2)] px-3 text-[12px] outline-none"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  {BULK_STATUS_TARGETS.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="block font-semibold">
+              Reason
+              <textarea
+                rows={3}
+                value={bulkReason}
+                onChange={(e) => setBulkReason(e.target.value)}
+                placeholder="Explain why (min 10 characters)…"
+                className="mt-1.5 w-full rounded-md border bg-[var(--surface-2)] p-3 text-[12px] outline-none"
+                style={{ borderColor: "var(--border)" }}
+              />
+            </label>
+            {bulkModal === "status" && (
+              <p className="text-[11px]" style={{ color: "var(--text-3)" }}>
+                Only allowed transitions for each booking will succeed. Invalid ones are skipped with an error.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={bulkBusy}
+              onClick={() => {
+                setBulkModal(null);
+                setBulkReason("");
+              }}
+            >
+              Back
+            </Button>
+            <Button
+              type="button"
+              disabled={bulkBusy || bulkReason.trim().length < 10}
+              onClick={handleBulkSubmit}
+              style={
+                bulkModal === "cancel"
+                  ? { background: "var(--destructive)", color: "#fff" }
+                  : undefined
+              }
+            >
+              {bulkBusy
+                ? "Working…"
+                : bulkModal === "cancel"
+                  ? "Cancel bookings"
+                  : "Update status"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Table */}
       <div className="overflow-hidden rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
         <div className="overflow-x-auto scrollbar-thin">
@@ -439,7 +740,7 @@ export function BookingsIndex() {
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}>{b.venue}</td>
                     <td className="border-b px-3 py-3 font-mono text-[11px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.screenType}</td>
                     <td className="border-b px-3 py-3 font-mono font-semibold" style={{ borderColor: "var(--border)" }}>{b.size}</td>
-                    <td className="border-b px-3 py-3 font-mono text-[11px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.arrangement}</td>
+                    <td className="border-b px-3 py-3 font-mono text-[11px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.arrangement || "—"}</td>
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}>
                       <div className="flex -space-x-1.5">
                         {b.assignees.map((a, ai) => (

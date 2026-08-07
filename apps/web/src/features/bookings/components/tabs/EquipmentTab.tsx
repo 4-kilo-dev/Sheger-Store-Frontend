@@ -1,34 +1,53 @@
 import { AlertTriangle, Package, Plus, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
 import { Section } from "@/features/bookings/components/shared/Section";
 import type { Booking } from "@/features/bookings/services/bookings.api";
 import type { BookingCapabilities } from "@/features/bookings/hooks/useBookingCapabilities";
 import { useBookingBom } from "@/features/bookings/hooks/useBookingBom";
+import { bookingToPackingSlip, printPackingSlip } from "@/features/bookings/utils/printPackingSlip";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 function AvailabilityHint({
   available,
+  stock,
   loading,
   requested,
+  unit,
 }: {
   available: number | null;
+  stock?: number | null;
   loading: boolean;
   requested?: number;
+  unit?: string;
 }) {
   if (loading) {
     return (
       <span className="text-[10px]" style={{ color: "var(--text-3)" }}>
-        Checking…
+        Checking stock…
       </span>
     );
   }
-  if (available == null) return null;
+  if (available == null && (stock == null || stock <= 0)) return null;
 
-  const over = requested != null && requested > available;
+  const unitLabel = unit ? ` ${unit}` : "";
+  const over = available != null && requested != null && requested > available;
   return (
     <span
       className="text-[10px] font-semibold"
       style={{ color: over ? "var(--color-pay-advance)" : "var(--color-bom-returned)" }}
     >
-      Avail: {available}
+      {available != null ? (
+        <>
+          Avail: {available}
+          {stock != null && stock > 0 && stock !== available ? ` / Stock ${stock}` : ""}
+          {unitLabel}
+        </>
+      ) : (
+        <>
+          Stock: {stock}
+          {unitLabel}
+        </>
+      )}
       {over ? " · Over-allocated" : ""}
     </span>
   );
@@ -41,8 +60,19 @@ export function EquipmentTab({
   b: Booking;
   caps: BookingCapabilities;
 }) {
+  const { formatDateTime } = useDateFormatter();
   const isEditable = caps.canEditBom;
   const bom = useBookingBom(b, true);
+
+  function handlePrintPackingSlip() {
+    try {
+      printPackingSlip(bookingToPackingSlip(b), {
+        formatDate: (value) => (value ? formatDateTime(value) : "—"),
+      });
+    } catch (err: any) {
+      toast.error(err?.message || "Could not print packing slip");
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -68,8 +98,9 @@ export function EquipmentTab({
                   .filter((p: any) => !bom.staged.some((s) => s.poolId === p.id))
                   .map((p: any) => {
                     const avail = bom.getPoolAvailabilityLabel(p.id);
+                    const unit = p.unit || p.category?.unit || "";
                     const availLabel =
-                      avail != null ? ` — ${avail} ${p.unit || p.category?.unit || "avail"}` : "";
+                      avail != null ? ` — stock ${avail}${unit ? ` ${unit}` : ""}` : "";
                     return (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.category?.name || "General"}){availLabel}
@@ -102,8 +133,17 @@ export function EquipmentTab({
                         ? null
                         : bom.selectedAvailability?.available ?? null
                     }
-                    loading={!!bom.selectedAvailability?.loading || bom.availabilityLoading}
+                    stock={
+                      bom.selectedAvailability?.stock ??
+                      bom.getPoolAvailabilityLabel(bom.selectedPoolId)
+                    }
+                    loading={!!bom.selectedAvailability?.loading}
                     requested={bom.addQty}
+                    unit={
+                      bom.pools.find((p: any) => p.id === bom.selectedPoolId)?.unit ||
+                      bom.pools.find((p: any) => p.id === bom.selectedPoolId)?.category?.unit ||
+                      undefined
+                    }
                   />
                 </div>
               )}
@@ -348,7 +388,10 @@ export function EquipmentTab({
             {b.bomItems.length} items · {b.bomItems.reduce((s, i) => s + i.qty, 0)} total units
           </span>
           <button
-            className="rounded-md border px-3 py-1 text-[10px] font-semibold"
+            type="button"
+            onClick={handlePrintPackingSlip}
+            disabled={b.bomItems.length === 0}
+            className="rounded-md border px-3 py-1 text-[10px] font-semibold disabled:opacity-40"
             style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
           >
             Print Packing Slip

@@ -11,17 +11,19 @@ import {
 } from "@/features/bookings/services/bookings.api";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 
 type PaymentType = "advance" | "fully_paid";
 
 export function PaymentsTab({ b }: { b: Booking }) {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
+  const { formatDate } = useDateFormatter();
   const canManagePayment = can(PERMISSION.PAYMENT_MANAGE);
 
   const summary = getPaymentSummary(b);
   const paymentMethod = b.customFields?.paymentMethod || "Bank Transfer";
-  const dateStr = b.createdAt || new Date().toISOString().slice(0, 10);
+  const dateStr = b.createdAt || new Date().toISOString();
 
   const tx =
     b.payment === "PAID"
@@ -100,7 +102,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
                     className="border-b last:border-0"
                     style={{ borderColor: "var(--border)" }}
                   >
-                    <td className="py-3 font-mono">{t.d}</td>
+                    <td className="py-3 font-mono">{formatDate(t.d)}</td>
                     <td className="py-3">{t.n}</td>
                     <td className="py-3" style={{ color: "var(--text-2)" }}>
                       {t.m}
