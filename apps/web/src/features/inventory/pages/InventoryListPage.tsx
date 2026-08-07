@@ -99,13 +99,13 @@ export function InventoryPage() {
 
   return (
     <AppShell>
-      <div className="mb-5 flex flex-col gap-3 sm:gap-4">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-start sm:gap-4">
         <div>
           <div className="label-eyebrow mb-1">Warehouse Control</div>
           <h1 className="text-[20px] sm:text-[24px] font-bold tracking-tight">Inventory</h1>
         </div>
         {canManage && (
-          <div className="flex flex-wrap items-center gap-2 self-start">
+          <div className="flex w-fit flex-wrap items-center justify-start gap-2">
             <Button size="sm" variant="outline" onClick={() => setShowCategoriesModal(true)}>
               Manage Categories
             </Button>
