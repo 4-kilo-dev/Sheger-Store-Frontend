@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, Check, Package } from "lucide-react";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import type { Booking } from "@/features/bookings/services/bookings.api";
 import type { useBookingActions } from "@/features/bookings/hooks/useBookingActions";
 import {
@@ -10,6 +11,13 @@ import {
 import { isDeclinedAssignment } from "@/features/bookings/utils/assignmentHelpers";
 import { StaffMultiSelect } from "@/features/bookings/components/shared/StaffMultiSelect";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { getBookingCustodyApi } from "@/features/checkout/services/operations.api";
+import {
+  buildCheckinReturns,
+  isCheckinAction as isInventoryCheckinAction,
+  isCheckoutReverseAction,
+  type InventoryCondition,
+} from "@/features/checkout/services/operation-payloads";
 
 interface BookingActionModalProps {
   booking: Booking;
@@ -48,6 +56,10 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
     isAssigningTechnicians,
     performCheckout,
     isCheckingOut,
+    performCheckin,
+    isCheckingIn,
+    reverseCheckout,
+    isReversingCheckout,
     transitionStatus,
     isTransitioning,
     isRecordingPayment,
@@ -55,18 +67,42 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
     isConfirmingWithPayment,
   } = actions;
 
-  const isCheckinAction =
-    !!selectedAction &&
-    (selectedAction.id === "inventory.checkin" ||
-      selectedAction.id === "booking.done" ||
-      selectedAction.id === "booking.partial_return" ||
-      selectedAction.permissionKey === "inventory.checkin");
+  const isCheckinAction = isInventoryCheckinAction(selectedAction);
+  const isReverseAction = isCheckoutReverseAction(selectedAction);
 
   const [checkedCheckinItems, setCheckedCheckinItems] = useState<Set<string>>(new Set());
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
+  const [returnConditions, setReturnConditions] = useState<Record<string, InventoryCondition>>({});
+  const { data: custody = [] } = useQuery({
+    queryKey: ["checkoutCustody", booking.code],
+    queryFn: () => getBookingCustodyApi(booking.code),
+    enabled: showActionModal && isCheckinAction,
+  });
+  const checkinItems = useMemo(
+    () =>
+      custody
+        .filter((line) => Number.parseFloat(line.outstandingQuantity) > 0)
+        .map((line) => {
+          const source = booking.bomItems.find((item) =>
+            line.poolId ? item.poolId === line.poolId : item.itemId === line.itemId,
+          );
+          return {
+            id: line.poolId ? `pool:${line.poolId}` : `item:${line.itemId}`,
+            poolId: line.poolId || undefined,
+            itemId: line.itemId || undefined,
+            name: source?.name || "Equipment",
+            code: source?.code || line.poolId || line.itemId || "asset",
+            outstandingQuantity: line.outstandingQuantity,
+          };
+        }),
+    [booking.bomItems, custody],
+  );
 
   useEffect(() => {
     if (!showActionModal || !isCheckinAction) {
       setCheckedCheckinItems(new Set());
+      setReturnQuantities({});
+      setReturnConditions({});
     }
   }, [showActionModal, isCheckinAction, selectedAction?.id]);
 
@@ -104,16 +140,14 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
   };
 
   const toggleAllCheckinItems = () => {
-    if (checkedCheckinItems.size === booking.bomItems.length) {
+    if (checkedCheckinItems.size === checkinItems.length) {
       setCheckedCheckinItems(new Set());
     } else {
-      setCheckedCheckinItems(new Set(booking.bomItems.map((item) => item.id)));
+      setCheckedCheckinItems(new Set(checkinItems.map((item) => item.id)));
     }
   };
 
-  const allCheckinItemsVerified =
-    booking.bomItems.length === 0 ||
-    checkedCheckinItems.size === booking.bomItems.length;
+  const hasCheckinItemsSelected = checkedCheckinItems.size > 0;
 
   const stagehandLeaderName = booking.teamLeader || "— Not assigned —";
   const screenTypeLabel = booking.screenType || "—";
@@ -490,36 +524,38 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                       Checked-Out Materials — Verify Returns
                     </span>
                   </div>
-                  {booking.bomItems.length > 0 && (
+                  {checkinItems.length > 0 && (
                     <button
                       type="button"
                       onClick={toggleAllCheckinItems}
                       className="text-[11px] font-semibold"
                       style={{ color: "var(--color-bom-returned)" }}
                     >
-                      {checkedCheckinItems.size === booking.bomItems.length
+                      {checkedCheckinItems.size === checkinItems.length
                         ? "Uncheck All"
                         : "Check All"}
                     </button>
                   )}
                 </div>
 
-                {booking.bomItems.length === 0 ? (
+                {checkinItems.length === 0 ? (
                   <p className="px-3 py-3 text-[11px]" style={{ color: "var(--text-3)" }}>
-                    No BOM lines on this booking.
+                    No inventory is currently outstanding for this booking.
                   </p>
                 ) : (
                   <>
                     <ul className="max-h-48 divide-y overflow-y-auto" style={{ borderColor: "var(--border)" }}>
-                      {booking.bomItems.map((item) => {
+                      {checkinItems.map((item) => {
                         const checked = checkedCheckinItems.has(item.id);
                         return (
                           <li key={item.id}>
-                            <button
-                              type="button"
+                            <div
                               onClick={() => toggleCheckinItem(item.id)}
                               className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-[var(--surface-2)]"
                               style={{ opacity: checked ? 1 : 0.75 }}
+                              role="checkbox"
+                              aria-checked={checked}
+                              tabIndex={0}
                             >
                               <div
                                 className="flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition"
@@ -539,10 +575,45 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                                 {item.code}
                               </span>
                               <span className="min-w-0 flex-1 truncate text-[11px]">{item.name}</span>
-                              <span className="shrink-0 font-mono text-[11px] font-semibold">
-                                ×{item.qty}
-                              </span>
-                            </button>
+                              {item.poolId ? (
+                                <input
+                                  aria-label={`Return quantity for ${item.name}`}
+                                  inputMode="decimal"
+                                  value={
+                                    returnQuantities[item.id] ??
+                                    item.outstandingQuantity
+                                  }
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) =>
+                                    setReturnQuantities((current) => ({
+                                      ...current,
+                                      [item.id]: event.target.value,
+                                    }))
+                                  }
+                                  className="h-7 w-20 rounded border bg-[var(--surface-2)] px-2 text-right font-mono text-[11px]"
+                                  style={{ borderColor: "var(--border)" }}
+                                />
+                              ) : (
+                                <select
+                                  aria-label={`Condition for ${item.name}`}
+                                  value={returnConditions[item.id] ?? "AVAILABLE"}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) =>
+                                    setReturnConditions((current) => ({
+                                      ...current,
+                                      [item.id]: event.target.value as InventoryCondition,
+                                    }))
+                                  }
+                                  className="h-7 rounded border bg-[var(--surface-2)] px-2 text-[10px]"
+                                  style={{ borderColor: "var(--border)" }}
+                                >
+                                  <option value="AVAILABLE">Available</option>
+                                  <option value="DAMAGED">Damaged</option>
+                                  <option value="LOST">Lost</option>
+                                  <option value="UNDER_MAINTENANCE">Maintenance</option>
+                                </select>
+                              )}
+                            </div>
                           </li>
                         );
                       })}
@@ -552,7 +623,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                       style={{ borderColor: "var(--border)" }}
                     >
                       <span className="text-[11px]" style={{ color: "var(--text-2)" }}>
-                        {checkedCheckinItems.size} of {booking.bomItems.length} items verified
+                        {checkedCheckinItems.size} of {checkinItems.length} assets selected
                       </span>
                       <div
                         className="h-1.5 w-28 overflow-hidden rounded-full"
@@ -561,7 +632,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                         <div
                           className="h-full rounded-full transition-all"
                           style={{
-                            width: `${booking.bomItems.length > 0 ? (checkedCheckinItems.size / booking.bomItems.length) * 100 : 0}%`,
+                            width: `${checkinItems.length > 0 ? (checkedCheckinItems.size / checkinItems.length) * 100 : 0}%`,
                             background: "var(--color-bom-returned)",
                           }}
                         />
@@ -614,6 +685,30 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                 return;
               }
               performCheckout();
+            } else if (isCheckinAction) {
+              try {
+                performCheckin(
+                  buildCheckinReturns(
+                    checkinItems.map((item) => ({
+                      selected: checkedCheckinItems.has(item.id),
+                      poolId: item.poolId,
+                      itemId: item.itemId,
+                      outstandingQuantity: item.outstandingQuantity,
+                      quantity:
+                        returnQuantities[item.id] ?? item.outstandingQuantity,
+                      condition: returnConditions[item.id] ?? "AVAILABLE",
+                    })),
+                  ),
+                );
+              } catch (error) {
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : "Invalid check-in selection",
+                );
+              }
+            } else if (isReverseAction) {
+              reverseCheckout(cancellationReason.trim());
             } else if (isAssignTechnicianAction) {
               if (selectedTechnicianIds.length === 0) {
                 toast.error("Please select at least one technician");
@@ -673,6 +768,8 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
             isRecordingPayment ||
             isConfirmingWithPayment ||
             isCheckingOut ||
+            isCheckingIn ||
+            isReversingCheckout ||
             isAssigningTechnicians ||
             (selectedAction.requiresReason && cancellationReason.trim().length < 10) ||
             (isAssignTechnicianAction && selectedTechnicianIds.length === 0) ||
@@ -683,7 +780,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                 computedTotal < 1000 ||
                 (paymentType === "advance" && advancePayment > computedTotal) ||
                 (paymentType === "advance" && advancePayment <= 0))) ||
-            (isCheckinAction && !allCheckinItemsVerified)
+            (isCheckinAction && !hasCheckinItemsSelected)
           }
           className="rounded-md px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
           style={{
@@ -698,6 +795,8 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
           isRecordingPayment ||
           isConfirmingWithPayment ||
           isCheckingOut ||
+          isCheckingIn ||
+          isReversingCheckout ||
           isAssigningTechnicians
             ? "Processing..."
             : `Confirm: ${selectedAction.label}`}

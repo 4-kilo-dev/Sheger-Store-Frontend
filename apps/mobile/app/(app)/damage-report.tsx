@@ -18,6 +18,7 @@ import {
   TextArea,
 } from "@/components/ui";
 import { useBookings, useCreateDamageReport, useInventory } from "@/hooks/useOperations";
+import { uploadBookingAttachmentApi } from "@/services/attachments.api";
 import { alpha, colors, radius } from "@/theme/tokens";
 
 export default function DamageReportScreen() {
@@ -35,6 +36,7 @@ export default function DamageReportScreen() {
   const [bookingCode, setBookingCode] = useState(params.bookingCode ?? "");
   const [quantity, setQuantity] = useState("1");
   const [description, setDescription] = useState("");
+  const [reportType, setReportType] = useState<"DAMAGE" | "MISSING">("DAMAGE");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<ImagePicker.ImagePickerAsset[]>([]);
 
@@ -90,14 +92,27 @@ export default function DamageReportScreen() {
       return;
     }
     try {
-      await createDamageReport.mutateAsync({
+      const report = await createDamageReport.mutateAsync({
         bookingId: booking.id,
         poolId: item.poolId,
         itemId: item.itemId,
-        reportType: "DAMAGE",
+        reportType,
         quantity: item.poolId ? quantity : undefined,
         description,
       });
+
+      // Upload any attached photos to the damage report
+      if (attachments.length > 0 && report?.id) {
+        const uploads = attachments.map((asset) =>
+          uploadBookingAttachmentApi(
+            booking.id,
+            { uri: asset.uri, name: asset.fileName || `damage_photo_${Date.now()}.jpg`, type: asset.type || "image/jpeg" },
+            { relatedEntity: "damage_missing_report", relatedId: report.id },
+          ).catch(() => null), // upload failures are non-fatal; don't block submission
+        );
+        await Promise.all(uploads);
+      }
+
       setSubmitted(true);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Failed to submit damage report.");
@@ -193,6 +208,28 @@ export default function DamageReportScreen() {
         ) : null}
       </Section>
       <Section title="Incident details" icon={AlertTriangle}>
+        <Field label="Report type">
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {(["DAMAGE", "MISSING"] as const).map((type) => (
+              <Pressable
+                key={type}
+                onPress={() => setReportType(type)}
+                style={[
+                  styles.typeChip,
+                  reportType === type ? styles.typeChipActive : null,
+                ]}
+              >
+                <AppText
+                  variant="small"
+                  color={reportType === type ? colors.destructive : colors.text2}
+                  style={{ fontWeight: "800" }}
+                >
+                  {type === "DAMAGE" ? "Damaged" : "Missing"}
+                </AppText>
+              </Pressable>
+            ))}
+          </View>
+        </Field>
         <Field label="Damage severity">
           <Input defaultValue="Minor · usable with caution" />
         </Field>
@@ -235,8 +272,7 @@ export default function DamageReportScreen() {
         ) : null}
         {attachments.length > 0 ? (
           <AppText variant="small" color={colors.payment.ADVANCE}>
-            {attachments.length} photo{attachments.length === 1 ? "" : "s"} attached locally. Photo
-            upload isn't wired to the server yet — keep a backup until it is.
+            {attachments.length} photo{attachments.length === 1 ? "" : "s"} attached — will upload when you submit the report.
           </AppText>
         ) : null}
       </Card>
@@ -299,5 +335,17 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: "center",
     gap: 16,
+  },
+  typeChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.surface2,
+  },
+  typeChipActive: {
+    borderColor: colors.destructive,
+    backgroundColor: "rgba(229,72,77,0.12)",
   },
 });

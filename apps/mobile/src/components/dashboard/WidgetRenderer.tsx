@@ -3,6 +3,7 @@ import { BookingQueuesWidget } from "./BookingQueuesWidget";
 import { EquipmentPoolWidget } from "./EquipmentPoolWidget";
 import { FeaturedBookingWidget } from "./FeaturedBookingWidget";
 import { OnsiteDeploymentsWidget } from "./OnsiteDeploymentsWidget";
+import { PendingTasksWidget } from "./PendingTasksWidget";
 import { QuickActionsWidget } from "./QuickActionsWidget";
 import { RecentBookingsWidget } from "./RecentBookingsWidget";
 import { ScreenAvailabilityWidget } from "./ScreenAvailabilityWidget";
@@ -18,6 +19,8 @@ export function WidgetRenderer({ id }: { id: WidgetId }) {
       return <FeaturedBookingWidget />;
     case "equipment-pool":
       return <EquipmentPoolWidget />;
+    case "pending-tasks":
+      return <PendingTasksWidget />;
     case "recent-bookings":
       return <RecentBookingsWidget />;
     case "booking-queues":

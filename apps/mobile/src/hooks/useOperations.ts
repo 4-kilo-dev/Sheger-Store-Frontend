@@ -1,16 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   acceptAssignmentApi,
+  checkoutReverseApi,
+  confirmBookingWithPaymentApi,
   createAssignmentApi,
   createBookingApi,
   createBomLineApi,
+  createHandoffSnapshotApi,
+  createReservationApi,
   declineAssignmentApi,
   deleteAssignmentApi,
   deleteBomLineApi,
+  deleteReservationApi,
   getBookingAllowedTransitionsApi,
   getBookingAssignmentsApi,
   getBookingBomLinesApi,
   getBookingDetailApi,
+  getBookingReservationsApi,
+  getBookingSnapshotsApi,
   getBookingsApi,
   recordBookingPaymentApi,
   transitionBookingStatusApi,
@@ -80,7 +87,7 @@ import {
   submitInternalEvaluationApi,
   updatePerformanceMetricApi,
 } from "@/services/evaluations.api";
-import type { BookingStatus } from "@/types/domain";
+import type { Booking, BookingStatus } from "@/types/domain";
 
 export function useBookings() {
   return useQuery({ queryKey: ["bookings"], queryFn: getBookingsApi });
@@ -140,6 +147,38 @@ export function useUpdateBooking() {
     mutationFn: ({ bookingId, payload }: { bookingId: string; payload: Record<string, unknown> }) =>
       updateBookingApi(bookingId, payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bookings"] }),
+  });
+}
+
+export function useConfirmBookingWithPayment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      booking,
+      toPaymentStatus,
+      amount,
+      totalAmount,
+      pricingDailyRate,
+      pricingRentedDays,
+    }: {
+      booking: Booking;
+      toPaymentStatus: "advance" | "fully_paid";
+      amount: number;
+      totalAmount: number;
+      pricingDailyRate: number;
+      pricingRentedDays: number;
+    }) =>
+      confirmBookingWithPaymentApi(booking, {
+        toPaymentStatus,
+        amount,
+        totalAmount,
+        pricingDailyRate,
+        pricingRentedDays,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions"] });
+    },
   });
 }
 
@@ -600,4 +639,72 @@ export function useDeleteAttachment() {
 
 export function useDownloadAttachment() {
   return useMutation({ mutationFn: (attachmentId: string) => getDownloadUrlApi(attachmentId) });
+}
+
+export function useCreateHandoffSnapshot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (bookingId: string) => createHandoffSnapshotApi(bookingId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking-snapshots"] });
+    },
+  });
+}
+
+export function useCheckoutReverse() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, reason }: { bookingId: string; reason: string }) =>
+      checkoutReverseApi(bookingId, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions"] });
+    },
+  });
+}
+
+export function useBookingReservations(bookingId: string) {
+  return useQuery({
+    queryKey: ["booking-reservations", bookingId],
+    queryFn: () => getBookingReservationsApi(bookingId),
+    enabled: !!bookingId,
+  });
+}
+
+export function useCreateReservation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      bookingId,
+      payload,
+    }: {
+      bookingId: string;
+      payload: { poolId?: string; itemId?: string; quantity?: string };
+    }) => createReservationApi(bookingId, payload),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["booking-reservations", variables.bookingId] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    },
+  });
+}
+
+export function useDeleteReservation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, id }: { bookingId: string; id: string }) =>
+      deleteReservationApi(bookingId, id),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["booking-reservations", variables.bookingId] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    },
+  });
+}
+
+export function useBookingSnapshots(bookingId: string, kind?: string) {
+  return useQuery({
+    queryKey: ["booking-snapshots", bookingId, kind],
+    queryFn: () => getBookingSnapshotsApi(bookingId, kind ? { kind } : undefined),
+    enabled: !!bookingId,
+  });
 }

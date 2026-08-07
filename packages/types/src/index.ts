@@ -37,6 +37,9 @@ export interface Booking {
   payment: PaymentStatus;
   amount: number;
   paymentAmount?: number;
+  dailyRate?: number;
+  rentedDays?: number;
+  advanceAmount?: number;
   ctoNotes: string;
   bomItems: BomItem[];
   teamLeader: string;

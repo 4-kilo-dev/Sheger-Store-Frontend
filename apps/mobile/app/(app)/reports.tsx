@@ -9,12 +9,14 @@ import {
   Truck,
   Users,
 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Share, StyleSheet, View } from "react-native";
+import { useQuery } from "@tanstack/react-query";
 import {
   AppText,
   Button,
   ErrorState,
+  Input,
   LoadingState,
   ProgressBar,
   Screen,
@@ -22,20 +24,26 @@ import {
   SegmentedTabs,
   StatCard,
 } from "@/components/ui";
-import { useBookings, useDriverTrips, useInventory, useStaff } from "@/hooks/useOperations";
-import { usePermissions } from "@/hooks/use-permissions";
-import { PERMISSION } from "@/lib/auth/permission-keys";
+import { useAppContext } from "@/context/AppContext";
 import { colors } from "@/theme/tokens";
-import { STATUS_LABELS, STATUS_ORDER } from "@/types/domain";
-import type { Booking, InventoryItem, StaffMember } from "@/types/domain";
 import { formatCompactCurrency, formatCurrency, pct } from "@/utils/format";
+import {
+  getBookingsReportApi,
+  getCanceledBookingsReportApi,
+  getCustomersReportApi,
+  getDriverTripsReportApi,
+  getEvaluationsReportApi,
+  getFreelancerWorkloadReportApi,
+  getInventoryReportApi,
+  getRevenueReportApi,
+  getUpcomingBookingsReportApi,
+} from "@/services/reports.api";
 
 const BASE_TABS = [
   "Revenue & Bookings",
   "Inventory Health",
   "Client Directory",
   "Quality & Crew",
-  "Driver Trips",
   "Audit Logs",
 ] as const;
 const STAFF_WORK_SHEETS_TAB = "Staff Work Sheets" as const;
@@ -51,75 +59,70 @@ function toCsv(rows: Array<Record<string, string | number>>): string {
   return lines.join("\n");
 }
 
-function monthsFromBookings(bookings: Booking[]) {
-  const now = new Date();
-  const buckets: { m: string; revenue: number; bookings: number }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const label = date.toLocaleDateString(undefined, { month: "short" });
-    const inMonth = bookings.filter((booking) => {
-      const eventDate = new Date(booking.eventDate);
-      return (
-        eventDate.getMonth() === date.getMonth() && eventDate.getFullYear() === date.getFullYear()
-      );
-    });
-    buckets.push({
-      m: label,
-      revenue: inMonth.reduce((sum, booking) => sum + booking.amount, 0),
-      bookings: inMonth.length,
-    });
-  }
-  return buckets;
-}
-
 export default function ReportsScreen() {
-  const { can } = usePermissions();
-  const canViewStaffWorkSheets = can(PERMISSION.USER_VIEW);
+  const { authUser } = useAppContext();
+  const role = (authUser?.role || "").toLowerCase();
+  const isAdminOrSupervisor = role === "admin" || role === "supervisor";
+  const canViewStaffWorkSheets = isAdminOrSupervisor;
   const visibleTabs = canViewStaffWorkSheets ? TABS : BASE_TABS;
   const [tab, setTab] = useState<(typeof TABS)[number]>("Revenue & Bookings");
-  const bookingsQuery = useBookings();
-  const inventoryQuery = useInventory();
-  const staffQuery = useStaff();
-  const driverTripsQuery = useDriverTrips();
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [status, setStatus] = useState("");
+  const [location, setLocation] = useState("");
+  const [sheetStartDate, setSheetStartDate] = useState("");
+  const [sheetEndDate, setSheetEndDate] = useState("");
 
-  const isLoading =
-    bookingsQuery.isLoading ||
-    inventoryQuery.isLoading ||
-    staffQuery.isLoading ||
-    driverTripsQuery.isLoading;
-  const isError =
-    bookingsQuery.isError ||
-    inventoryQuery.isError ||
-    staffQuery.isError ||
-    driverTripsQuery.isError;
+  const bookingsQuery = useQuery({
+    queryKey: ["reports-bookings", { status, startDate, endDate, location }],
+    queryFn: () => getBookingsReportApi({ status, startDate, endDate, location }),
+  });
+  const revenueQuery = useQuery({
+    queryKey: ["reports-revenue", { startDate, endDate }],
+    queryFn: () => getRevenueReportApi({ startDate, endDate }),
+  });
+  const inventoryQuery = useQuery({
+    queryKey: ["reports-inventory"],
+    queryFn: () => getInventoryReportApi(),
+  });
+  const customersQuery = useQuery({
+    queryKey: ["reports-customers"],
+    queryFn: () => getCustomersReportApi(),
+  });
+  const evaluationsQuery = useQuery({
+    queryKey: ["reports-evaluations", { startDate, endDate }],
+    queryFn: () => getEvaluationsReportApi({ startDate, endDate }),
+  });
+  const canceledQuery = useQuery({
+    queryKey: ["reports-canceled", { startDate, endDate }],
+    queryFn: () => getCanceledBookingsReportApi({ startDate, endDate }),
+  });
+  const upcomingQuery = useQuery({
+    queryKey: ["reports-upcoming"],
+    queryFn: () => getUpcomingBookingsReportApi(7),
+  });
+  const freelancerQuery = useQuery({
+    queryKey: ["reports-freelancer-workload", { startDate: sheetStartDate, endDate: sheetEndDate }],
+    queryFn: () =>
+      getFreelancerWorkloadReportApi({
+        startDate: sheetStartDate || undefined,
+        endDate: sheetEndDate || undefined,
+      }),
+    enabled: canViewStaffWorkSheets && tab === STAFF_WORK_SHEETS_TAB,
+  });
+  const driverTripsReportQuery = useQuery({
+    queryKey: ["reports-driver-trips", { startDate: sheetStartDate, endDate: sheetEndDate }],
+    queryFn: () =>
+      getDriverTripsReportApi({
+        startDate: sheetStartDate || undefined,
+        endDate: sheetEndDate || undefined,
+      }),
+    enabled: canViewStaffWorkSheets && tab === STAFF_WORK_SHEETS_TAB,
+  });
 
-  if (isLoading) {
-    return (
-      <Screen>
-        <LoadingState label="Loading reports..." />
-      </Screen>
-    );
-  }
-
-  if (isError) {
-    return (
-      <Screen>
-        <ErrorState
-          detail="Could not load report data from the server."
-          onRetry={() => {
-            bookingsQuery.refetch();
-            inventoryQuery.refetch();
-            staffQuery.refetch();
-            driverTripsQuery.refetch();
-          }}
-        />
-      </Screen>
-    );
-  }
-
-  const BOOKINGS = bookingsQuery.data ?? [];
-  const INVENTORY = inventoryQuery.data ?? [];
-  const STAFF = staffQuery.data ?? [];
+  const safeTab = (visibleTabs as readonly string[]).includes(tab)
+    ? tab
+    : ("Revenue & Bookings" as const);
 
   return (
     <Screen>
@@ -127,207 +130,198 @@ export default function ReportsScreen() {
         <AppText variant="eyebrow">Business Intelligence</AppText>
         <AppText variant="title">Operations Reports</AppText>
         <AppText variant="subtitle">
-          A consolidated view of booking volume, collections, stock use, and crew output.
+          Booking, revenue, equipment, and crew performance from the reporting APIs.
         </AppText>
       </View>
-      <SegmentedTabs tabs={visibleTabs} value={tab} onChange={setTab} />
 
-      {tab === "Revenue & Bookings" ? (
-        <RevenueBookingsTab BOOKINGS={BOOKINGS} INVENTORY={INVENTORY} />
+      <Section title="Filters" icon={BarChart3}>
+        <View style={styles.filterRow}>
+          <View style={{ flex: 1 }}>
+            <AppText variant="small" color={colors.text2}>
+              Start date
+            </AppText>
+            <Input value={startDate} onChangeText={setStartDate} placeholder="YYYY-MM-DD" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <AppText variant="small" color={colors.text2}>
+              End date
+            </AppText>
+            <Input value={endDate} onChangeText={setEndDate} placeholder="YYYY-MM-DD" />
+          </View>
+        </View>
+        <View style={styles.filterRow}>
+          <View style={{ flex: 1 }}>
+            <AppText variant="small" color={colors.text2}>
+              Status
+            </AppText>
+            <Input
+              value={status}
+              onChangeText={setStatus}
+              placeholder="e.g. CONFIRMED"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <AppText variant="small" color={colors.text2}>
+              Location
+            </AppText>
+            <Input
+              value={location}
+              onChangeText={setLocation}
+              placeholder="Search location..."
+            />
+          </View>
+        </View>
+      </Section>
+
+      <SegmentedTabs
+        tabs={visibleTabs}
+        value={safeTab}
+        onChange={(next) => setTab(next as (typeof TABS)[number])}
+      />
+
+      {safeTab === "Revenue & Bookings" ? (
+        <RevenueBookingsTab
+          bookingsQuery={bookingsQuery}
+          revenueQuery={revenueQuery}
+        />
       ) : null}
-      {tab === "Inventory Health" ? <InventoryHealthTab INVENTORY={INVENTORY} /> : null}
-      {tab === "Client Directory" ? <ClientDirectoryTab BOOKINGS={BOOKINGS} /> : null}
-      {tab === "Quality & Crew" ? <QualityCrewTab STAFF={STAFF} /> : null}
-      {tab === "Staff Work Sheets" && canViewStaffWorkSheets ? (
-        <StaffWorkSheetsTab STAFF={STAFF} />
+      {safeTab === "Inventory Health" ? <InventoryHealthTab query={inventoryQuery} /> : null}
+      {safeTab === "Client Directory" ? <ClientDirectoryTab query={customersQuery} /> : null}
+      {safeTab === "Quality & Crew" ? <QualityCrewTab query={evaluationsQuery} /> : null}
+      {safeTab === "Audit Logs" ? (
+        <AuditLogsTab canceledQuery={canceledQuery} upcomingQuery={upcomingQuery} />
       ) : null}
-      {tab === "Driver Trips" ? <DriverTripsTab /> : null}
-      {tab === "Audit Logs" ? <AuditLogsTab BOOKINGS={BOOKINGS} /> : null}
+      {safeTab === STAFF_WORK_SHEETS_TAB && canViewStaffWorkSheets ? (
+        <StaffWorkSheetsTab
+          sheetStartDate={sheetStartDate}
+          sheetEndDate={sheetEndDate}
+          setSheetStartDate={setSheetStartDate}
+          setSheetEndDate={setSheetEndDate}
+          freelancerQuery={freelancerQuery}
+          driverTripsReportQuery={driverTripsReportQuery}
+        />
+      ) : null}
     </Screen>
   );
 }
 
-function StaffWorkSheetsTab({ STAFF }: { STAFF: StaffMember[] }) {
-  return (
-    <View style={{ gap: 12 }}>
-      <Section title="Crew Workload" icon={Users} aside="This quarter">
-        {STAFF.map((staff) => (
-          <View key={staff.id} style={{ gap: 6 }}>
-            <View style={styles.lineTop}>
-              <View>
-                <AppText style={{ fontWeight: "800" }}>{staff.name}</AppText>
-                <AppText variant="small" color={colors.text2}>
-                  {staff.role} · {staff.team}
-                </AppText>
-              </View>
-              <AppText variant="data">
-                {staff.jobs}/{staff.capacity}
-              </AppText>
-            </View>
-            <ProgressBar value={pct(staff.jobs, staff.capacity)} />
-          </View>
-        ))}
-      </Section>
-    </View>
-  );
-}
-
-function DriverTripsTab() {
-  const { data: trips = [], isLoading, isError, refetch } = useDriverTrips();
-  if (isLoading) return <LoadingState label="Loading driver trips..." />;
-  if (isError)
-    return <ErrorState detail="Could not load driver trips." onRetry={() => refetch()} />;
-  return (
-    <Section title="Driver Trips" icon={Truck} aside={`${trips.length} trips`}>
-      {trips.length === 0 ? (
-        <AppText variant="subtitle">No driver trips recorded.</AppText>
-      ) : (
-        <View style={{ gap: 10 }}>
-          {trips.map((trip) => (
-            <View key={trip.id} style={styles.lineTop}>
-              <View>
-                <AppText style={{ fontWeight: "800" }}>
-                  {trip.driver?.name || "Unknown Driver"}
-                </AppText>
-                <AppText variant="small" color={colors.text2}>
-                  {trip.booking?.eventLocation || trip.reason}
-                </AppText>
-              </View>
-              <AppText variant="data" color={colors.text3}>
-                {trip.leftAt ? new Date(trip.leftAt).toLocaleDateString() : "—"}
-              </AppText>
-            </View>
-          ))}
-        </View>
-      )}
-    </Section>
-  );
-}
-
 function RevenueBookingsTab({
-  BOOKINGS,
-  INVENTORY,
+  bookingsQuery,
+  revenueQuery,
 }: {
-  BOOKINGS: Booking[];
-  INVENTORY: InventoryItem[];
+  bookingsQuery: ReturnType<typeof useQuery<Awaited<ReturnType<typeof getBookingsReportApi>>>>;
+  revenueQuery: ReturnType<typeof useQuery<Awaited<ReturnType<typeof getRevenueReportApi>>>>;
 }) {
-  const stats = useMemo(() => {
-    const totalRevenue = BOOKINGS.reduce((sum, booking) => sum + booking.amount, 0);
-    const completedJobs = BOOKINGS.filter(
-      (booking) => booking.status === "COMPLETED" || booking.status === "DONE",
-    ).length;
-    const totalInventory = INVENTORY.reduce((sum, item) => sum + item.total, 0);
-    const available = INVENTORY.reduce((sum, item) => sum + item.available, 0);
-    return {
-      totalRevenue,
-      completedJobs,
-      utilization: pct(totalInventory - available, totalInventory),
-      avgJobValue: BOOKINGS.length ? Math.round(totalRevenue / BOOKINGS.length / 1000) : 0,
-    };
-  }, [BOOKINGS, INVENTORY]);
-  const MONTHS = useMemo(() => monthsFromBookings(BOOKINGS), [BOOKINGS]);
-  const maxRevenue = Math.max(1, ...MONTHS.map((month) => month.revenue));
-  const trendNote = (thisValue: number, lastValue: number) => {
-    if (!lastValue) return "No prior month data";
-    const change = ((thisValue - lastValue) / lastValue) * 100;
-    return `${change >= 0 ? "+" : ""}${change.toFixed(1)}% vs last month`;
-  };
-  const thisMonth = MONTHS[MONTHS.length - 1];
-  const lastMonth = MONTHS[MONTHS.length - 2];
-  const avgJobValue = (month?: { revenue: number; bookings: number }) =>
-    month?.bookings ? month.revenue / month.bookings : 0;
+  if (bookingsQuery.isLoading || revenueQuery.isLoading) {
+    return <LoadingState label="Loading revenue & bookings..." />;
+  }
+  if (bookingsQuery.isError || revenueQuery.isError) {
+    return (
+      <ErrorState
+        detail="Could not load bookings/revenue reports."
+        onRetry={() => {
+          bookingsQuery.refetch();
+          revenueQuery.refetch();
+        }}
+      />
+    );
+  }
+
+  const bookingsReport = bookingsQuery.data!;
+  const revenueReport = revenueQuery.data!;
+  const monthly = Object.entries(revenueReport.monthlyRevenue || {}).map(([m, revenue]) => ({
+    m,
+    revenue,
+  }));
+  const maxRevenue = Math.max(1, ...monthly.map((row) => row.revenue));
 
   return (
     <>
       <View style={{ gap: 12 }}>
         <StatCard
           label="Booked Revenue"
-          value={formatCompactCurrency(stats.totalRevenue)}
-          note={trendNote(thisMonth.revenue, lastMonth.revenue)}
+          value={formatCompactCurrency(revenueReport.totalRevenue || bookingsReport.totalBookingAmountValue || 0)}
+          note={`${bookingsReport.totalCount} bookings`}
           icon={Banknote}
         />
         <StatCard
-          label="Completed Jobs"
-          value={stats.completedJobs}
-          note={`${pct(stats.completedJobs, BOOKINGS.length)}% completion rate`}
+          label="Booking Count"
+          value={bookingsReport.totalCount}
+          note="Filtered window"
           icon={CalendarCheck}
         />
         <StatCard
-          label="Fleet Utilization"
-          value={`${stats.utilization}%`}
-          note="LED cabinet fleet"
-          icon={Gauge}
-        />
-        <StatCard
           label="Avg. Job Value"
-          value={`${stats.avgJobValue}K`}
-          note={trendNote(avgJobValue(thisMonth), avgJobValue(lastMonth))}
+          value={
+            bookingsReport.totalCount
+              ? formatCompactCurrency(
+                  (bookingsReport.totalBookingAmountValue || 0) / bookingsReport.totalCount,
+                )
+              : "—"
+          }
+          note="Contract average"
           icon={Banknote}
         />
       </View>
-      <Section title="Revenue Trend" icon={BarChart3} aside="Last 6 months">
-        <View style={styles.chart}>
-          {MONTHS.map((month) => (
-            <View key={month.m} style={styles.barWrap}>
-              <View
-                style={[styles.bar, { height: Math.max(20, (month.revenue / maxRevenue) * 190) }]}
-              />
-              <AppText variant="small" style={{ fontWeight: "800" }}>
-                {month.m}
-              </AppText>
-              <AppText variant="data" color={colors.text3}>
-                {month.bookings}
-              </AppText>
-            </View>
-          ))}
-        </View>
+
+      <Section title="Revenue Trend" icon={BarChart3} aside="Monthly">
+        {monthly.length === 0 ? (
+          <AppText variant="subtitle">No monthly revenue data for this range.</AppText>
+        ) : (
+          <View style={styles.chart}>
+            {monthly.map((month) => (
+              <View key={month.m} style={styles.barWrap}>
+                <View
+                  style={[styles.bar, { height: Math.max(20, (month.revenue / maxRevenue) * 190) }]}
+                />
+                <AppText variant="small" style={{ fontWeight: "800" }}>
+                  {month.m}
+                </AppText>
+              </View>
+            ))}
+          </View>
+        )}
       </Section>
+
       <Section title="Booking Status Distribution" icon={PieChart}>
-        {STATUS_ORDER.map((status) => {
-          const count = BOOKINGS.filter((booking) => booking.status === status).length;
-          return (
-            <View key={status} style={styles.lineTop}>
-              <AppText variant="eyebrow" color={colors.status[status]}>
-                {STATUS_LABELS[status]}
-              </AppText>
-              <AppText variant="data" color={colors.status[status]} style={{ fontWeight: "900" }}>
-                {count}
+        {Object.entries(bookingsReport.statusCounts || {}).map(([status, count]) => (
+          <View key={status} style={styles.lineTop}>
+            <AppText variant="eyebrow">{status}</AppText>
+            <AppText variant="data" style={{ fontWeight: "900" }}>
+              {count}
+            </AppText>
+          </View>
+        ))}
+      </Section>
+
+      <Section title="Recent Bookings" icon={CalendarCheck}>
+        {(bookingsReport.bookings || []).slice(0, 12).map((booking) => (
+          <View key={`${booking.bookingCode}-${booking.createdAt}`} style={styles.lineTop}>
+            <View>
+              <AppText style={{ fontWeight: "800" }}>{booking.bookingCode}</AppText>
+              <AppText variant="small" color={colors.text2}>
+                {booking.customerName} · {booking.status}
               </AppText>
             </View>
-          );
-        })}
+            <AppText variant="data" color={colors.accent}>
+              {formatCurrency(Number(booking.paymentAmount) || 0)}
+            </AppText>
+          </View>
+        ))}
       </Section>
-      <Section title="Payment Collection Summary" icon={Banknote}>
-        {(["PAID", "ADVANCE", "UNPAID"] as const).map((payment) => {
-          const data = BOOKINGS.filter((booking) => booking.payment === payment);
-          return (
-            <View key={payment} style={styles.lineTop}>
-              <AppText variant="eyebrow" color={colors.payment[payment]}>
-                {payment}
-              </AppText>
-              <AppText variant="data">
-                {data.length} ·{" "}
-                {formatCurrency(data.reduce((sum, booking) => sum + booking.amount, 0))}
-              </AppText>
-            </View>
-          );
-        })}
-      </Section>
-      <Section title="Export operational report" icon={Download}>
-        <AppText variant="subtitle">
-          Generate a booking, payment, inventory, or team performance report.
-        </AppText>
+
+      <Section title="Export" icon={Download}>
         <Button
           variant="outline"
           icon={Download}
           onPress={() => {
             const csv = toCsv(
-              BOOKINGS.map((b) => ({
-                code: b.code,
-                client: b.client,
+              (bookingsReport.bookings || []).map((b) => ({
+                code: b.bookingCode,
+                client: b.customerName,
                 status: b.status,
-                payment: b.payment,
-                amount: b.amount,
+                payment: b.paymentStatus,
+                amount: b.paymentAmount,
                 eventDate: b.eventDate,
               })),
             );
@@ -341,59 +335,90 @@ function RevenueBookingsTab({
   );
 }
 
-function InventoryHealthTab({ INVENTORY }: { INVENTORY: InventoryItem[] }) {
-  const categories = useMemo(() => {
-    const byCategory = new Map<string, InventoryItem[]>();
-    for (const item of INVENTORY) {
-      const list = byCategory.get(item.category) ?? [];
-      list.push(item);
-      byCategory.set(item.category, list);
-    }
-    return Array.from(byCategory.entries()).map(([category, items]) => {
-      const total = items.reduce((sum, item) => sum + item.total, 0);
-      const available = items.reduce((sum, item) => sum + item.available, 0);
-      const onsite = items.reduce((sum, item) => sum + item.onsite, 0);
-      const damaged = items.reduce((sum, item) => sum + item.damaged, 0);
-      return { category, total, available, onsite, damaged };
-    });
-  }, [INVENTORY]);
+function InventoryHealthTab({
+  query,
+}: {
+  query: ReturnType<typeof useQuery<Awaited<ReturnType<typeof getInventoryReportApi>>>>;
+}) {
+  if (query.isLoading) return <LoadingState label="Loading inventory report..." />;
+  if (query.isError) {
+    return <ErrorState detail="Could not load inventory report." onRetry={() => query.refetch()} />;
+  }
+  const categories = query.data || [];
 
   return (
     <View style={{ gap: 12 }}>
-      {categories.map((c) => {
-        const availPct = pct(c.available, c.total);
-        const onsitePct = pct(c.onsite, c.total);
-        const damagedPct = pct(c.damaged, c.total);
-        return (
-          <Section key={c.category} title={c.category} icon={Gauge} aside={`${c.total} total`}>
-            <View style={styles.healthBar}>
-              <View
-                style={[
-                  styles.healthSegment,
-                  { flex: Math.max(availPct, 0.001), backgroundColor: colors.success },
-                ]}
-              />
-              <View
-                style={[
-                  styles.healthSegment,
-                  { flex: Math.max(onsitePct, 0.001), backgroundColor: colors.status.ACCEPTED },
-                ]}
-              />
-              <View
-                style={[
-                  styles.healthSegment,
-                  { flex: Math.max(damagedPct, 0.001), backgroundColor: colors.destructive },
-                ]}
-              />
-            </View>
-            <View style={styles.healthLegendRow}>
-              <LegendDot label={`Available ${c.available}`} tone={colors.success} />
-              <LegendDot label={`Onsite ${c.onsite}`} tone={colors.status.ACCEPTED} />
-              <LegendDot label={`Damaged ${c.damaged}`} tone={colors.destructive} />
-            </View>
-          </Section>
-        );
-      })}
+      {categories.length === 0 ? (
+        <AppText variant="subtitle">No inventory categories in report.</AppText>
+      ) : (
+        categories.map((category) => {
+          const total = category.pools.reduce((sum, p) => sum + (p.totalQuantity || 0), 0);
+          const available = category.pools.reduce((sum, p) => sum + (p.availableQuantity || 0), 0);
+          const onsite = category.pools.reduce((sum, p) => sum + (p.checkedOutQuantity || 0), 0);
+          const damaged = category.pools.reduce((sum, p) => sum + (p.damagedQuantity || 0), 0);
+          const availPct = pct(available, total);
+          const onsitePct = pct(onsite, total);
+          const damagedPct = pct(damaged, total);
+          return (
+            <Section key={category.categoryId} title={category.name} icon={Gauge} aside={`${total} total`}>
+              <View style={styles.healthBar}>
+                <View
+                  style={[
+                    styles.healthSegment,
+                    { flex: Math.max(availPct, 0.001), backgroundColor: colors.success },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.healthSegment,
+                    { flex: Math.max(onsitePct, 0.001), backgroundColor: colors.status.ACCEPTED },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.healthSegment,
+                    { flex: Math.max(damagedPct, 0.001), backgroundColor: colors.destructive },
+                  ]}
+                />
+              </View>
+              <View style={styles.healthLegendRow}>
+                <LegendDot label={`Available ${available}`} tone={colors.success} />
+                <LegendDot label={`Checked out ${onsite}`} tone={colors.status.ACCEPTED} />
+                <LegendDot label={`Damaged ${damaged}`} tone={colors.destructive} />
+              </View>
+              {category.pools.map((pool) => (
+                <View key={pool.poolId} style={styles.lineTop}>
+                  <AppText variant="small">{pool.name}</AppText>
+                  <AppText variant="data">{pool.availableQuantity}/{pool.totalQuantity}</AppText>
+                </View>
+              ))}
+            </Section>
+          );
+        })
+      )}
+      <Section title="Export" icon={Download}>
+        <Button
+          variant="outline"
+          icon={Download}
+          onPress={() => {
+            const csv = toCsv(
+              categories.flatMap((category) =>
+                category.pools.map((p) => ({
+                  category: category.name,
+                  pool: p.name,
+                  total: p.totalQuantity || 0,
+                  available: p.availableQuantity || 0,
+                  checkedOut: p.checkedOutQuantity || 0,
+                  damaged: p.damagedQuantity || 0,
+                })),
+              ),
+            );
+            Share.share({ message: csv, title: "Inventory Health Report" });
+          }}
+        >
+          Export Inventory CSV
+        </Button>
+      </Section>
     </View>
   );
 }
@@ -409,29 +434,27 @@ function LegendDot({ label, tone }: { label: string; tone: string }) {
   );
 }
 
-function ClientDirectoryTab({ BOOKINGS }: { BOOKINGS: Booking[] }) {
-  const clients = useMemo(() => {
-    const byClient = new Map<string, { bookings: number; completed: number; revenue: number }>();
-    for (const booking of BOOKINGS) {
-      const entry = byClient.get(booking.client) ?? { bookings: 0, completed: 0, revenue: 0 };
-      entry.bookings += 1;
-      if (booking.status === "COMPLETED" || booking.status === "DONE") entry.completed += 1;
-      entry.revenue += booking.amount;
-      byClient.set(booking.client, entry);
-    }
-    return Array.from(byClient.entries())
-      .map(([name, data]) => ({ name, ...data }))
-      .sort((a, b) => b.revenue - a.revenue);
-  }, [BOOKINGS]);
+function ClientDirectoryTab({
+  query,
+}: {
+  query: ReturnType<typeof useQuery<Awaited<ReturnType<typeof getCustomersReportApi>>>>;
+}) {
+  if (query.isLoading) return <LoadingState label="Loading clients..." />;
+  if (query.isError) {
+    return <ErrorState detail="Could not load customers report." onRetry={() => query.refetch()} />;
+  }
+  const clients = [...(query.data || [])].sort(
+    (a, b) => b.totalRevenueContributed - a.totalRevenueContributed,
+  );
 
   return (
     <Section title="Repeat clients & lifetime valuations" icon={Users}>
       <View style={{ gap: 14 }}>
         {clients.map((client) => (
-          <View key={client.name} style={{ gap: 4 }}>
+          <View key={client.customerId} style={{ gap: 4 }}>
             <View style={styles.lineTop}>
               <AppText style={{ fontWeight: "800" }}>{client.name}</AppText>
-              {client.bookings >= 5 ? (
+              {client.totalBookings >= 5 ? (
                 <View style={styles.repeatBadge}>
                   <AppText variant="small" color={colors.accent} style={{ fontWeight: "800" }}>
                     Repeat Client
@@ -441,72 +464,151 @@ function ClientDirectoryTab({ BOOKINGS }: { BOOKINGS: Booking[] }) {
             </View>
             <View style={styles.lineTop}>
               <AppText variant="small" color={colors.text2}>
-                {client.bookings} bookings · {client.completed} completed
+                {client.totalBookings} bookings · {client.completedBookings} completed
               </AppText>
               <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
-                {formatCurrency(client.revenue)}
+                {formatCurrency(client.totalRevenueContributed)}
               </AppText>
             </View>
           </View>
         ))}
       </View>
+      <Button
+        variant="outline"
+        icon={Download}
+        onPress={() => {
+          const csv = toCsv(
+            clients.map((c) => ({
+              name: c.name,
+              bookings: c.totalBookings,
+              completed: c.completedBookings,
+              revenue: c.totalRevenueContributed,
+            })),
+          );
+          Share.share({ message: csv, title: "Client Directory Report" });
+        }}
+      >
+        Export Clients CSV
+      </Button>
     </Section>
   );
 }
 
-function QualityCrewTab({ STAFF }: { STAFF: StaffMember[] }) {
+function QualityCrewTab({
+  query,
+}: {
+  query: ReturnType<typeof useQuery<Awaited<ReturnType<typeof getEvaluationsReportApi>>>>;
+}) {
+  if (query.isLoading) return <LoadingState label="Loading evaluations..." />;
+  if (query.isError) {
+    return (
+      <ErrorState detail="Could not load evaluations report." onRetry={() => query.refetch()} />
+    );
+  }
+  const report = query.data!;
+  const averages = Object.entries(report.metricAverages || {});
+
   return (
-    <Section title="Crew Performance" icon={Users} aside="This quarter">
-      {STAFF.map((staff) => (
-        <View key={staff.id} style={{ gap: 6 }}>
-          <View style={styles.lineTop}>
+    <View style={{ gap: 12 }}>
+      <Section title="Metric Averages" icon={Users}>
+        {averages.length === 0 ? (
+          <AppText variant="subtitle">No evaluation metrics in range.</AppText>
+        ) : (
+          averages.map(([key, metric]) => (
+            <View key={key} style={{ gap: 6 }}>
+              <View style={styles.lineTop}>
+                <AppText style={{ fontWeight: "800" }}>{metric.label}</AppText>
+                <AppText variant="data">{metric.average.toFixed(1)}</AppText>
+              </View>
+              <ProgressBar value={Math.min(100, Math.round((metric.average / 10) * 100))} />
+            </View>
+          ))
+        )}
+      </Section>
+      <Section title="Recent Evaluations" icon={BarChart3}>
+        {(report.evaluations || []).slice(0, 12).map((evaluation) => (
+          <View key={evaluation.id} style={styles.lineTop}>
             <View>
-              <AppText style={{ fontWeight: "800" }}>{staff.name}</AppText>
+              <AppText style={{ fontWeight: "800" }}>{evaluation.bookingCode}</AppText>
               <AppText variant="small" color={colors.text2}>
-                {staff.role} · {staff.team}
+                {evaluation.clientNameVenue} · {evaluation.evaluatorName}
               </AppText>
             </View>
-            <AppText variant="data">
-              {staff.jobs}/{staff.capacity}
-            </AppText>
+            <AppText variant="data">{evaluation.teamSize} crew</AppText>
           </View>
-          <ProgressBar value={pct(staff.jobs, staff.capacity)} />
-        </View>
-      ))}
-    </Section>
+        ))}
+      </Section>
+      <Section title="Export" icon={Download}>
+        <Button
+          variant="outline"
+          icon={Download}
+          onPress={() => {
+            const csv = toCsv(
+              (report.evaluations || []).map((e) => ({
+                booking: e.bookingCode,
+                client: e.clientNameVenue,
+                evaluator: e.evaluatorName,
+                crew: e.teamSize,
+              })),
+            );
+            Share.share({ message: csv, title: "Quality & Crew Report" });
+          }}
+        >
+          Export Evaluations CSV
+        </Button>
+      </Section>
+    </View>
   );
 }
 
-function AuditLogsTab({ BOOKINGS }: { BOOKINGS: Booking[] }) {
-  const upcoming = useMemo(() => {
-    const now = new Date();
-    return BOOKINGS.filter((booking) => {
-      const date = new Date(booking.assemblyDate);
-      const diff = (date.getTime() - now.getTime()) / 86400000;
-      return diff >= 0 && diff <= 7;
-    }).sort((a, b) => a.assemblyDate.localeCompare(b.assemblyDate));
-  }, [BOOKINGS]);
+function AuditLogsTab({
+  canceledQuery,
+  upcomingQuery,
+}: {
+  canceledQuery: ReturnType<
+    typeof useQuery<Awaited<ReturnType<typeof getCanceledBookingsReportApi>>>
+  >;
+  upcomingQuery: ReturnType<
+    typeof useQuery<Awaited<ReturnType<typeof getUpcomingBookingsReportApi>>>
+  >;
+}) {
+  if (canceledQuery.isLoading || upcomingQuery.isLoading) {
+    return <LoadingState label="Loading audit logs..." />;
+  }
+  if (canceledQuery.isError || upcomingQuery.isError) {
+    return (
+      <ErrorState
+        detail="Could not load canceled/upcoming reports."
+        onRetry={() => {
+          canceledQuery.refetch();
+          upcomingQuery.refetch();
+        }}
+      />
+    );
+  }
 
-  const canceled = BOOKINGS.filter((booking) => booking.status === "CANCELED");
+  const canceled = canceledQuery.data || [];
+  const upcoming = upcomingQuery.data || [];
 
   return (
     <>
-      <Section
-        title="Canceled Bookings Audit Log"
-        icon={AlertTriangle}
-        aside={`${canceled.length} canceled`}
-      >
+      <Section title="Canceled Bookings Audit Log" icon={AlertTriangle} aside={`${canceled.length}`}>
         {canceled.length === 0 ? (
           <AppText variant="subtitle">No cancellations recorded in the current period.</AppText>
         ) : (
           <View style={{ gap: 10 }}>
             {canceled.map((booking) => (
-              <View key={booking.code} style={styles.lineTop}>
-                <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
-                  {booking.code}
-                </AppText>
-                <AppText variant="small" color={colors.text2}>
-                  {booking.client}
+              <View key={booking.id || booking.bookingCode} style={{ gap: 2 }}>
+                <View style={styles.lineTop}>
+                  <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
+                    {booking.bookingCode}
+                  </AppText>
+                  <AppText variant="small" color={colors.text2}>
+                    {booking.customerName}
+                  </AppText>
+                </View>
+                <AppText variant="small" color={colors.text3}>
+                  {booking.reason || "No reason"} · {booking.canceledBy || "—"}
                 </AppText>
               </View>
             ))}
@@ -515,28 +617,185 @@ function AuditLogsTab({ BOOKINGS }: { BOOKINGS: Booking[] }) {
       </Section>
       <Section title="Upcoming Operations" icon={CalendarCheck} aside="Next 7 days">
         {upcoming.length === 0 ? (
-          <AppText variant="subtitle">Nothing scheduled to assemble in the next 7 days.</AppText>
+          <AppText variant="subtitle">Nothing scheduled in the next 7 days.</AppText>
         ) : (
           <View style={{ gap: 10 }}>
             {upcoming.map((booking) => (
-              <View key={booking.code} style={styles.lineTop}>
+              <View key={booking.id || booking.bookingCode} style={styles.lineTop}>
                 <View>
                   <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
-                    {booking.code}
+                    {booking.bookingCode}
                   </AppText>
                   <AppText variant="small" color={colors.text2}>
-                    {booking.client} · {booking.venue}
+                    {booking.customerName} · {booking.eventLocation}
                   </AppText>
                 </View>
                 <AppText variant="data" color={colors.text3}>
-                  {booking.assemblyDate}
+                  {booking.eventDate?.slice(0, 10)}
                 </AppText>
               </View>
             ))}
           </View>
         )}
       </Section>
+      <Section title="Export" icon={Download}>
+        <Button
+          variant="outline"
+          icon={Download}
+          onPress={() => {
+            const canceledRows = canceled.map((b) => ({
+              type: "CANCELED",
+              code: b.bookingCode,
+              client: b.customerName,
+              reason: b.reason || "",
+              by: b.canceledBy || "",
+            }));
+            const upcomingRows = upcoming.map((b) => ({
+              type: "UPCOMING",
+              code: b.bookingCode,
+              client: b.customerName,
+              location: b.eventLocation,
+              date: b.eventDate || "",
+            }));
+            Share.share({
+              message: toCsv([...canceledRows, ...upcomingRows]),
+              title: "Audit Logs Report",
+            });
+          }}
+        >
+          Export Audit CSV
+        </Button>
+      </Section>
     </>
+  );
+}
+
+function StaffWorkSheetsTab({
+  sheetStartDate,
+  sheetEndDate,
+  setSheetStartDate,
+  setSheetEndDate,
+  freelancerQuery,
+  driverTripsReportQuery,
+}: {
+  sheetStartDate: string;
+  sheetEndDate: string;
+  setSheetStartDate: (value: string) => void;
+  setSheetEndDate: (value: string) => void;
+  freelancerQuery: ReturnType<
+    typeof useQuery<Awaited<ReturnType<typeof getFreelancerWorkloadReportApi>>>
+  >;
+  driverTripsReportQuery: ReturnType<
+    typeof useQuery<Awaited<ReturnType<typeof getDriverTripsReportApi>>>
+  >;
+}) {
+  const freelancers = freelancerQuery.data || [];
+  const trips = driverTripsReportQuery.data || [];
+
+  return (
+    <View style={{ gap: 12 }}>
+      <Section title="Work Sheet Filters" icon={Users}>
+        <View style={styles.filterRow}>
+          <View style={{ flex: 1 }}>
+            <Input
+              value={sheetStartDate}
+              onChangeText={setSheetStartDate}
+              placeholder="Start YYYY-MM-DD"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Input
+              value={sheetEndDate}
+              onChangeText={setSheetEndDate}
+              placeholder="End YYYY-MM-DD"
+            />
+          </View>
+        </View>
+      </Section>
+
+      <Section title="Freelancer Workload" icon={Users} aside={`${freelancers.length}`}>
+        {freelancerQuery.isLoading ? (
+          <LoadingState label="Loading freelancer workload..." />
+        ) : freelancerQuery.isError ? (
+          <ErrorState
+            detail="Could not load freelancer workload."
+            onRetry={() => freelancerQuery.refetch()}
+          />
+        ) : freelancers.length === 0 ? (
+          <AppText variant="subtitle">No freelancer workload in this range.</AppText>
+        ) : (
+          freelancers.map((row) => (
+            <View key={row.userId} style={styles.lineTop}>
+              <View>
+                <AppText style={{ fontWeight: "800" }}>{row.name}</AppText>
+                <AppText variant="small" color={colors.text2}>
+                  {row.email || "—"}
+                </AppText>
+              </View>
+              <AppText variant="data">
+                {row.bookingsCount} jobs · {row.sqmCovered} sqm
+              </AppText>
+            </View>
+          ))
+        )}
+      </Section>
+
+      <Section title="Driver Trips Summary" icon={Truck} aside={`${trips.length}`}>
+        {driverTripsReportQuery.isLoading ? (
+          <LoadingState label="Loading driver trips report..." />
+        ) : driverTripsReportQuery.isError ? (
+          <ErrorState
+            detail="Could not load driver trips report."
+            onRetry={() => driverTripsReportQuery.refetch()}
+          />
+        ) : trips.length === 0 ? (
+          <AppText variant="subtitle">No driver trip metrics in this range.</AppText>
+        ) : (
+          trips.map((row) => (
+            <View key={row.driverUserId} style={styles.lineTop}>
+              <View>
+                <AppText style={{ fontWeight: "800" }}>{row.name}</AppText>
+                <AppText variant="small" color={colors.text2}>
+                  {row.approvedCount} approved · {row.pendingCount} pending · {row.rejectedCount}{" "}
+                  rejected
+                </AppText>
+              </View>
+              <AppText variant="data">{row.tripsCount} trips</AppText>
+            </View>
+          ))
+        )}
+      </Section>
+
+      <Section title="Export" icon={Download}>
+        <Button
+          variant="outline"
+          icon={Download}
+          onPress={() => {
+            const freelanceRows = freelancers.map((row) => ({
+              sheet: "freelancer",
+              name: row.name,
+              email: row.email || "",
+              bookings: row.bookingsCount,
+              sqm: row.sqmCovered,
+            }));
+            const tripRows = trips.map((row) => ({
+              sheet: "driver",
+              name: row.name,
+              trips: row.tripsCount,
+              approved: row.approvedCount,
+              pending: row.pendingCount,
+              rejected: row.rejectedCount,
+            }));
+            Share.share({
+              message: toCsv([...freelanceRows, ...tripRows]),
+              title: "Staff Work Sheets Report",
+            });
+          }}
+        >
+          Export Staff Work Sheets CSV
+        </Button>
+      </Section>
+    </View>
   );
 }
 
@@ -591,5 +850,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     backgroundColor: "rgba(245,183,49,0.12)",
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: 10,
   },
 });

@@ -368,6 +368,9 @@ export async function createBookingApi(form: any): Promise<any> {
   // 3. Create booking — daily rate / payment are set later at RESERVED → CONFIRMED
   const booking = await client.post<any>("/api/bookings", bookingPayload);
 
+  // 3. Create booking — daily rate / payment are set later at RESERVED → CONFIRMED
+  const booking = await client.post<any>("/api/bookings", bookingPayload);
+
   return booking;
 }
 

@@ -13,24 +13,19 @@ import {
   SlidersHorizontal,
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { ToneBadge } from "@/components/status";
 import {
   AppText,
   Button,
   EmptyState,
-  ErrorState,
   LoadingState,
   Screen,
   Section,
   SegmentedTabs,
   StatCard,
 } from "@/components/ui";
-import {
-  useMarkAllNotificationsRead,
-  useMarkNotificationRead,
-  useNotifications,
-} from "@/hooks/useOperations";
+import { useNotificationsContext } from "@/context/NotificationsContext";
 import { getNotificationDisplay, groupByRecency } from "@/services/notifications-api";
 import { colors } from "@/theme/tokens";
 import type { NotificationType } from "@/types/domain";
@@ -46,9 +41,13 @@ const ICONS: Record<NotificationType, LucideIcon> = {
 };
 
 export default function NotificationsScreen() {
-  const { data: NOTIFICATIONS = [], isLoading, isError, refetch } = useNotifications();
-  const markRead = useMarkNotificationRead();
-  const markAllRead = useMarkAllNotificationsRead();
+  const {
+    notifications: NOTIFICATIONS,
+    isLoading,
+    isLive,
+    markAsRead,
+    markAllRead,
+  } = useNotificationsContext();
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
 
   const displayItems = useMemo(
@@ -64,28 +63,13 @@ export default function NotificationsScreen() {
   }, [displayItems, tab]);
 
   const toggleRead = (id: string, unread: boolean) => {
-    if (unread) {
-      markRead.mutate(id, {
-        onError: () => Alert.alert("Error", "Failed to mark notification as read."),
-      });
-    }
+    if (unread) markAsRead(id);
   };
 
   if (isLoading) {
     return (
       <Screen>
         <LoadingState label="Loading notifications..." />
-      </Screen>
-    );
-  }
-
-  if (isError) {
-    return (
-      <Screen>
-        <ErrorState
-          detail="Could not load notifications from the server."
-          onRetry={() => refetch()}
-        />
       </Screen>
     );
   }
@@ -97,22 +81,14 @@ export default function NotificationsScreen() {
         <AppText variant="title">Notifications</AppText>
         <AppText variant="subtitle">
           Prioritized booking, warehouse, payment, and schedule alerts.
+          {isLive ? " Live updates connected." : ""}
         </AppText>
       </View>
       {unreadCount > 0 ? <StatCard label="Unread" value={unreadCount} icon={Bell} /> : null}
       <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
       {unreadCount > 0 ? (
-        <Button
-          variant="outline"
-          icon={CheckCheck}
-          disabled={markAllRead.isPending}
-          onPress={() =>
-            markAllRead.mutate(undefined, {
-              onError: () => Alert.alert("Error", "Failed to mark all notifications as read."),
-            })
-          }
-        >
-          {markAllRead.isPending ? "Marking..." : "Mark all read"}
+        <Button variant="outline" icon={CheckCheck} onPress={() => markAllRead()}>
+          Mark all read
         </Button>
       ) : null}
       {filtered.length === 0 ? (

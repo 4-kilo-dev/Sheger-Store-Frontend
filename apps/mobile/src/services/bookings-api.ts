@@ -1,4 +1,5 @@
 import { client } from "@/lib/api/client";
+import { assignBomLineCodes } from "@/utils/bomLineCodes";
 import type {
   Booking,
   BookingAssignment,
@@ -30,6 +31,8 @@ interface RawAssignment {
   isTeamLead?: boolean;
   roleContext?: string;
   phase?: string;
+  respondedAt?: string | null;
+  declineReason?: string | null;
   user?: RawPerson & { id?: string };
 }
 
@@ -48,6 +51,8 @@ interface RawBooking {
   rentalEnd?: string;
   paymentStatus?: string;
   paymentAmount?: string | number;
+  dailyRate?: string | number;
+  advanceAmount?: string | number;
   amount?: string;
   mealProvision?: string;
   notes?: string;
@@ -71,18 +76,67 @@ interface RawBooking {
   customFields?: Record<string, unknown>;
 }
 
+function parseNumericField(value: string | number | null | undefined): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = typeof value === "number" ? value : parseFloat(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+const KNOWN_SCREEN_TYPES = new Set<string>([
+  "P2.97",
+  "P4",
+  "P5",
+  "P2.97-New",
+  "P3.91 INDOOR",
+  "P3.91 OUTDOOR",
+]);
+
+function parseSqm(value: string): number {
+  const parsed = Number.parseFloat(value.replace(/sqm/i, "").trim());
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+/** Derive display fields from backend spec without inventing defaults for new (spec-less) bookings. */
+function parseBookingScreenFields(b: {
+  itemServiceSpec?: string | null;
+  screenAreaSqm?: number | string | null;
+}): { screenType: ScreenType | ""; size: number; arrangement: string } {
+  const spec = (b.itemServiceSpec || "").trim();
+  const specParts = spec ? spec.split(" - ").map((part) => part.trim()) : [];
+
+  let screenType: ScreenType | "" = "";
+  let size = 0;
+
+  const sqmPart = specParts.find((part) => /sqm/i.test(part));
+  if (sqmPart) size = parseSqm(sqmPart);
+
+  const firstPart = specParts[0] || "";
+  if (KNOWN_SCREEN_TYPES.has(firstPart)) {
+    screenType = firstPart as ScreenType;
+    if (!size && specParts[1]) size = parseSqm(specParts[1]);
+  }
+
+  const backendSize = Number(b.screenAreaSqm);
+  if (Number.isFinite(backendSize) && backendSize > 0) size = backendSize;
+
+  return { screenType, size, arrangement: spec };
+}
+
 function mapBackendBookingToFrontend(b: RawBooking): Booking {
   const customerName = b.customer?.name || "Client";
   const customerPhone = b.customer?.phone || "";
 
-  const bomItems: BomItem[] = (b.bomLines || []).map((line) => ({
-    id: line.id,
-    name: line.item?.name || line.pool?.name || "Equipment Line",
-    qty: parseFloat(line.quantity),
-    status: line.acceptedShortfall ? "Checked Out" : "Reserved",
-    poolId: line.poolId || undefined,
-    itemId: line.itemId || undefined,
-  }));
+  const bomItems: BomItem[] = assignBomLineCodes(
+    (b.bomLines || []).map((line) => ({
+      id: line.id,
+      name: line.item?.name || line.pool?.name || "Equipment Line",
+      qty: parseFloat(line.quantity),
+      status: (line.acceptedShortfall ? "Checked Out" : "Reserved") as BomItem["status"],
+      poolId: line.poolId || undefined,
+      itemId: line.itemId || undefined,
+      categoryKey: (line.pool as { category?: { key?: string } } | undefined)?.category?.key,
+    })),
+  );
 
   const assignees = (b.assignments || []).map((a) => a.user?.name).filter(Boolean) as string[];
 
@@ -109,16 +163,7 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
     payment = "ADVANCE";
   }
 
-  const specParts = b.itemServiceSpec ? b.itemServiceSpec.split(" - ") : [];
-  const screenType = (specParts[0] || "P3.91 OUTDOOR") as ScreenType;
-  const parsedSpecSize = Number.parseFloat(specParts[1] || "");
-  const screenAreaSqm = Number(b.screenAreaSqm);
-  const size = Number.isFinite(screenAreaSqm)
-    ? screenAreaSqm
-    : Number.isFinite(parsedSpecSize)
-      ? parsedSpecSize
-      : b.rentedDays || 0;
-  const arrangement = specParts[2] || b.itemServiceSpec || "Standard layout";
+  const { screenType, size, arrangement } = parseBookingScreenFields(b);
 
   const paymentAmountNum =
     typeof b.paymentAmount === "number" ? b.paymentAmount : parseFloat(b.paymentAmount || "0");
@@ -138,6 +183,8 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
     roleContext: a.roleContext,
     isTeamLead: a.isTeamLead,
     phase: a.phase,
+    respondedAt: a.respondedAt ?? null,
+    declineReason: a.declineReason ?? null,
     user: a.user?.id ? { id: a.user.id, name: a.user.name || "" } : undefined,
   }));
 
@@ -161,7 +208,10 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
     status: (b.status || "RESERVED") as BookingStatus,
     payment,
     amount: paymentAmountNum || parseFloat(b.amount || "0"),
-    paymentAmount: Number.isFinite(paymentAmountNum) ? paymentAmountNum : undefined,
+    paymentAmount: parseNumericField(b.paymentAmount),
+    dailyRate: parseNumericField(b.dailyRate),
+    rentedDays: b.rentedDays ?? undefined,
+    advanceAmount: parseNumericField(b.advanceAmount),
     ctoNotes: b.ctoConsultationNotes || b.notes || "",
     bomItems,
     teamLeader,
@@ -196,12 +246,10 @@ export async function createBookingApi(form: {
   assemblyDate?: string;
   eventDate?: string;
   dismantleDate?: string;
-  screenType?: string;
-  size?: number;
-  arrangement?: string;
-  amount?: number;
-  paymentTerms?: "UNPAID" | "ADVANCE" | "PAID";
-  ctoNotes?: string;
+  rentedDays?: number;
+  itemServiceSpec?: string;
+  size?: string | number;
+  notes?: string;
   customValues?: Record<string, unknown>;
 }): Promise<Booking> {
   const customer = await client.post<{ id: string }>("/api/customers", {
@@ -210,44 +258,64 @@ export async function createBookingApi(form: {
     notes: form.contactPerson || "Client contact",
   });
 
-  const eventDateStr = `${form.eventDate || new Date().toISOString().slice(0, 10)}T18:00:00.000Z`;
-  const assemblyStartStr = `${form.assemblyDate || new Date().toISOString().slice(0, 10)}T12:00:00.000Z`;
-  const assemblyEndStr = `${form.assemblyDate || new Date().toISOString().slice(0, 10)}T15:00:00.000Z`;
-  const dismantleDateStr = form.dismantleDate
-    ? `${form.dismantleDate}T23:59:59.000Z`
-    : `${form.eventDate || new Date().toISOString().slice(0, 10)}T23:59:00.000Z`;
+  const eventDateStr = form.eventDate
+    ? form.eventDate.includes("T")
+      ? new Date(form.eventDate).toISOString()
+      : `${form.eventDate}T18:00:00.000Z`
+    : new Date().toISOString();
 
-  const bookingPayload = {
+  const assemblyStartStr = form.assemblyDate
+    ? form.assemblyDate.includes("T")
+      ? new Date(form.assemblyDate).toISOString()
+      : `${form.assemblyDate}T12:00:00.000Z`
+    : new Date().toISOString();
+
+  const assemblyEndStr = form.assemblyDate
+    ? form.assemblyDate.includes("T")
+      ? new Date(new Date(form.assemblyDate).getTime() + 3 * 3600000).toISOString()
+      : `${form.assemblyDate}T15:00:00.000Z`
+    : new Date().toISOString();
+
+  const dismantleDateStr = form.dismantleDate
+    ? form.dismantleDate.includes("T")
+      ? new Date(form.dismantleDate).toISOString()
+      : `${form.dismantleDate}T23:59:59.000Z`
+    : form.eventDate
+      ? form.eventDate.includes("T")
+        ? new Date(new Date(form.eventDate).getTime() + 6 * 3600000).toISOString()
+        : `${form.eventDate}T23:59:00.000Z`
+      : new Date().toISOString();
+
+  const screenSize = form.size !== "" && form.size != null ? Number(form.size) : undefined;
+  const hasValidSize = screenSize !== undefined && Number.isFinite(screenSize) && screenSize >= 0;
+  const specText = form.itemServiceSpec?.trim();
+  const itemServiceSpec =
+    specText && hasValidSize
+      ? `${specText} - ${screenSize}sqm`
+      : specText || (hasValidSize ? `Screen - ${screenSize}sqm` : undefined);
+
+  const bookingPayload: Record<string, unknown> = {
     customerId: customer.id,
     eventDate: eventDateStr,
     eventLocation: form.venue || "TBD",
     deliveryDate: assemblyStartStr,
     rentalStart: eventDateStr,
     rentalEnd: dismantleDateStr,
-    rentedDays: 1,
     assemblyStart: assemblyStartStr,
     assemblyEnd: assemblyEndStr,
     disassemblyStart: dismantleDateStr,
     disassemblyEnd: dismantleDateStr,
-    itemServiceSpec: `${form.screenType || "P4"} - ${form.size || 0}sqm - ${form.arrangement || "standard"}`,
-    screenAreaSqm: Number(form.size) >= 0 ? Number(form.size) : 0,
+    itemServiceSpec,
     itemServiceType: "Rental",
-    notes: form.ctoNotes || "",
+    notes: form.notes || "",
     customFields: form.customValues || {},
   };
 
-  const booking = await client.post<RawBooking>("/api/bookings", bookingPayload);
-
-  if (form.amount && form.amount > 0) {
-    try {
-      await client.post(`/api/bookings/${booking.id}/payment`, {
-        toStatus: form.paymentTerms === "PAID" ? "fully_paid" : "advance",
-        amount: String(form.amount),
-      });
-    } catch (e) {
-      console.error("Failed to record initial booking payment", e);
-    }
+  if (form.rentedDays != null && form.rentedDays > 0) {
+    bookingPayload.rentedDays = form.rentedDays;
   }
+
+  const booking = await client.post<RawBooking>("/api/bookings", bookingPayload);
 
   return mapBackendBookingToFrontend(booking);
 }
@@ -300,19 +368,23 @@ export interface PaymentSummary {
   remaining: number | null;
 }
 
-/**
- * Honest payment figures from the fields the API actually exposes (`payment`
- * status + `paymentAmount`) — no `/2` guessing. Mirrors web's getPaymentSummary.
- */
+/** Payment figures from paymentAmount (total), advanceAmount (deposit), and payment status. */
 export function getPaymentSummary(b: Booking): PaymentSummary {
-  const recorded = b.paymentAmount ?? b.amount ?? 0;
+  const totalRaw = b.paymentAmount ?? b.amount;
+  const total = totalRaw != null && totalRaw > 0 ? totalRaw : null;
+
   if (b.payment === "PAID") {
-    return { paid: recorded, total: recorded, remaining: 0 };
+    return { paid: total ?? 0, total, remaining: 0 };
   }
   if (b.payment === "ADVANCE") {
-    return { paid: recorded, total: null, remaining: null };
+    const paid = b.advanceAmount ?? 0;
+    return {
+      paid,
+      total,
+      remaining: total != null ? Math.max(0, total - paid) : null,
+    };
   }
-  return { paid: 0, total: null, remaining: null };
+  return { paid: 0, total, remaining: total };
 }
 
 export async function updateBookingApi(
@@ -320,6 +392,45 @@ export async function updateBookingApi(
   payload: Record<string, unknown>,
 ): Promise<RawBooking> {
   return client.patch(`/api/bookings/${bookingId}`, payload);
+}
+
+/** Mirrors web's useBookingActions confirmBookingWithPayment: pricing patch, then payment, then transition to CONFIRMED. */
+export async function confirmBookingWithPaymentApi(
+  booking: Booking,
+  args: {
+    toPaymentStatus: "advance" | "fully_paid";
+    amount: number;
+    totalAmount: number;
+    pricingDailyRate: number;
+    pricingRentedDays: number;
+  },
+): Promise<void> {
+  const { toPaymentStatus, amount, totalAmount, pricingDailyRate, pricingRentedDays } = args;
+
+  if (pricingDailyRate > 0 && pricingRentedDays > 0) {
+    await updateBookingApi(booking.id, {
+      dailyRate: String(pricingDailyRate),
+      rentedDays: pricingRentedDays,
+    });
+  } else if (pricingDailyRate > 0) {
+    await updateBookingApi(booking.id, {
+      dailyRate: String(pricingDailyRate),
+    });
+  }
+
+  const needsNewPayment =
+    booking.payment === "UNPAID" ||
+    (booking.payment === "ADVANCE" && toPaymentStatus === "fully_paid");
+
+  if (needsNewPayment) {
+    await recordBookingPaymentApi(
+      booking.id,
+      toPaymentStatus,
+      toPaymentStatus === "fully_paid" ? totalAmount : amount,
+    );
+  }
+
+  await transitionBookingStatusApi(booking.id, "CONFIRMED");
 }
 
 export async function createAssignmentApi(
@@ -379,7 +490,9 @@ export interface BookingSnapshotLine {
   poolId?: string;
   itemId?: string;
   name?: string;
-  quantity?: string;
+  quantity?: string | number;
+  item?: { name?: string };
+  pool?: { name?: string };
 }
 
 export interface BookingSnapshot {
@@ -408,8 +521,14 @@ export interface BookingReservation {
   quantity?: string;
 }
 
-export async function getBookingReservationsApi(bookingId: string): Promise<BookingReservation[]> {
-  return client.get(`/api/bookings/${bookingId}/reservations`);
+export async function getBookingReservationsApi(
+  bookingId: string,
+): Promise<{ reservations: BookingReservation[] }> {
+  const res = await client.get<BookingReservation[] | { reservations?: BookingReservation[] }>(
+    `/api/bookings/${bookingId}/reservations`,
+  );
+  if (Array.isArray(res)) return { reservations: res };
+  return { reservations: res?.reservations ?? [] };
 }
 
 export async function createReservationApi(

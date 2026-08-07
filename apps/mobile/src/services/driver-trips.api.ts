@@ -71,6 +71,10 @@ export async function listDriverTripsApi(
   return client.get<DriverTrip[]>(`/api/driver-trips${qs ? `?${qs}` : ""}`);
 }
 
+export async function getDriverTripApi(id: string): Promise<DriverTrip> {
+  return client.get<DriverTrip>(`/api/driver-trips/${id}`);
+}
+
 export async function createDriverTripApi(payload: CreateDriverTripPayload): Promise<DriverTrip> {
   return client.post<DriverTrip>("/api/driver-trips", payload);
 }

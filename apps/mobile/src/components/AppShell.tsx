@@ -24,7 +24,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from "react
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppContext } from "@/context/AppContext";
 import { usePermissions } from "@/hooks/use-permissions";
-import { useNotifications } from "@/hooks/useOperations";
+import { useNotificationsContext } from "@/context/NotificationsContext";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { alpha, colors, radius } from "@/theme/tokens";
 import { AppText, BrandMark, Button, IconButton } from "@/components/ui";
@@ -97,8 +97,8 @@ export function AppShell() {
   const [searchOpen, setSearchOpen] = useState(false);
 
   const navTitle = titleFromPath(pathname);
-  const { data: notifications = [] } = useNotifications();
-  const unreadHint = notifications.some((n) => !n.readAt);
+  const { unreadCount } = useNotificationsContext();
+  const unreadHint = unreadCount > 0;
   const visiblePrimary = useMemo(
     () => PRIMARY_NAV.filter((item) => canOpen(canAny, item.href)),
     [canAny],

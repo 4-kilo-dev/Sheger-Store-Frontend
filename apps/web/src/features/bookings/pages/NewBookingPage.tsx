@@ -36,6 +36,7 @@ export function NewBooking() {
   const [form, setForm] = useState({
     client: "", contactPerson: "", contactPhone: "",
     venue: "", assemblyDate: "", eventDate: "", dismantleDate: "",
+    rentedDays: 1,
     itemServiceSpec: "", size: "",
     rentedDays: 1,
     notes: "",
@@ -546,6 +547,10 @@ export function NewBooking() {
                 <div>
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Event</div>
                   <div className="font-mono font-semibold">{form.eventDate ? formatDateTime(form.eventDate) : "—"}</div>
+                </div>
+                <div className="col-span-2">
+                  <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Number of Days</div>
+                  <div className="font-semibold">{form.rentedDays > 0 ? form.rentedDays : "—"}</div>
                 </div>
                 <div className="col-span-2">
                   <div className="uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Number of Days</div>
