@@ -738,7 +738,7 @@ export function BookingsIndex() {
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{formatDate(b.assemblyDate)}</td>
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{formatDate(b.eventDate)}</td>
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}>{b.venue}</td>
-                    <td className="border-b px-3 py-3 font-mono text-[11px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.screenType}</td>
+                    <td className="border-b px-3 py-3 font-mono text-[11px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.screenType || "—"}</td>
                     <td className="border-b px-3 py-3 font-mono font-semibold" style={{ borderColor: "var(--border)" }}>{b.size}</td>
                     <td className="border-b px-3 py-3 font-mono text-[11px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.arrangement || "—"}</td>
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}>

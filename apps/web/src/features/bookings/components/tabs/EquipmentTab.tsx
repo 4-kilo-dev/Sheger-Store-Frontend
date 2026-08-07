@@ -65,6 +65,10 @@ export function EquipmentTab({
   const bom = useBookingBom(b, true);
 
   function handlePrintPackingSlip() {
+    if (!b.bomItems.length) {
+      toast.error("Add at least one BOM item before printing a packing slip");
+      return;
+    }
     try {
       printPackingSlip(bookingToPackingSlip(b), {
         formatDate: (value) => (value ? formatDateTime(value) : "—"),
@@ -76,6 +80,21 @@ export function EquipmentTab({
 
   return (
     <div className="space-y-4">
+      {!isEditable && (
+        <div
+          className="rounded-lg border px-4 py-3 text-[12px] font-semibold leading-relaxed"
+          style={{
+            borderColor: "var(--border)",
+            background: "var(--surface-2)",
+            color: "var(--text-2)",
+          }}
+        >
+          BOM editing is available when this booking is <strong>ACCEPTED</strong> or{" "}
+          <strong>PREPARATION</strong>
+          {b.status ? ` (current: ${b.status})` : ""}. Advance the booking status first, then add
+          equipment lines.
+        </div>
+      )}
       {isEditable && (
         <Section title="BOM Creator - Add Items" icon={Package}>
           <form onSubmit={bom.handleAddItem} className="flex flex-col md:flex-row items-end gap-3">
@@ -95,7 +114,11 @@ export function EquipmentTab({
               >
                 <option value="">-- Choose Equipment --</option>
                 {bom.pools
-                  .filter((p: any) => !bom.staged.some((s) => s.poolId === p.id))
+                  .filter(
+                    (p: any) =>
+                      !bom.staged.some((s) => s.poolId === p.id) &&
+                      (p.category?.trackingType == null || p.category.trackingType === "bulk"),
+                  )
                   .map((p: any) => {
                     const avail = bom.getPoolAvailabilityLabel(p.id);
                     const unit = p.unit || p.category?.unit || "";
@@ -263,7 +286,10 @@ export function EquipmentTab({
                   className="py-6 text-center text-[12px]"
                   style={{ color: "var(--text-3)" }}
                 >
-                  No items in Bill of Materials. Add items using the BOM Creator above.
+                  No items in Bill of Materials.
+                  {isEditable
+                    ? " Add items using the BOM Creator above."
+                    : " Advance to ACCEPTED or PREPARATION to edit the BOM."}
                 </td>
               </tr>
             ) : (
@@ -390,8 +416,12 @@ export function EquipmentTab({
           <button
             type="button"
             onClick={handlePrintPackingSlip}
-            disabled={b.bomItems.length === 0}
-            className="rounded-md border px-3 py-1 text-[10px] font-semibold disabled:opacity-40"
+            title={
+              b.bomItems.length === 0
+                ? "Add BOM items before printing"
+                : "Print packing slip"
+            }
+            className="rounded-md border px-3 py-1 text-[10px] font-semibold transition hover:brightness-110"
             style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
           >
             Print Packing Slip

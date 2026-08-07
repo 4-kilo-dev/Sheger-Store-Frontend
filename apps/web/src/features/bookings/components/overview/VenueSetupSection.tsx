@@ -21,11 +21,11 @@ export function VenueSetupSection({ b }: OverviewSectionProps) {
       <div className="grid grid-cols-2 gap-x-6">
         <KV label="Venue" value={displayValue(b.venue)} />
         <KV label="Requested Size (sqm)" value={b.size > 0 ? b.size : "—"} mono />
-        <div className="col-span-2">
-          <KV label="Intake Specification" value={displayValue(b.itemServiceSpec)} />
-        </div>
         <KV label="Screen Type" value={displayValue(b.screenType)} mono />
         <KV label="Arrangement" value={displayValue(b.arrangement)} mono />
+        <div className="col-span-2">
+          <KV label="Intake / Technical Spec" value={displayValue(b.itemServiceSpec)} />
+        </div>
         {customFieldDefs
           .filter((def) => def.key !== "technician_notes")
           .map((def) => {

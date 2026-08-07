@@ -9,11 +9,32 @@ import {
   RotateCcw, AlertCircle, Package, ChevronRight,
 } from "lucide-react";
 
+function parseDay(value?: string | null): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** Dispatch queue: assembly/event day is today or later (exclude finished past jobs). */
+function isUpcomingOrToday(booking: Booking, now = new Date()): boolean {
+  const day = parseDay(booking.assemblyDate) || parseDay(booking.eventDate);
+  if (!day) return true;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return day.getTime() >= today.getTime();
+}
+
+function bookingSortKey(booking: Booking): string {
+  return booking.assemblyDate || booking.eventDate || booking.createdAt || "";
+}
+
 // ─── Column definitions ───────────────────────────────────────────────────────
 const COLUMNS: Array<{
   id: string;
   label: string;
   statuses: BookingStatus[];
+  /** When true, hide bookings whose assembly/event date is already in the past. */
+  upcomingOnly?: boolean;
   accent: string;
   accentFg: string;
   emptyMsg: string;
@@ -22,9 +43,10 @@ const COLUMNS: Array<{
     id: "dispatch",
     label: "Needs Dispatch",
     statuses: ["ACCEPTED", "PREPARATION"],
+    upcomingOnly: true,
     accent: "#f59e0b",
     accentFg: "#78350f",
-    emptyMsg: "No bookings awaiting dispatch.",
+    emptyMsg: "No upcoming bookings awaiting dispatch.",
   },
   {
     id: "onsite",
@@ -217,7 +239,10 @@ export function OperationsPage() {
     Object.fromEntries(
       COLUMNS.map((col) => [
         col.id,
-        filtered.filter((b) => col.statuses.includes(b.status)),
+        filtered
+          .filter((b) => col.statuses.includes(b.status))
+          .filter((b) => (col.upcomingOnly ? isUpcomingOrToday(b) : true))
+          .sort((a, b) => bookingSortKey(a).localeCompare(bookingSortKey(b))),
       ])
     ),
     [filtered]
