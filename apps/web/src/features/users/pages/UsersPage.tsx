@@ -1,9 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { Search, UserCheck, Users, Radio, BriefcaseBusiness, Phone, Calendar } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { STAFF_ROLES, staffMatchesRoleFilter } from "@/features/checkout/services/operations.api";
+import {
+  STAFF_ROLES,
+  staffMatchesRoleFilter,
+  type StaffMember,
+} from "@/features/checkout/services/operations.api";
 import { AddStaffModal } from "../components/AddStaffModal";
+import { AssignStaffToBookingModal } from "../components/AssignStaffToBookingModal";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStaffApi, resetPasswordApi, toggleUserActiveApi, setStaffFreelancerApi } from "@/features/users/services/staff.api";
 import { getBookingsApi } from "@/features/bookings/services/bookings.api";
@@ -32,10 +37,13 @@ const statusColor: Record<string, string> = {
 export function StaffPage() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<(typeof STAFF_ROLES)[number]>("All");
+  const [assignPerson, setAssignPerson] = useState<StaffMember | null>(null);
   const { can } = usePermissions();
   const { formatDate } = useDateFormatter();
   const canViewStaff = can(PERMISSION.USER_VIEW);
   const canManageStaff = can(PERMISSION.USER_MANAGE);
+  const canAssignStaff =
+    can(PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN) || can(PERMISSION.ASSIGNMENT_ASSIGN_CREW);
   const queryClient = useQueryClient();
 
   const { data: staffList = [] } = useQuery({
@@ -307,16 +315,18 @@ export function StaffPage() {
                   <Calendar className="mr-1 inline h-3 w-3" />
                   Joined {formatDate(p.joinedDate)}
                 </span>
-                <Link
-                  to="/bookings"
-                  className="font-semibold cursor-pointer hover:underline"
-                  style={{ color: "var(--accent)" }}
-                  onClick={() =>
-                    toast.message(`Assign ${p.name} from a CONFIRMED booking’s Assign Technician / Crew action`)
-                  }
-                >
-                  Assign to Booking →
-                </Link>
+                {canAssignStaff ? (
+                  <button
+                    type="button"
+                    className="font-semibold cursor-pointer hover:underline"
+                    style={{ color: "var(--accent)" }}
+                    onClick={() => setAssignPerson(p)}
+                  >
+                    Assign to Booking →
+                  </button>
+                ) : (
+                  <span style={{ color: "var(--text-3)" }}>No assign permission</span>
+                )}
               </div>
             </div>
           );
@@ -324,6 +334,11 @@ export function StaffPage() {
       </div>
       </>
       )}
+      <AssignStaffToBookingModal
+        person={assignPerson}
+        open={!!assignPerson}
+        onClose={() => setAssignPerson(null)}
+      />
     </AppShell>
   );
 }

@@ -18,5 +18,14 @@ export function useSystemCurrency() {
     return formatCurrency(Number(value), currency);
   };
 
-  return { currency, formatMoney };
+  /** Compact labels for dashboards / charts (e.g. 1.2M ETB). */
+  const formatMoneyCompact = (value: number | null | undefined) => {
+    if (value == null || !Number.isFinite(Number(value))) return "—";
+    const n = Number(value);
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M ${currency}`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K ${currency}`;
+    return formatMoney(n);
+  };
+
+  return { currency, formatMoney, formatMoneyCompact };
 }

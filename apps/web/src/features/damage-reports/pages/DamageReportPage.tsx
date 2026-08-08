@@ -113,7 +113,6 @@ export function DamageReportPage() {
 
   const { mutate: submitReport, isPending } = useMutation({
     mutationFn: async () => {
-      if (!bookingCode) throw new Error("Select the related booking");
       if (!selected) throw new Error("Select an inventory item");
       if (!description.trim()) throw new Error("Description is required");
 
@@ -129,7 +128,7 @@ export function DamageReportPage() {
         `Discovered: ${discovered}`,
       ].join("\n");
 
-      return createDamageReportApi(bookingCode, {
+      return createDamageReportApi(bookingCode || null, {
         reportType,
         poolId: selected.poolId,
         itemId: selected.itemId,
@@ -201,16 +200,20 @@ export function DamageReportPage() {
               <div className="mb-4 label-eyebrow">Equipment identification</div>
               <div className="grid grid-cols-2 gap-4">
                 <label className="col-span-2 text-[12px] font-semibold">
-                  Related booking
+                  Related booking{" "}
+                  <span className="font-normal" style={{ color: "var(--text-3)" }}>
+                    (optional — leave blank for warehouse-only)
+                  </span>
                   <select
-                    required
                     value={bookingCode}
                     onChange={(e) => setBookingCode(e.target.value)}
                     className={fieldClass}
                     disabled={bookingsLoading}
                   >
                     <option value="">
-                      {bookingsLoading ? "Loading bookings…" : "-- Select booking --"}
+                      {bookingsLoading
+                        ? "Loading bookings…"
+                        : "-- None (warehouse inspection) --"}
                     </option>
                     {bookings.map((b) => (
                       <option key={b.id} value={b.code}>

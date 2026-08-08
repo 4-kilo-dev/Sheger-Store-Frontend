@@ -614,8 +614,20 @@ export async function createHandoffSnapshotApi(bookingId: string): Promise<any> 
   return client.post(`/api/bookings/${bookingId}/bom/snapshots`, { kind: "HANDOFF" });
 }
 
-export async function createDamageReportApi(bookingId: string, payload: { description?: string; poolId?: string; itemId?: string; reportType: "DAMAGE" | "MISSING"; quantity?: string }): Promise<any> {
-  return client.post(`/api/bookings/${bookingId}/damage-reports`, payload);
+export async function createDamageReportApi(
+  bookingId: string | null | undefined,
+  payload: {
+    description?: string;
+    poolId?: string;
+    itemId?: string;
+    reportType: "DAMAGE" | "MISSING";
+    quantity?: string;
+  },
+): Promise<any> {
+  if (bookingId) {
+    return client.post(`/api/bookings/${bookingId}/damage-reports`, payload);
+  }
+  return client.post(`/api/damage-reports`, payload);
 }
 
 export async function submitEvaluationApi(bookingId: string, payload: any): Promise<any> {
