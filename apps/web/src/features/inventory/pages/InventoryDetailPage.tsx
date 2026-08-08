@@ -63,7 +63,13 @@ export function InventoryDetail() {
   const { can } = usePermissions();
   const canManage = can(PERMISSION.INVENTORY_MANAGE);
   const [showEdit, setShowEdit] = useState(false);
-  const [tab, setTab] = useState<"Units" | "Movement" | "Maintenance">("Units");
+  const [tab, setTab] = useState<"Units" | "Allocation" | "Maintenance">("Units");
+
+  const serviceDateLabel = (value?: string | null) => {
+    if (!value) return "Not recorded";
+    const formatted = formatDate(value);
+    return formatted === "—" ? "Not recorded" : formatted;
+  };
 
   const { data: item, isLoading, error } = useQuery({
     queryKey: ["inventoryItem", itemId],
@@ -137,8 +143,8 @@ export function InventoryDetail() {
               <Pencil /> Edit
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => setTab("Movement")}>
-            <RotateCcw /> Stock Movement
+          <Button variant="outline" size="sm" onClick={() => setTab("Allocation")}>
+            <RotateCcw /> Stock Allocation
           </Button>
           <Button size="sm" asChild>
             <Link
@@ -185,7 +191,7 @@ export function InventoryDetail() {
       <div className="mt-4 grid grid-cols-12 gap-4">
         <div className="col-span-9 rounded-lg border border-border bg-surface">
           <div className="flex gap-1 border-b border-border px-3">
-            {(["Units", "Movement", "Maintenance"] as const).map((name) => (
+            {(["Units", "Allocation", "Maintenance"] as const).map((name) => (
               <button
                 key={name}
                 type="button"
@@ -232,7 +238,7 @@ export function InventoryDetail() {
                     </td>
                     <td className="px-4 py-3 text-text-2">{unit.location}</td>
                     <td className="px-4 py-3 font-mono text-text-2">
-                      {formatDate(unit.inspected)}
+                      {serviceDateLabel(unit.inspected)}
                     </td>
                   </tr>
                 ))}
@@ -240,11 +246,11 @@ export function InventoryDetail() {
             </table>
           )}
 
-          {tab === "Movement" && (
+          {tab === "Allocation" && (
             <div className="space-y-4 p-5">
               <p className="text-[12px] text-text-2">
-                Current stock allocation for this {item.entityKind === "pool" ? "pool" : "asset"}.
-                Checkout history is recorded on booking check-out / check-in.
+                Live allocation snapshot for this {item.entityKind === "pool" ? "pool" : "asset"} — not a
+                movement history. Checkout / check-in trails live on each booking.
               </p>
               {movementSummary.map((row) => (
                 <div key={row.label} className="flex items-center gap-3">
@@ -270,8 +276,14 @@ export function InventoryDetail() {
                 <div>
                   <p className="text-[13px] font-semibold">Service schedule</p>
                   <p className="mt-0.5 font-mono text-[11px] text-text-2">
-                    Last: {formatDate(item.lastService)} · Next: {formatDate(item.nextService)}
+                    Last: {serviceDateLabel(item.lastService)} · Next:{" "}
+                    {serviceDateLabel(item.nextService)}
                   </p>
+                  {!item.lastService && !item.nextService && (
+                    <p className="mt-2 text-[11px] text-text-3">
+                      Maintenance dates are not tracked for this item yet.
+                    </p>
+                  )}
                   {item.notes ? (
                     <p className="mt-2 text-[11px] text-text-2">{item.notes}</p>
                   ) : (
@@ -299,11 +311,11 @@ export function InventoryDetail() {
             <div className="space-y-2 text-[11px]">
               <div className="flex justify-between">
                 <span className="text-text-2">Last service</span>
-                <span className="font-mono">{formatDate(item.lastService)}</span>
+                <span className="font-mono">{serviceDateLabel(item.lastService)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-2">Next due</span>
-                <span className="font-mono">{formatDate(item.nextService)}</span>
+                <span className="font-mono">{serviceDateLabel(item.nextService)}</span>
               </div>
             </div>
           </div>

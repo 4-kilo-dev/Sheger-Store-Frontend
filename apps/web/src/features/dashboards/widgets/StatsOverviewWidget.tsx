@@ -11,12 +11,14 @@ import { PERMISSION } from "@/lib/auth/permission-keys";
 import { getBookingsApi } from "@/features/bookings/services/bookings.api";
 import { getCombinedInventoryApi } from "@/features/inventory/services/inventory.api";
 import { StatCard } from "../components/StatCard";
+import { useSystemCurrency } from "@/hooks/use-system-currency";
 
 export function StatsOverviewWidget() {
   const authUser = useAuthUser();
   const role = authUser?.role?.toLowerCase() || "";
   const { can } = usePermissions();
   const canViewFinancials = can(PERMISSION.PAYMENT_MANAGE);
+  const { formatMoneyCompact } = useSystemCurrency();
 
   const { data: bookingsList = [] } = useQuery({
     queryKey: ["bookings"],
@@ -142,12 +144,7 @@ export function StatsOverviewWidget() {
 
   // Render cards based on role
   if (role === "admin" || role === "supervisor") {
-    // Format revenue display
-    const revenueDisplay = adminStats.revenue >= 1_000_000
-      ? `${(adminStats.revenue / 1_000_000).toFixed(1)}M ETB`
-      : adminStats.revenue >= 1_000
-        ? `${(adminStats.revenue / 1_000).toFixed(0)}K ETB`
-        : `${adminStats.revenue.toLocaleString()} ETB`;
+    const revenueDisplay = formatMoneyCompact(adminStats.revenue);
 
     const revenueTrendColor = adminStats.revenueTrend.startsWith("+")
       ? "var(--color-bom-returned)"

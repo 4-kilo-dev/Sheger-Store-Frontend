@@ -11,6 +11,7 @@ import {
 import { isDeclinedAssignment } from "@/features/bookings/utils/assignmentHelpers";
 import { StaffMultiSelect } from "@/features/bookings/components/shared/StaffMultiSelect";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { useSystemCurrency } from "@/hooks/use-system-currency";
 import { getBookingCustodyApi } from "@/features/checkout/services/operations.api";
 import {
   buildCheckinReturns,
@@ -26,6 +27,7 @@ interface BookingActionModalProps {
 
 export function BookingActionModal({ booking, actions }: BookingActionModalProps) {
   const authUser = useAuthUser();
+  const { currency, formatMoney } = useSystemCurrency();
   const {
     showActionModal,
     setShowActionModal,
@@ -253,7 +255,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                     className="text-[11px] font-semibold"
                     style={{ color: "var(--text-2)" }}
                   >
-                    Daily Rate (ETB)
+                    Daily Rate ({currency})
                     <input
                       type="number"
                       value={dailyRate || ""}
@@ -267,7 +269,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                     className="text-[11px] font-semibold"
                     style={{ color: "var(--text-2)" }}
                   >
-                    Computed Total (ETB)
+                    Computed Total ({currency})
                     <input
                       type="text"
                       readOnly
@@ -282,7 +284,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                       className="text-[11px] font-semibold"
                       style={{ color: "var(--text-2)" }}
                     >
-                      Advance Payment (ETB)
+                      Advance Payment ({currency})
                       <input
                         type="number"
                         value={advancePayment || ""}
@@ -302,10 +304,10 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                     advancePayment > 0 && computedTotal >= 1000 ? (
                       <span>
                         Advance payment will record{" "}
-                        <strong>ETB {advancePayment.toLocaleString()}</strong> (
+                        <strong>{formatMoney(advancePayment)}</strong> (
                         {((advancePayment / computedTotal) * 100).toFixed(0)}
                         %) as paid, leaving a balance of{" "}
-                        <strong>ETB {(computedTotal - advancePayment).toLocaleString()} remaining.</strong>
+                        <strong>{formatMoney(computedTotal - advancePayment)} remaining.</strong>
                       </span>
                     ) : (
                       <span>
@@ -316,7 +318,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                   ) : computedTotal >= 1000 ? (
                     <span>
                       Full payment will record the entire{" "}
-                      <strong>ETB {computedTotal.toLocaleString()}</strong> as paid, leaving no balance.
+                      <strong>{formatMoney(computedTotal)}</strong> as paid, leaving no balance.
                     </span>
                   ) : (
                     <span>Enter the daily rate to compute the contract total (size × days × rate).</span>
@@ -343,7 +345,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
               (computedTotal < 1000 || dailyRate <= 0) && (
                 <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
                   <AlertCircle className="h-3.5 w-3.5" />
-                  <span>Daily rate is required (computed total min ETB 1,000).</span>
+                  <span>Daily rate is required (computed total min {formatMoney(1000)}).</span>
                 </div>
               )}
             {showPaymentCapture &&
@@ -361,7 +363,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
               advancePayment <= 0 && (
                 <div className="mt-2 text-[11px] font-semibold text-destructive flex items-center gap-1.5 animate-in fade-in duration-200">
                   <AlertCircle className="h-3.5 w-3.5" />
-                  <span>Advance Payment must be greater than ETB 0.</span>
+                  <span>Advance Payment must be greater than {formatMoney(0)}.</span>
                 </div>
               )}
             {isAssignTechnicianAction && (
@@ -444,7 +446,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                     className="col-span-2 text-[11px] font-semibold"
                     style={{ color: "var(--text-2)" }}
                   >
-                    Meal Budget (ETB)
+                    Meal Budget ({currency})
                     <input
                       type="number"
                       value={checkoutMealBudget || ""}
@@ -725,12 +727,12 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                 return;
               }
               if (computedTotal < 1000 || dailyRate <= 0) {
-                toast.error("Daily rate is required (computed total min ETB 1,000).");
+                toast.error(`Daily rate is required (computed total min ${formatMoney(1000)}).`);
                 return;
               }
               if (paymentType === "advance") {
                 if (advancePayment <= 0) {
-                  toast.error("Advance payment must be greater than ETB 0");
+                  toast.error(`Advance payment must be greater than ${formatMoney(0)}`);
                   return;
                 }
                 if (advancePayment > computedTotal) {

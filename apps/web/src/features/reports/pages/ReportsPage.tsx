@@ -31,6 +31,7 @@ import {
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { useSystemCurrency } from "@/hooks/use-system-currency";
 
 function csvEscape(value: string | number | null | undefined): string {
   const text = value == null ? "" : String(value);
@@ -81,6 +82,7 @@ type TabId = "revenue_bookings" | "inventory_health" | "client_directory" | "qua
 
 export function ReportsPage() {
   const { formatDate } = useDateFormatter();
+  const { currency, formatMoney } = useSystemCurrency();
   const authUser = useAuthUser();
   const userRole = authUser?.role?.toLowerCase() || "";
   const isAdminOrSupervisor = userRole === "admin" || userRole === "supervisor";
@@ -507,7 +509,7 @@ export function ReportsPage() {
                   <Banknote className="h-4 w-4" style={{ color: "var(--accent)" }} />
                 </div>
                 <div className="mt-3 text-[22px] font-bold">
-                  {loadingRevenue ? "..." : `ETB ${(revenueReport?.totalRevenue || 0).toLocaleString()}`}
+                  {loadingRevenue ? "..." : formatMoney(revenueReport?.totalRevenue || 0)}
                 </div>
                 <div className="mt-1 text-[11px]" style={{ color: "var(--text-3)" }}>
                   {startDate || endDate ? "Payments in selected date range" : "Aggregated lifetime payments"}
@@ -533,7 +535,7 @@ export function ReportsPage() {
                   <TrendingUp className="h-4 w-4" style={{ color: "var(--accent)" }} />
                 </div>
                 <div className="mt-3 text-[22px] font-bold">
-                  {loadingRevenue ? "..." : `ETB ${averageBookingValue.toLocaleString()}`}
+                  {loadingRevenue ? "..." : formatMoney(averageBookingValue)}
                 </div>
                 <div className="mt-1 text-[11px]" style={{ color: "var(--text-3)" }}>
                   Logged revenue ÷ paying bookings
@@ -572,7 +574,7 @@ export function ReportsPage() {
                               }}
                             />
                             <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[var(--surface-2)] text-[9px] px-1 rounded font-mono opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
-                              ETB {(val / 1000).toFixed(0)}k
+                              {currency} {(val / 1000).toFixed(0)}k
                             </div>
                           </div>
                           <span className="text-[10.5px] font-semibold" style={{ color: "var(--text-2)" }}>{month}</span>
@@ -656,7 +658,7 @@ export function ReportsPage() {
                               </Link>
                             </td>
                             <td className="px-4 py-2.5 font-medium">{p.customerName}</td>
-                            <td className="px-4 py-2.5 font-mono font-bold">ETB {parseFloat(p.amount).toLocaleString()}</td>
+                            <td className="px-4 py-2.5 font-mono font-bold">{formatMoney(parseFloat(p.amount))}</td>
                             <td className="px-4 py-2.5">
                               <span 
                                 className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
@@ -813,7 +815,7 @@ export function ReportsPage() {
                         <td className="px-4 py-3 font-mono font-bold text-[12px]">{c.totalBookings}</td>
                         <td className="px-4 py-3 font-mono text-zinc-400">{c.completedBookings}</td>
                         <td className="px-4 py-3 font-mono font-bold" style={{ color: "var(--accent)" }}>
-                          ETB {c.totalRevenueContributed.toLocaleString()}
+                          {formatMoney(c.totalRevenueContributed)}
                         </td>
                       </tr>
                     ))}
@@ -943,7 +945,7 @@ export function ReportsPage() {
                           <span className="font-bold text-[12.5px]" style={{ color: "var(--accent)" }}>{c.bookingCode || c.id}</span>
                           <span className="text-[10px] text-zinc-500 font-mono">({formatDate(c.eventDate)})</span>
                         </div>
-                        <span className="font-bold text-zinc-400 font-mono">ETB {parseFloat(c.paymentAmount).toLocaleString()}</span>
+                        <span className="font-bold text-zinc-400 font-mono">{formatMoney(parseFloat(c.paymentAmount))}</span>
                       </div>
 
                       <div className="text-[11.5px] leading-relaxed">
