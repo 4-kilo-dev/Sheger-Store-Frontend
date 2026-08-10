@@ -17,12 +17,22 @@ function parseDay(value?: string | null): Date | null {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function isUpcomingOrToday(booking: Booking, now = new Date()): boolean {
-  const day = parseDay(booking.assemblyDate) || parseDay(booking.eventDate);
+function isActiveOrUpcoming(booking: Booking, now = new Date()): boolean {
+  const day =
+    parseDay(booking.dismantleDate) ||
+    parseDay(booking.eventDate) ||
+    parseDay(booking.assemblyDate);
   if (!day) return true;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return day.getTime() >= today.getTime();
 }
+
+const DISPATCH_STATUSES: BookingStatus[] = [
+  "CONFIRMED",
+  "ASSIGNED",
+  "ACCEPTED",
+  "PREPARATION",
+];
 
 const COLUMNS: {
   title: string;
@@ -33,7 +43,7 @@ const COLUMNS: {
 }[] = [
   {
     title: "Needs Dispatch",
-    statuses: ["ACCEPTED", "PREPARATION"],
+    statuses: DISPATCH_STATUSES,
     upcomingOnly: true,
     color: colors.payment.ADVANCE,
     emptyMsg: "No upcoming bookings awaiting dispatch.",
@@ -110,7 +120,7 @@ export default function OperationsScreen() {
         {COLUMNS.map((col) => {
           const items = filtered
             .filter((b) => col.statuses.includes(b.status))
-            .filter((b) => (col.upcomingOnly ? isUpcomingOrToday(b) : true));
+            .filter((b) => (col.upcomingOnly ? isActiveOrUpcoming(b) : true));
           return (
             <View key={col.title} style={styles.column}>
               <View style={[styles.columnHeader, { borderLeftColor: col.color }]}>
@@ -199,7 +209,7 @@ function BookingCard({ booking, accentColor }: { booking: Booking; accentColor: 
             </AppText>
           </View>
         </View>
-      ) : booking.status === "ACCEPTED" || booking.status === "PREPARATION" ? (
+      ) : DISPATCH_STATUSES.includes(booking.status) ? (
         <View style={[styles.contextRow, { borderTopColor: colors.border }]}>
           {crewCount > 0 ? (
             <View style={styles.contextItem}>

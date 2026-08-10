@@ -35,6 +35,8 @@ export const PERMISSION = {
   DRIVER_TRIP_EDIT: "driver_trip.edit",
   DRIVER_TRIP_VIEW: "driver_trip.view",
   DRIVER_TRIP_APPROVE: "driver_trip.approve",
+  CUSTOMER_VIEW: "customer.view",
+  CUSTOMER_MANAGE: "customer.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSION)[keyof typeof PERMISSION];

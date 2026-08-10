@@ -71,9 +71,15 @@ export function useBookingPoolAvailability(
           }
           const res = await getPoolAvailabilityApi(poolId, window.from, window.to);
           const total = Number(res.total);
-          const available = Number(res.available);
+          const hardAvailable = Number(res.available);
+          // Backend `available` only subtracts HARD holds + damage. Technical holds
+          // are SOFT, so planning UI must also subtract softReserved.
+          const softReserved = Number(res.softReserved ?? 0);
+          const planningAvailable = Number.isFinite(hardAvailable)
+            ? Math.max(0, hardAvailable - (Number.isFinite(softReserved) ? softReserved : 0))
+            : stock;
           return {
-            available: Number.isFinite(available) ? available : stock,
+            available: planningAvailable,
             total: Number.isFinite(total) && total > 0 ? total : stock,
             stock,
           };

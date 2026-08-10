@@ -272,6 +272,7 @@ export interface BomItem {
 export interface Booking {
   id: string;
   code: string;
+  customerId?: string;
   client: string;
   contactPerson: string;
   contactPhone: string;
@@ -375,6 +376,10 @@ function normalizeBookingDateTime(value?: string | null): string {
 function mapBackendBookingToFrontend(b: any): Booking {
   const customerName = b.customer?.name || "Client";
   const customerPhone = b.customer?.phone || "";
+  const contactPerson =
+    (typeof b.customer?.notes === "string" && b.customer.notes.trim()
+      ? b.customer.notes.trim()
+      : customerName);
   
   // Format BOM lines with material-type shorthand codes (SC-001, CB-002, …)
   const sortedBomLines = [...(b.bomLines || [])].sort((a: any, c: any) => {
@@ -448,8 +453,9 @@ function mapBackendBookingToFrontend(b: any): Booking {
   return {
     id: b.id,
     code: b.bookingCode || b.id, // Use human-readable bookingCode if available, fallback to id
+    customerId: b.customerId || b.customer?.id || undefined,
     client: customerName,
-    contactPerson: customerName,
+    contactPerson,
     contactPhone: customerPhone,
     assemblyDate: normalizeBookingDateTime(b.assemblyStart || b.deliveryDate || b.rentalStart),
     eventDate: normalizeBookingDateTime(b.eventDate),
@@ -629,8 +635,23 @@ export async function updateBookingApi(bookingId: string, payload: any): Promise
   return client.patch(`/api/bookings/${bookingId}`, payload);
 }
 
+export async function updateCustomerApi(
+  customerId: string,
+  payload: { name?: string; phone?: string; notes?: string },
+): Promise<any> {
+  return client.patch(`/api/customers/${customerId}`, payload);
+}
+
 export async function createReservationApi(bookingId: string, payload: { poolId?: string; itemId?: string; quantity?: string }): Promise<any> {
   return client.post(`/api/bookings/${bookingId}/reservations`, payload);
+}
+
+/** Atomically replace pool holds — supports HARD locks after confirm. */
+export async function replacePoolReservationsApi(
+  bookingId: string,
+  lines: Array<{ poolId: string; quantity: string }>,
+): Promise<any> {
+  return client.post(`/api/bookings/${bookingId}/reservations/replace`, { lines });
 }
 
 export async function createAssignmentApi(bookingId: string, payload: { userId: string; roleContext: string; isTeamLead?: boolean; phase?: string }): Promise<any> {

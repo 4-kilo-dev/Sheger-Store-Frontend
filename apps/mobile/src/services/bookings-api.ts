@@ -11,8 +11,10 @@ import type {
 } from "@/types/domain";
 
 interface RawPerson {
+  id?: string;
   name?: string;
   phone?: string;
+  notes?: string;
 }
 
 interface RawBomLine {
@@ -39,6 +41,7 @@ interface RawAssignment {
 interface RawBooking {
   id: string;
   bookingCode?: string;
+  customerId?: string;
   status?: string;
   eventDate?: string;
   eventLocation?: string;
@@ -125,6 +128,10 @@ function parseBookingScreenFields(b: {
 function mapBackendBookingToFrontend(b: RawBooking): Booking {
   const customerName = b.customer?.name || "Client";
   const customerPhone = b.customer?.phone || "";
+  const contactPerson =
+    typeof b.customer?.notes === "string" && b.customer.notes.trim()
+      ? b.customer.notes.trim()
+      : customerName;
 
   const bomItems: BomItem[] = assignBomLineCodes(
     (b.bomLines || []).map((line) => ({
@@ -191,8 +198,9 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
   return {
     id: b.id,
     code: b.bookingCode || b.id,
+    customerId: b.customerId || b.customer?.id || undefined,
     client: customerName,
-    contactPerson: customerName,
+    contactPerson,
     contactPhone: customerPhone,
     assemblyDate: b.assemblyStart ? b.assemblyStart.slice(0, 10) : "",
     eventDate: b.eventDate ? b.eventDate.slice(0, 10) : "",
@@ -394,6 +402,13 @@ export async function updateBookingApi(
   return client.patch(`/api/bookings/${bookingId}`, payload);
 }
 
+export async function updateCustomerApi(
+  customerId: string,
+  payload: { name?: string; phone?: string; notes?: string },
+): Promise<RawPerson> {
+  return client.patch(`/api/customers/${customerId}`, payload);
+}
+
 /** Mirrors web's useBookingActions confirmBookingWithPayment: pricing patch, then payment, then transition to CONFIRMED. */
 export async function confirmBookingWithPaymentApi(
   booking: Booking,
@@ -536,6 +551,14 @@ export async function createReservationApi(
   payload: { poolId?: string; itemId?: string; quantity?: string },
 ): Promise<BookingReservation> {
   return client.post(`/api/bookings/${bookingId}/reservations`, payload);
+}
+
+/** Atomically replace pool holds — supports HARD locks after confirm. */
+export async function replacePoolReservationsApi(
+  bookingId: string,
+  lines: Array<{ poolId: string; quantity: string }>,
+): Promise<{ holdType: string; count: number; reservations: BookingReservation[] }> {
+  return client.post(`/api/bookings/${bookingId}/reservations/replace`, { lines });
 }
 
 export async function deleteReservationApi(bookingId: string, id: string): Promise<void> {

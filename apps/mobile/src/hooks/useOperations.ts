@@ -20,9 +20,11 @@ import {
   getBookingSnapshotsApi,
   getBookingsApi,
   recordBookingPaymentApi,
+  replacePoolReservationsApi,
   transitionBookingStatusApi,
   updateBomLineApi,
   updateBookingApi,
+  updateCustomerApi,
 } from "@/services/bookings-api";
 import {
   checkinBookingApi,
@@ -147,6 +149,23 @@ export function useUpdateBooking() {
     mutationFn: ({ bookingId, payload }: { bookingId: string; payload: Record<string, unknown> }) =>
       updateBookingApi(bookingId, payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bookings"] }),
+  });
+}
+
+export function useUpdateCustomer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      customerId,
+      payload,
+    }: {
+      customerId: string;
+      payload: { name?: string; phone?: string; notes?: string };
+    }) => updateCustomerApi(customerId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking"] });
+    },
   });
 }
 
@@ -682,6 +701,23 @@ export function useCreateReservation() {
       bookingId: string;
       payload: { poolId?: string; itemId?: string; quantity?: string };
     }) => createReservationApi(bookingId, payload),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["booking-reservations", variables.bookingId] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    },
+  });
+}
+
+export function useReplacePoolReservations() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      bookingId,
+      lines,
+    }: {
+      bookingId: string;
+      lines: Array<{ poolId: string; quantity: string }>;
+    }) => replacePoolReservationsApi(bookingId, lines),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["booking-reservations", variables.bookingId] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
