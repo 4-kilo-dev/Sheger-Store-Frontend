@@ -16,7 +16,10 @@ const SPEC_EDIT_STATUSES = new Set([
   "RESERVED",
   "CONFIRMED",
   "ASSIGNED",
+  "PREPARATION",
 ]);
+
+const TERMINAL_BOOKING_STATUSES = new Set(["DONE", "CANCELED"]);
 
 export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
@@ -27,7 +30,12 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
     id: "booking-specifications",
     Component: BookingSpecificationsEditor,
-    when: (caps, b) => caps.canEditBooking && SPEC_EDIT_STATUSES.has(b.status),
+    when: (caps, b) => {
+      if (!caps.canEditBooking || TERMINAL_BOOKING_STATUSES.has(b.status)) return false;
+      // booking.edit (admin/CCR): editable at every active stage
+      if (caps.canEditLogistics) return true;
+      return SPEC_EDIT_STATUSES.has(b.status);
+    },
   },
   {
     id: "onsite-dashboard",
@@ -37,7 +45,12 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
     id: "technical-holds",
     Component: TechnicalHoldsSection,
-    when: (_caps, b) => b.status === "RESERVED",
+    when: (caps, b) => {
+      if (TERMINAL_BOOKING_STATUSES.has(b.status)) return false;
+      // Writers can manage holds beyond RESERVED; others only see at RESERVED
+      if (caps.canWriteTechnicalHolds) return true;
+      return b.status === "RESERVED";
+    },
   },
   {
     id: "oo-crew-assignment",
@@ -47,7 +60,11 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
     id: "oo-vehicle-driver",
     Component: OoVehicleDriverSection,
-    when: (caps, b) => b.status === "PREPARATION" && caps.canEditBooking,
+    when: (caps, b) => {
+      if (TERMINAL_BOOKING_STATUSES.has(b.status)) return false;
+      if (caps.canEditLogistics) return true;
+      return b.status === "PREPARATION" && caps.canEditBooking;
+    },
   },
   {
     id: "client-contact",
@@ -57,7 +74,8 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
     id: "venue-setup",
     Component: VenueSetupSection,
-    when: () => true,
+    // Full editor already covers these fields for booking.edit users
+    when: (caps) => !caps.canEditLogistics,
   },
   {
     id: "logistics-team",

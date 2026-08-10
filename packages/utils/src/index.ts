@@ -34,3 +34,6 @@ export function getPaymentBalance(amount: number, status: PaymentStatus) {
   if (status === "ADVANCE") return amount / 2;
   return amount;
 }
+
+export * from "./ethiopian-time";
+

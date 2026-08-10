@@ -9,7 +9,8 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { createBookingApi, getCustomFieldDefinitionsApi } from "@/features/bookings/services/bookings.api";
 import { DatePicker } from "@/components/ui/date-picker";
-import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { EthTimeSelect } from "@/components/ui/eth-time-select";
+import { useCalendarSystem, useDateFormatter } from "@/context/CalendarSystemContext";
 
 const _Route = createFileRoute("/bookings/new")({
   head: () => ({
@@ -32,6 +33,7 @@ export function NewBooking() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { formatDateTime } = useDateFormatter();
+  const { calendarSystem } = useCalendarSystem();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     client: "", contactPerson: "", contactPhone: "",
@@ -234,12 +236,32 @@ export function NewBooking() {
                       />
                     </Field>
                     <Field label="Assembly Time">
-                      <input 
-                        type="time" 
-                        value={getDateTimeParts(form.assemblyDate).time} 
-                        onChange={(e) => set("assemblyDate", mergeDateTime(getDateTimeParts(form.assemblyDate).date, e.target.value))} 
-                        className={inputCls} 
-                      />
+                      {calendarSystem === "ethiopic" ? (
+                        <EthTimeSelect
+                          value={getDateTimeParts(form.assemblyDate).time}
+                          onChange={(t) =>
+                            set(
+                              "assemblyDate",
+                              mergeDateTime(getDateTimeParts(form.assemblyDate).date, t),
+                            )
+                          }
+                        />
+                      ) : (
+                        <input
+                          type="time"
+                          value={getDateTimeParts(form.assemblyDate).time}
+                          onChange={(e) =>
+                            set(
+                              "assemblyDate",
+                              mergeDateTime(
+                                getDateTimeParts(form.assemblyDate).date,
+                                e.target.value,
+                              ),
+                            )
+                          }
+                          className={inputCls}
+                        />
+                      )}
                     </Field>
                   </div>
                 </div>
@@ -259,12 +281,29 @@ export function NewBooking() {
                       />
                     </Field>
                     <Field label="Event Time">
-                      <input 
-                        type="time" 
-                        value={getDateTimeParts(form.eventDate).time} 
-                        onChange={(e) => set("eventDate", mergeDateTime(getDateTimeParts(form.eventDate).date, e.target.value))} 
-                        className={inputCls} 
-                      />
+                      {calendarSystem === "ethiopic" ? (
+                        <EthTimeSelect
+                          value={getDateTimeParts(form.eventDate).time}
+                          onChange={(t) =>
+                            set(
+                              "eventDate",
+                              mergeDateTime(getDateTimeParts(form.eventDate).date, t),
+                            )
+                          }
+                        />
+                      ) : (
+                        <input
+                          type="time"
+                          value={getDateTimeParts(form.eventDate).time}
+                          onChange={(e) =>
+                            set(
+                              "eventDate",
+                              mergeDateTime(getDateTimeParts(form.eventDate).date, e.target.value),
+                            )
+                          }
+                          className={inputCls}
+                        />
+                      )}
                     </Field>
                   </div>
                 </div>
@@ -284,12 +323,32 @@ export function NewBooking() {
                       />
                     </Field>
                     <Field label="Dismantle Time">
-                      <input 
-                        type="time" 
-                        value={getDateTimeParts(form.dismantleDate).time} 
-                        onChange={(e) => set("dismantleDate", mergeDateTime(getDateTimeParts(form.dismantleDate).date, e.target.value))} 
-                        className={inputCls} 
-                      />
+                      {calendarSystem === "ethiopic" ? (
+                        <EthTimeSelect
+                          value={getDateTimeParts(form.dismantleDate).time}
+                          onChange={(t) =>
+                            set(
+                              "dismantleDate",
+                              mergeDateTime(getDateTimeParts(form.dismantleDate).date, t),
+                            )
+                          }
+                        />
+                      ) : (
+                        <input
+                          type="time"
+                          value={getDateTimeParts(form.dismantleDate).time}
+                          onChange={(e) =>
+                            set(
+                              "dismantleDate",
+                              mergeDateTime(
+                                getDateTimeParts(form.dismantleDate).date,
+                                e.target.value,
+                              ),
+                            )
+                          }
+                          className={inputCls}
+                        />
+                      )}
                     </Field>
                   </div>
                 </div>

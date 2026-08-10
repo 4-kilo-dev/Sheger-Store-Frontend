@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import * as SecureStore from "expo-secure-store";
+import { formatEthiopianDateTimeClock } from "@vortex/utils";
 import { useAppContext } from "@/context/AppContext";
 import { getSettingsApi, updateSettingsApi } from "@/services/settings.api";
 
@@ -153,13 +154,16 @@ export function useDateFormatter() {
       if (calendarSystem === "ethiopic") {
         const locale =
           numeralsSystem === "geez" ? "am-ET-u-ca-ethiopic" : "am-ET-u-ca-ethiopic-nu-latn";
-        return new Intl.DateTimeFormat(locale, {
+        const datePart = new Intl.DateTimeFormat(locale, {
           year: "numeric",
           month: "long",
           day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
         }).format(date);
+        const timePart = formatEthiopianDateTimeClock(
+          date,
+          numeralsSystem === "geez" ? "geez" : "latn",
+        );
+        return `${datePart} ${timePart}`;
       }
 
       return new Intl.DateTimeFormat("en-US", {

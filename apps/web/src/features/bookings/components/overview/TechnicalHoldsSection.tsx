@@ -13,6 +13,7 @@ import {
   getInventoryCategoriesApi,
   getInventoryPoolsApi,
 } from "@/features/inventory/services/inventory.api";
+import { filterScreenPools } from "@/features/inventory/utils/screen-pools";
 import { useBookingPoolAvailability } from "@/features/bookings/hooks/useBookingPoolAvailability";
 import { getBookingRentalWindow } from "@/features/bookings/utils/bookingAvailability";
 import { Section } from "@/features/bookings/components/shared/Section";
@@ -64,12 +65,7 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
           getInventoryCategoriesApi(),
           getInventoryPoolsApi(),
         ]);
-        const screenCat = cats.find((c) => c.key === "screen" || c.name === "LED Screen Modules");
-        if (screenCat) {
-          setScreenPools(pools.filter((p) => p.categoryId === screenCat.id));
-        } else {
-          setScreenPools(pools);
-        }
+        setScreenPools(filterScreenPools(pools, cats));
       } catch (e: any) {
         console.error("Failed to load screen pools", e);
         if (e.status === 403) {
@@ -304,6 +300,11 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
                     style={{ borderColor: "var(--border)" }}
                   >
                     <option value="">— Select Screen —</option>
+                    {screenPools.length === 0 && (
+                      <option value="" disabled>
+                        No LED screen pools in inventory
+                      </option>
+                    )}
                     {screenPools
                       .filter((p) => {
                         if (p.id === alloc.poolId) return true;
