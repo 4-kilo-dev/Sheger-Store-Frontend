@@ -81,7 +81,8 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { getPaymentSummary } from "@/services/bookings-api";
-import { getInventoryPoolsApi } from "@/services/inventory-api";
+import { getInventoryCategoriesApi, getInventoryPoolsApi } from "@/services/inventory-api";
+import { filterScreenPools } from "@/utils/screen-pools";
 import { uploadBookingAttachmentApi } from "@/services/attachments.api";
 import {
   useBookingCapabilities,
@@ -523,8 +524,18 @@ function OverviewTab({
 
   useEffect(() => {
     if (booking.status !== "RESERVED") return;
-    getInventoryPoolsApi()
-      .then((rows) => setPools(rows.map((p) => ({ id: p.id, name: p.name, categoryId: p.categoryId }))))
+    Promise.all([getInventoryCategoriesApi(), getInventoryPoolsApi()])
+      .then(([cats, rows]) => {
+        const screens = filterScreenPools(
+          rows.map((p) => ({
+            id: p.id,
+            name: p.name,
+            categoryId: p.categoryId,
+          })),
+          cats,
+        );
+        setPools(screens.map((p) => ({ id: p.id!, name: p.name || "", categoryId: p.categoryId || undefined })));
+      })
       .catch((error) => {
         setPools([]);
         if (error && typeof error === "object" && "status" in error && (error as { status: number }).status === 403) {

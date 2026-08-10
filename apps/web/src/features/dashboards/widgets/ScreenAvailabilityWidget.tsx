@@ -5,6 +5,7 @@ import {
   getInventoryPoolsApi,
   getPoolAvailabilityApi,
 } from "@/features/inventory/services/inventory.api";
+import { filterScreenPools } from "@/features/inventory/utils/screen-pools";
 
 function readStock(raw: unknown): number {
   if (raw == null || raw === "") return 0;
@@ -34,23 +35,10 @@ export function ScreenAvailabilityWidget() {
     queryFn: getInventoryPoolsApi,
   });
 
-  const screenPools = useMemo(() => {
-    const screenCat = categories.find(
-      (c) =>
-        c.key === "screen" ||
-        /led\s*screen/i.test(c.name) ||
-        c.name.toLowerCase() === "led panels",
-    );
-    const filtered = screenCat
-      ? pools.filter((p: any) => p.categoryId === screenCat.id && p.isActive !== false)
-      : pools.filter((p: any) => {
-          const name = String(p.name || "");
-          return /p\d|screen|led|panel/i.test(name) && p.isActive !== false;
-        });
-    return [...filtered].sort((a: any, b: any) =>
-      String(a.name || "").localeCompare(String(b.name || "")),
-    );
-  }, [categories, pools]);
+  const screenPools = useMemo(
+    () => filterScreenPools(pools, categories),
+    [categories, pools],
+  );
 
   const availabilityQueries = useQueries({
     queries: screenPools.map((pool: any) => ({

@@ -55,9 +55,16 @@ function looksLikeDimension(value?: string | null): boolean {
   return DIMENSION_RE.test(String(value ?? "").trim());
 }
 
+function isGenericScreenLabel(value?: string | null): boolean {
+  const text = String(value ?? "").trim();
+  if (!text) return false;
+  return /^(led\s*)?(screen|panel)s?(\s+modules?)?$/i.test(text);
+}
+
 function isScreenTypeToken(value: string): boolean {
   const text = value.trim();
   if (!text) return false;
+  if (isGenericScreenLabel(text)) return true;
   if (KNOWN_SCREEN_TYPES.some((k) => k.toUpperCase() === text.toUpperCase())) return true;
   return Boolean(extractPitchLabel(text));
 }
@@ -67,36 +74,53 @@ function extractScreenType(spec: string): string {
   const text = spec.trim();
   if (!text) return "";
 
-  for (const known of KNOWN_SCREEN_TYPES) {
-    if (text.toUpperCase().includes(known.toUpperCase())) return known;
-  }
-
-  // "45sqm of P3.9 Outdoor LED Panel" (CTO technical holds)
-  const ofMatch = text.match(/\d+(?:\.\d+)?\s*sqm\s+of\s+(.+)$/i);
-  if (ofMatch) {
-    const name = ofMatch[1].trim();
+  const pitchFromSegment = (segment: string): string => {
+    const part = segment.trim();
+    if (!part) return "";
     for (const known of KNOWN_SCREEN_TYPES) {
-      if (name.toUpperCase().includes(known.toUpperCase())) return known;
+      if (part.toUpperCase().includes(known.toUpperCase())) return known;
     }
-    const fromName = extractPitchLabel(name);
-    if (fromName) return fromName;
-    if (!looksLikeDimension(name) && !isMountStyle(name)) return name;
+    const ofMatch = part.match(/\d+(?:\.\d+)?\s*sqm\s+of\s+(.+)$/i);
+    if (ofMatch) {
+      const name = ofMatch[1].trim();
+      for (const known of KNOWN_SCREEN_TYPES) {
+        if (name.toUpperCase().includes(known.toUpperCase())) return known;
+      }
+      return extractPitchLabel(name);
+    }
+    return extractPitchLabel(part);
+  };
+
+  // Multi-allocation specs ("Pool A - 24sqm; Pool B - 10sqm")
+  const segments = text.split(/\s*[;|]\s*/).map((s) => s.trim()).filter(Boolean);
+  if (segments.length > 1) {
+    const pitches: string[] = [];
+    for (const segment of segments) {
+      const pitch = pitchFromSegment(segment);
+      if (pitch && !pitches.includes(pitch)) pitches.push(pitch);
+    }
+    if (pitches.length > 0) return pitches.join(", ");
   }
 
-  const fromSpec = extractPitchLabel(text);
-  if (fromSpec) return fromSpec;
+  return pitchFromSegment(text);
+}
 
-  const firstPart = text.split(" - ")[0]?.trim() || "";
-  if (
-    firstPart &&
-    !/sqm/i.test(firstPart) &&
-    !/^intake:/i.test(firstPart) &&
-    !looksLikeDimension(firstPart) &&
-    !isMountStyle(firstPart)
-  ) {
-    return firstPart;
+/** Collect pitch labels from reserved / BOM screen pools. */
+function extractScreenTypesFromEquipment(sources: Array<{ name?: string | null; categoryKey?: string | null }>): string {
+  const pitches: string[] = [];
+  for (const source of sources) {
+    const name = String(source.name || "").trim();
+    if (!name) continue;
+    const key = String(source.categoryKey || "").toLowerCase();
+    const looksScreen =
+      key === "screen" ||
+      key.includes("screen") ||
+      /led|panel|p\d/i.test(name);
+    if (!looksScreen) continue;
+    const pitch = extractPitchLabel(name);
+    if (pitch && !pitches.includes(pitch)) pitches.push(pitch);
   }
-  return "";
+  return pitches.join(", ");
 }
 
 function extractPitchLabel(text: string): string {
@@ -126,6 +150,13 @@ function parseBookingScreenFields(b: {
   arrangement_details?: string | null;
   screenAreaSqm?: number | string | null;
   customFields?: Record<string, any> | null;
+  reservations?: Array<{
+    releasedAt?: string | null;
+    pool?: { name?: string | null; category?: { key?: string | null } | null } | null;
+  }> | null;
+  bomLines?: Array<{
+    pool?: { name?: string | null; category?: { key?: string | null } | null } | null;
+  }> | null;
 }) {
   const spec = (b.itemServiceSpec || "").trim();
   const specParts = spec ? spec.split(" - ").map((part) => part.trim()) : [];
@@ -143,7 +174,26 @@ function parseBookingScreenFields(b: {
   const backendSize = Number(b.screenAreaSqm);
   if (Number.isFinite(backendSize) && backendSize > 0) size = backendSize;
 
-  const screenType = extractScreenType(spec);
+  let screenType = extractScreenType(spec);
+
+  // Prefer live soft/hard holds, then BOM screen lines, when spec text has no pitch
+  if (!screenType) {
+    const fromReservations = extractScreenTypesFromEquipment(
+      (b.reservations || [])
+        .filter((r) => !r.releasedAt)
+        .map((r) => ({
+          name: r.pool?.name,
+          categoryKey: r.pool?.category?.key,
+        })),
+    );
+    const fromBom = extractScreenTypesFromEquipment(
+      (b.bomLines || []).map((line) => ({
+        name: line.pool?.name,
+        categoryKey: line.pool?.category?.key,
+      })),
+    );
+    screenType = fromReservations || fromBom;
+  }
 
   // Layout text candidates (preferred). Mount style is a separate fallback.
   const layoutCandidates: Array<string | null | undefined> = [
@@ -161,7 +211,8 @@ function parseBookingScreenFields(b: {
       (part) =>
         !isMountStyle(part) &&
         !/sqm/i.test(part) &&
-        !isScreenTypeToken(part),
+        !isScreenTypeToken(part) &&
+        !isGenericScreenLabel(part),
     ),
   ];
 
@@ -180,7 +231,11 @@ function parseBookingScreenFields(b: {
     for (const candidate of layoutCandidates) {
       if (candidate == null || candidate === spec) continue; // avoid dumping full CTO hold blurbs
       const formatted = formatArrangementLabel(candidate);
-      if (formatted && !isScreenTypeToken(formatted)) {
+      if (
+        formatted &&
+        !isScreenTypeToken(formatted) &&
+        !isGenericScreenLabel(formatted)
+      ) {
         arrangement = formatted;
         break;
       }

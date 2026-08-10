@@ -304,7 +304,16 @@ export function BookingsIndex() {
     }
 
     // Screen type filter
-    if (screenFilter.size > 0) r = r.filter((b) => screenFilter.has(b.screenType));
+    if (screenFilter.size > 0) {
+      r = r.filter((b) => {
+        const types = String(b.screenType || "")
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
+        if (types.length === 0) return false;
+        return types.some((t) => screenFilter.has(t as ScreenType)) || screenFilter.has(b.screenType as ScreenType);
+      });
+    }
 
     // Assignee filter
     if (assigneeFilter.size > 0) r = r.filter((b) => b.assignees.some((a) => assigneeFilter.has(a)));
