@@ -82,6 +82,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned);
 
   const canEditLogistics = can(PERMISSION.BOOKING_EDIT);
+  const canManageCustomer = can(PERMISSION.CUSTOMER_MANAGE);
 
   const canReportDamage = can(PERMISSION.DAMAGE_REPORT);
   const canSubmitEval =
@@ -239,6 +240,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     canDeclineAssignment,
     canEditBooking,
     canEditLogistics,
+    canManageCustomer,
     canReportDamage,
     canSubmitEval,
     canViewEval,

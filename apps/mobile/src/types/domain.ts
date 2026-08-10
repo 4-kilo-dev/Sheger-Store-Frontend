@@ -49,6 +49,7 @@ export interface BookingAssignment {
 export interface Booking {
   id: string;
   code: string;
+  customerId?: string;
   client: string;
   contactPerson: string;
   contactPhone: string;

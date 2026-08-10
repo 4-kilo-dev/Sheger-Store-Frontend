@@ -68,12 +68,12 @@ import {
   usePerformanceMetrics,
   useSubmitInternalEvaluation,
   useUpdateBooking,
+  useUpdateCustomer,
   useCreateHandoffSnapshot,
   useCheckoutReverse,
   useBookingSnapshots,
   useBookingReservations,
-  useCreateReservation,
-  useDeleteReservation,
+  useReplacePoolReservations,
   useCustomFieldDefinitions,
 } from "@/hooks/useOperations";
 import { useBookingActions } from "@/hooks/useBookingActions";
@@ -503,13 +503,24 @@ function OverviewTab({
     isOnsiteSurface ? booking.id : "",
     "CHECKOUT",
   );
+  const holdEditableStatuses = new Set([
+    "RESERVED",
+    "CONFIRMED",
+    "ASSIGNED",
+    "ACCEPTED",
+    "PREPARATION",
+  ]);
   const { data: reservationsData } = useBookingReservations(
-    booking.status === "RESERVED" ? booking.id : "",
+    holdEditableStatuses.has(booking.status) ? booking.id : "",
   );
   const updateBooking = useUpdateBooking();
-  const createReservation = useCreateReservation();
-  const deleteReservation = useDeleteReservation();
+  const updateCustomer = useUpdateCustomer();
+  const replacePoolReservations = useReplacePoolReservations();
   const [ctoNotes, setCtoNotes] = useState(booking.ctoNotes || "");
+  const [clientName, setClientName] = useState(booking.client || "");
+  const [contactPerson, setContactPerson] = useState(booking.contactPerson || "");
+  const [contactPhone, setContactPhone] = useState(booking.contactPhone || "");
+  const [savingClient, setSavingClient] = useState(false);
   const [allocations, setAllocations] = useState<Array<{ poolId: string; quantity: string }>>([
     { poolId: "", quantity: "" },
   ]);
@@ -521,6 +532,12 @@ function OverviewTab({
   const [driverName, setDriverName] = useState(booking.driver || "");
   const [teamLeader, setTeamLeader] = useState(booking.teamLeader || "");
   const customFieldsQuery = useCustomFieldDefinitions();
+
+  useEffect(() => {
+    setClientName(booking.client || "");
+    setContactPerson(booking.contactPerson || "");
+    setContactPhone(booking.contactPhone || "");
+  }, [booking.client, booking.contactPerson, booking.contactPhone]);
 
   useEffect(() => {
     if (booking.status !== "RESERVED") return;
@@ -574,17 +591,12 @@ function OverviewTab({
     }
     setSavingHolds(true);
     try {
-      for (const reservation of reservations) {
-        await deleteReservation.mutateAsync({ bookingId: booking.id, id: reservation.id });
+      if (valid.length > 0) {
+        await replacePoolReservations.mutateAsync({
+          bookingId: booking.id,
+          lines: valid.map((a) => ({ poolId: a.poolId, quantity: a.quantity })),
+        });
       }
-      await Promise.all(
-        valid.map((a) =>
-          createReservation.mutateAsync({
-            bookingId: booking.id,
-            payload: { poolId: a.poolId, quantity: a.quantity },
-          }),
-        ),
-      );
       const spec = valid
         .map((a) => {
           const poolName = pools.find((p) => p.id === a.poolId)?.name || "LED Screen";
@@ -814,10 +826,65 @@ function OverviewTab({
       ) : null}
 
       <Section title="Client & Contact" icon={User}>
-        <KV label="Client" value={booking.client} />
-        <KV label="Contact Person" value={booking.contactPerson} />
-        <KV label="Phone" value={booking.contactPhone} mono />
-        <KV label="Booking Code" value={booking.code} mono />
+        {caps.canManageCustomer && booking.customerId ? (
+          <>
+            <Field label="Client">
+              <Input value={clientName} onChangeText={setClientName} placeholder="Client name" />
+            </Field>
+            <Field label="Contact Person">
+              <Input
+                value={contactPerson}
+                onChangeText={setContactPerson}
+                placeholder="Contact person"
+              />
+            </Field>
+            <Field label="Phone">
+              <Input
+                value={contactPhone}
+                onChangeText={setContactPhone}
+                placeholder="Phone"
+                keyboardType="phone-pad"
+              />
+            </Field>
+            <KV label="Booking Code" value={booking.code} mono />
+            <Button
+              onPress={async () => {
+                if (!clientName.trim() || !contactPhone.trim()) {
+                  Alert.alert("Incomplete", "Client name and phone are required.");
+                  return;
+                }
+                setSavingClient(true);
+                try {
+                  await updateCustomer.mutateAsync({
+                    customerId: booking.customerId!,
+                    payload: {
+                      name: clientName.trim(),
+                      phone: contactPhone.trim(),
+                      notes: contactPerson.trim() || clientName.trim(),
+                    },
+                  });
+                  Alert.alert("Saved", "Client & contact saved.");
+                } catch (error) {
+                  Alert.alert(
+                    "Save failed",
+                    error instanceof Error ? error.message : "Could not save client details.",
+                  );
+                } finally {
+                  setSavingClient(false);
+                }
+              }}
+            >
+              {savingClient ? "Saving..." : "Save Client Info"}
+            </Button>
+          </>
+        ) : (
+          <>
+            <KV label="Client" value={booking.client} />
+            <KV label="Contact Person" value={booking.contactPerson} />
+            <KV label="Phone" value={booking.contactPhone} mono />
+            <KV label="Booking Code" value={booking.code} mono />
+          </>
+        )}
       </Section>
       <Section title="Venue & Setup" icon={MapPin}>
         <KV label="Venue" value={booking.venue} />

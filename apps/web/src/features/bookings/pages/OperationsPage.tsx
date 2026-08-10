@@ -16,9 +16,12 @@ function parseDay(value?: string | null): Date | null {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-/** Dispatch queue: assembly/event day is today or later (exclude finished past jobs). */
-function isUpcomingOrToday(booking: Booking, now = new Date()): boolean {
-  const day = parseDay(booking.assemblyDate) || parseDay(booking.eventDate);
+/** Still on the dispatch board until the job window ends (not just assembly day). */
+function isActiveOrUpcoming(booking: Booking, now = new Date()): boolean {
+  const day =
+    parseDay(booking.dismantleDate) ||
+    parseDay(booking.eventDate) ||
+    parseDay(booking.assemblyDate);
   if (!day) return true;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return day.getTime() >= today.getTime();
@@ -28,12 +31,20 @@ function bookingSortKey(booking: Booking): string {
   return booking.assemblyDate || booking.eventDate || booking.createdAt || "";
 }
 
+/** Pre-onsite statuses that still need logistics / dispatch attention. */
+const DISPATCH_STATUSES: BookingStatus[] = [
+  "CONFIRMED",
+  "ASSIGNED",
+  "ACCEPTED",
+  "PREPARATION",
+];
+
 // ─── Column definitions ───────────────────────────────────────────────────────
 const COLUMNS: Array<{
   id: string;
   label: string;
   statuses: BookingStatus[];
-  /** When true, hide bookings whose assembly/event date is already in the past. */
+  /** When true, hide bookings whose event/dismantle window is already in the past. */
   upcomingOnly?: boolean;
   accent: string;
   accentFg: string;
@@ -42,7 +53,7 @@ const COLUMNS: Array<{
   {
     id: "dispatch",
     label: "Needs Dispatch",
-    statuses: ["ACCEPTED", "PREPARATION"],
+    statuses: DISPATCH_STATUSES,
     upcomingOnly: true,
     accent: "#f59e0b",
     accentFg: "#78350f",
@@ -144,7 +155,7 @@ function BookingCard({ booking, colAccent }: { booking: Booking; colAccent: stri
         </div>
       )}
 
-      {(booking.status === "ACCEPTED" || booking.status === "PREPARATION") && (
+      {DISPATCH_STATUSES.includes(booking.status) && (
         <div className="mt-3 pt-3 border-t flex items-center gap-1.5 text-[11px]" style={{ borderColor: "var(--border)" }}>
           {crewCount > 0 ? (
             <>
@@ -241,7 +252,7 @@ export function OperationsPage() {
         col.id,
         filtered
           .filter((b) => col.statuses.includes(b.status))
-          .filter((b) => (col.upcomingOnly ? isUpcomingOrToday(b) : true))
+          .filter((b) => (col.upcomingOnly ? isActiveOrUpcoming(b) : true))
           .sort((a, b) => bookingSortKey(a).localeCompare(bookingSortKey(b))),
       ])
     ),

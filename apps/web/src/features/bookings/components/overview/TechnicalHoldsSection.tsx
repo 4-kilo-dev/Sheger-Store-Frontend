@@ -4,9 +4,8 @@ import { toast } from "sonner";
 import { AlertCircle, Trash2, Wrench } from "lucide-react";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 import {
-  createReservationApi,
-  deleteReservationApi,
   getBookingReservationsApi,
+  replacePoolReservationsApi,
   updateBookingApi,
 } from "@/features/bookings/services/bookings.api";
 import {
@@ -107,16 +106,15 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
     }
     setIsSavingTechnical(true);
     try {
-      const res = await getBookingReservationsApi(b.id);
-      if (res?.reservations) {
-        await Promise.all(res.reservations.map((r: any) => deleteReservationApi(b.id, r.id)));
+      if (validAllocations.length > 0) {
+        await replacePoolReservationsApi(
+          b.id,
+          validAllocations.map((a) => ({
+            poolId: a.poolId,
+            quantity: String(a.quantity),
+          })),
+        );
       }
-
-      await Promise.all(
-        validAllocations.map((a) =>
-          createReservationApi(b.id, { poolId: a.poolId, quantity: String(a.quantity) })
-        )
-      );
 
       const bookingPayload: Record<string, string | number> = {
         ctoConsultationNotes: ctoNotes,
@@ -140,6 +138,7 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
       setIsEditingHolds(false);
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["booking-reservations", b.id] });
+      queryClient.invalidateQueries({ queryKey: ["pool-availability"] });
     } catch (e: any) {
       toast.error(e.message || "Failed to save technical allocation");
     } finally {

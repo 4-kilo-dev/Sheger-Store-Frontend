@@ -98,15 +98,27 @@ export function ScreenAvailabilityWidget() {
         {screenPools.map((pool: any, idx: number) => {
           const stock = readStock(pool.totalQuantity);
           const availQuery = availabilityQueries[idx];
-          const available =
+          const hardAvailable =
             availQuery?.data?.available != null
               ? Number(availQuery.data.available)
               : null;
+          const softReserved =
+            availQuery?.data?.softReserved != null
+              ? Number(availQuery.data.softReserved)
+              : 0;
           const hardReserved =
             availQuery?.data?.hardReserved != null
               ? Number(availQuery.data.hardReserved)
               : null;
-          const displayAvail = available != null && Number.isFinite(available) ? available : stock;
+          // Match booking planning: soft technical holds reduce displayed availability.
+          const available =
+            hardAvailable != null && Number.isFinite(hardAvailable)
+              ? Math.max(0, hardAvailable - (Number.isFinite(softReserved) ? softReserved : 0))
+              : null;
+          const displayAvail = available != null ? available : stock;
+          const held =
+            (Number.isFinite(hardReserved) ? (hardReserved as number) : 0) +
+            (Number.isFinite(softReserved) ? softReserved : 0);
           const tight = displayAvail <= 0;
           const low = !tight && stock > 0 && displayAvail / stock < 0.25;
 
@@ -142,9 +154,9 @@ export function ScreenAvailabilityWidget() {
                   <div>
                     Stock <span className="font-mono font-semibold">{stock}</span> {unit}
                   </div>
-                  {hardReserved != null && hardReserved > 0 && (
+                  {held > 0 && (
                     <div className="mt-0.5">
-                      Held <span className="font-mono font-semibold">{hardReserved}</span> {unit}
+                      Held <span className="font-mono font-semibold">{held}</span> {unit}
                     </div>
                   )}
                 </div>
