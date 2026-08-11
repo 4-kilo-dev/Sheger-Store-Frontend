@@ -5,11 +5,13 @@ import { Truck } from "lucide-react";
 import { updateBookingApi } from "@/features/bookings/services/bookings.api";
 import { useStaffForBooking } from "@/features/bookings/hooks/useStaffForBooking";
 import { Section } from "@/features/bookings/components/shared/Section";
+import { KV } from "@/features/bookings/components/shared/KV";
 import type { OverviewSectionProps } from "./types";
 
 export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) {
   const queryClient = useQueryClient();
-  const { staffList } = useStaffForBooking(caps.canFetchStaff);
+  const canEdit = caps.canEditLogistics;
+  const { staffList } = useStaffForBooking(canEdit && caps.canFetchStaff);
 
   const [vehicleText, setVehicleText] = useState(b.vehicleText || "");
   const [vehiclePlate, setVehiclePlate] = useState(b.vehiclePlate || "");
@@ -39,6 +41,23 @@ export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) 
     }
   };
 
+  const selectedDriver =
+    staffList.find((s) => s.id === (b.driverUserId || driverUserId))?.name ||
+    b.driver ||
+    "—";
+
+  if (!canEdit) {
+    return (
+      <Section title="Vehicle & Driver Details" icon={Truck}>
+        <div className="grid grid-cols-2 gap-x-6">
+          <KV label="Driver Name / Description" value={b.vehicleText || b.driver || "—"} />
+          <KV label="Vehicle Plate" value={b.vehiclePlate || "—"} mono />
+          <KV label="Assigned Driver" value={selectedDriver} />
+        </div>
+      </Section>
+    );
+  }
+
   return (
     <Section title="Vehicle & Driver Details" icon={Truck}>
       <div className="space-y-4">
@@ -54,8 +73,7 @@ export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) 
               value={vehicleText}
               onChange={(e) => setVehicleText(e.target.value)}
               placeholder="e.g. Abebe Kebede"
-              disabled={!caps.canEditLogistics}
-              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] disabled:opacity-75 disabled:cursor-not-allowed"
+              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
               style={{ borderColor: "var(--border)" }}
             />
           </label>
@@ -66,8 +84,7 @@ export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) 
               value={vehiclePlate}
               onChange={(e) => setVehiclePlate(e.target.value)}
               placeholder="e.g. AA 3-A12345"
-              disabled={!caps.canEditLogistics}
-              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] font-mono disabled:opacity-75 disabled:cursor-not-allowed"
+              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] font-mono"
               style={{ borderColor: "var(--border)" }}
             />
           </label>
@@ -79,8 +96,7 @@ export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) 
             <select
               value={driverUserId}
               onChange={(e) => setDriverUserId(e.target.value)}
-              disabled={!caps.canEditLogistics}
-              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px] cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2 text-[12px] cursor-pointer"
               style={{ borderColor: "var(--border)" }}
             >
               <option value="">— Select driver (optional) —</option>
@@ -92,18 +108,17 @@ export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) 
             </select>
           </label>
         </div>
-        {caps.canEditLogistics && (
-          <div className="flex justify-end">
-            <button
-              onClick={handleSaveLogistics}
-              disabled={isSavingLogistics}
-              className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 cursor-pointer"
-              style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
-            >
-              {isSavingLogistics ? "Saving…" : "Save Vehicle & Driver"}
-            </button>
-          </div>
-        )}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleSaveLogistics}
+            disabled={isSavingLogistics}
+            className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50 cursor-pointer"
+            style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+          >
+            {isSavingLogistics ? "Saving…" : "Save Vehicle & Driver"}
+          </button>
+        </div>
       </div>
     </Section>
   );
