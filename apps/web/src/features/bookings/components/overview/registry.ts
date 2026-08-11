@@ -10,15 +10,6 @@ import { VenueSetupSection } from "./VenueSetupSection";
 import { LogisticsTeamSection } from "./LogisticsTeamSection";
 import { NotesRequirementsSection } from "./NotesRequirementsSection";
 
-const SPEC_EDIT_STATUSES = new Set([
-  "ACCEPTED",
-  "ONSITE",
-  "RESERVED",
-  "CONFIRMED",
-  "ASSIGNED",
-  "PREPARATION",
-]);
-
 const TERMINAL_BOOKING_STATUSES = new Set(["DONE", "CANCELED"]);
 
 export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
@@ -31,10 +22,9 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
     id: "booking-specifications",
     Component: BookingSpecificationsEditor,
     when: (caps, b) => {
-      if (!caps.canEditBooking || TERMINAL_BOOKING_STATUSES.has(b.status)) return false;
-      // booking.edit (admin/CCR): editable at every active stage
-      if (caps.canEditLogistics) return true;
-      return SPEC_EDIT_STATUSES.has(b.status);
+      // Full editable booking details — booking.edit only (not field technicians)
+      if (!caps.canEditLogistics || TERMINAL_BOOKING_STATUSES.has(b.status)) return false;
+      return true;
     },
   },
   {
@@ -60,11 +50,7 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
     id: "oo-vehicle-driver",
     Component: OoVehicleDriverSection,
-    when: (caps, b) => {
-      if (TERMINAL_BOOKING_STATUSES.has(b.status)) return false;
-      if (caps.canEditLogistics) return true;
-      return b.status === "PREPARATION" && caps.canEditBooking;
-    },
+    when: (_caps, b) => !TERMINAL_BOOKING_STATUSES.has(b.status),
   },
   {
     id: "client-contact",
@@ -74,7 +60,7 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
     id: "venue-setup",
     Component: VenueSetupSection,
-    // Full editor already covers these fields for booking.edit users
+    // Read-only venue/spec view for users without booking.edit (e.g. technicians)
     when: (caps) => !caps.canEditLogistics,
   },
   {

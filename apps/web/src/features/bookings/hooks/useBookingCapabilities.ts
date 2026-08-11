@@ -81,7 +81,22 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     can(PERMISSION.BOOKING_EDIT) ||
     (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned);
 
-  const canEditLogistics = can(PERMISSION.BOOKING_EDIT);
+  /**
+   * Core booking / vehicle / logistics field edits.
+   * Requires booking.edit plus an ops-facing grant so field technicians
+   * (view_assigned only) stay read-only even if booking.edit was mis-granted.
+   */
+  const canEditLogistics =
+    can(PERMISSION.BOOKING_EDIT) &&
+    canAny([
+      PERMISSION.BOOKING_VIEW_ALL,
+      PERMISSION.BOOKING_CONFIRM,
+      PERMISSION.BOOKING_CREATE,
+      PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN,
+      PERMISSION.ASSIGNMENT_ASSIGN_CREW,
+      PERMISSION.CUSTOMER_MANAGE,
+      PERMISSION.PAYMENT_MANAGE,
+    ]);
   const canManageCustomer = can(PERMISSION.CUSTOMER_MANAGE);
 
   const canReportDamage = can(PERMISSION.DAMAGE_REPORT);
@@ -113,7 +128,6 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canWriteTechnicalHolds = can(PERMISSION.INVENTORY_RESERVE);
   const showOpsSidebar = canAny([
     PERMISSION.BOOKING_VIEW_ALL,
-    PERMISSION.BOOKING_EDIT,
     PERMISSION.BOOKING_CONFIRM,
     PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN,
     PERMISSION.ASSIGNMENT_ASSIGN_CREW,

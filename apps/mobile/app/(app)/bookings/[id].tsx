@@ -778,9 +778,9 @@ function OverviewTab({
         </Section>
       ) : null}
 
-      {booking.status === "PREPARATION" && (caps.canAssignCrew || caps.canEditBooking) ? (
+      {booking.status === "PREPARATION" && (caps.canAssignCrew || caps.canEditLogistics || caps.canEditBooking) ? (
         <Section title="Dispatch Logistics" icon={Truck}>
-          {caps.canEditBooking ? (
+          {caps.canEditLogistics ? (
             <>
               <Field label="Team Leader">
                 <Input value={teamLeader} onChangeText={setTeamLeader} />
