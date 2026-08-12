@@ -2,11 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "tanstack-start",
   "installCommand": "cd ../.. && pnpm install",
-  "buildCommand": "cd ../.. && pnpm build:web",
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "http://178.105.14.11:3000/:path*"
-    }
-  ]
+  "buildCommand": "cd ../.. && pnpm build:web"
 }
