@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { AlertCircle, Check, Package } from "lucide-react-native";
 import {
   buildCheckinReturns,
+  computeConfirmPricing,
   isCheckinAction as isInventoryCheckinAction,
   isCheckoutReverseAction,
   type InventoryCondition,
@@ -148,9 +149,15 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
   const hasCheckinItemsSelected = checkedCheckinItems.size > 0;
 
   const stagehandLeaderName = booking.teamLeader || "— Not assigned —";
+  const screenSize = booking.size > 0 ? booking.size : 0;
   const screenTypeLabel = booking.screenType || "—";
-  const screenSizeLabel = booking.size > 0 ? `${booking.size} sqm` : "—";
-  const computedTotal = dailyRate > 0 && rentedDays > 0 ? dailyRate * rentedDays : 0;
+  const screenSizeLabel = screenSize > 0 ? `${screenSize} sqm` : "—";
+  const pricing = computeConfirmPricing({
+    screenSize,
+    dailyRate,
+    rentedDays,
+  });
+  const computedTotal = pricing.total;
 
   const close = () => {
     setShowActionModal(false);
@@ -172,9 +179,7 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
       cancellationReason.trim().length < 10) ||
     (isAssignTechnicianAction && selectedTechnicianIds.length === 0) ||
     (showPaymentCapture &&
-      (computedTotal < 1000 ||
-        dailyRate <= 0 ||
-        rentedDays <= 0 ||
+      (!pricing.isValid ||
         (paymentType === "advance" && advancePayment > computedTotal) ||
         (paymentType === "advance" && advancePayment <= 0))) ||
     (isCheckinAction && !hasCheckinItemsSelected) ||
@@ -229,6 +234,10 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
     }
 
     if (showPaymentCapture) {
+      if (screenSize <= 0) {
+        Alert.alert("Error", "Screen size (sqm) is required before confirming.");
+        return;
+      }
       if (rentedDays <= 0) {
         Alert.alert(
           "Error",
@@ -236,8 +245,11 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
         );
         return;
       }
-      if (computedTotal < 1000 || dailyRate <= 0) {
-        Alert.alert("Error", "Daily rate is required (computed total min ETB 1,000).");
+      if (!pricing.isValid) {
+        Alert.alert(
+          "Error",
+          pricing.errors[0] || "Daily rate is required (computed total min ETB 1,000).",
+        );
         return;
       }
       if (paymentType === "advance") {
@@ -255,6 +267,7 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
           totalAmount: computedTotal,
           pricingDailyRate: dailyRate,
           pricingRentedDays: rentedDays,
+          pricingScreenSize: screenSize,
         });
       } else {
         confirmBookingWithPayment({
@@ -263,6 +276,7 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
           totalAmount: computedTotal,
           pricingDailyRate: dailyRate,
           pricingRentedDays: rentedDays,
+          pricingScreenSize: screenSize,
         });
       }
       return;
@@ -314,6 +328,9 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
                 ))}
               </View>
             </Field>
+            <Field label="Screen Size (sqm)">
+              <Input editable={false} value={screenSize > 0 ? String(screenSize) : "—"} />
+            </Field>
             <Field label="Number of Days">
               <Input editable={false} value={rentedDays > 0 ? String(rentedDays) : "—"} />
             </Field>
@@ -349,13 +366,16 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
                   : "Enter the daily rate and advance amount to preview the payment split."
                 : computedTotal >= 1000
                   ? `Full payment will record ${formatCurrency(computedTotal)} as paid.`
-                  : "Enter the daily rate to compute the contract total (days × rate)."}
+                  : "Total = screen size (sqm) × daily rate × days."}
             </AppText>
 
+            {screenSize <= 0 ? (
+              <Warning text="Screen size (sqm) is required before confirming." />
+            ) : null}
             {rentedDays <= 0 ? (
               <Warning text="This booking has no number of days set — update the booking schedule first." />
             ) : null}
-            {rentedDays > 0 && (computedTotal < 1000 || dailyRate <= 0) ? (
+            {screenSize > 0 && rentedDays > 0 && (computedTotal < 1000 || dailyRate <= 0) ? (
               <Warning text="Daily rate is required (computed total min ETB 1,000)." />
             ) : null}
             {paymentType === "advance" &&
@@ -372,7 +392,8 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
         {isAssignTechnicianAction ? (
           <View style={{ gap: 10 }}>
             <AppText variant="small" color={colors.text2}>
-              Select one or more technicians. Chief technicians are included in this list.
+              Select the technician crew. Uncheck someone to remove them; check someone new to add
+              them.
             </AppText>
             {assignableStaff.length === 0 ? (
               <AppText variant="subtitle">No technicians available to assign.</AppText>
@@ -383,7 +404,6 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
                 return (
                   <Pressable
                     key={member.id}
-                    disabled={already}
                     onPress={() => {
                       setSelectedTechnicianIds((prev) =>
                         prev.includes(member.id)
@@ -391,11 +411,7 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
                           : [...prev, member.id],
                       );
                     }}
-                    style={[
-                      styles.staffRow,
-                      selected ? styles.staffRowActive : null,
-                      already ? { opacity: 0.45 } : null,
-                    ]}
+                    style={[styles.staffRow, selected ? styles.staffRowActive : null]}
                   >
                     <View style={[styles.check, selected ? styles.checkOn : null]}>
                       {selected ? <Check size={12} color={colors.accentForeground} /> : null}
@@ -403,7 +419,7 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
                     <AppText style={{ flex: 1, fontWeight: "700" }}>
                       {member.name}
                       {isChiefTechnicianRole(member.role) ? " (Chief Technician)" : ""}
-                      {already ? " — already assigned" : ""}
+                      {already ? " — currently assigned" : ""}
                     </AppText>
                   </Pressable>
                 );

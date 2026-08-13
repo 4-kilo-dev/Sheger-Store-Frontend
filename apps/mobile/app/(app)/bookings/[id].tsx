@@ -75,12 +75,13 @@ import {
   useBookingReservations,
   useReplacePoolReservations,
   useCustomFieldDefinitions,
+  useDeleteAssignment,
 } from "@/hooks/useOperations";
 import { useBookingActions } from "@/hooks/useBookingActions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 import { PERMISSION } from "@/lib/auth/permission-keys";
-import { getPaymentSummary } from "@/services/bookings-api";
+import { getPaymentSummary, transitionBookingStatusApi } from "@/services/bookings-api";
 import { getInventoryCategoriesApi, getInventoryPoolsApi } from "@/services/inventory-api";
 import { filterScreenPools } from "@/utils/screen-pools";
 import { uploadBookingAttachmentApi } from "@/services/attachments.api";
@@ -376,6 +377,7 @@ export default function BookingDetailScreen() {
         <TeamTab
           booking={booking}
           assignments={assignments}
+          canAssignTechnician={caps.canAssignTechnician}
           onAssignPress={() =>
             actions.openAction(caps.assignTechnicianAction ?? createAssignTechnicianAction())
           }
@@ -387,7 +389,12 @@ export default function BookingDetailScreen() {
       {safeTab === "Payments" ? <PaymentsTab booking={booking} /> : null}
       {safeTab === "Files" ? <FilesTab booking={booking} attachments={attachments} /> : null}
       {safeTab === "Evaluations" ? (
-        <EvaluationsTab booking={booking} internalEval={internalEval} clientEval={clientEval} />
+        <EvaluationsTab
+          booking={bookingWithAssignments || booking}
+          canSubmitEval={caps.canSubmitEval}
+          internalEval={internalEval}
+          clientEval={clientEval}
+        />
       ) : null}
       {safeTab === "Activity" ? <ActivityTab statusHistory={booking.statusHistory} /> : null}
 
@@ -540,7 +547,7 @@ function OverviewTab({
   }, [booking.client, booking.contactPerson, booking.contactPhone]);
 
   useEffect(() => {
-    if (booking.status !== "RESERVED") return;
+    if (!caps.showTechnicalHolds) return;
     Promise.all([getInventoryCategoriesApi(), getInventoryPoolsApi()])
       .then(([cats, rows]) => {
         const screens = filterScreenPools(
@@ -559,7 +566,7 @@ function OverviewTab({
           setPoolsRestricted(true);
         }
       });
-  }, [booking.status]);
+  }, [booking.status, caps.showTechnicalHolds]);
 
   const checkoutSnapshot = snapshots[0] || null;
   const reservations = reservationsData?.reservations ?? [];
@@ -682,7 +689,7 @@ function OverviewTab({
         </>
       ) : null}
 
-      {booking.status === "RESERVED" ? (
+      {caps.showTechnicalHolds ? (
         <Section
           title="Technical Hold Specifications"
           icon={Wrench}
@@ -1039,6 +1046,7 @@ function ScheduleTab({ booking }: { booking: Booking }) {
 function TeamTab({
   booking,
   assignments,
+  canAssignTechnician,
   onAssignPress,
 }: {
   booking: Booking;
@@ -1052,9 +1060,11 @@ function TeamTab({
     status?: string;
     user?: { id?: string; name?: string };
   }>;
+  canAssignTechnician: boolean;
   onAssignPress: () => void;
 }) {
   const { canAny } = usePermissions();
+  const deleteAssignment = useDeleteAssignment();
   const canAssign = canAny([
     PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN,
     PERMISSION.ASSIGNMENT_ASSIGN_CREW,
@@ -1096,13 +1106,14 @@ function TeamTab({
     (a) => a.roleContext === "CREW" && !a.declineReason && a.status !== "DECLINED",
   );
 
-  type RosterRow = { role: string; name: string; statusKey: MemberStatus };
+  type RosterRow = { role: string; name: string; statusKey: MemberStatus; assignmentId?: string };
 
   const roster: RosterRow[] = [
     {
       role: "Chief Technician",
       name: chief?.user?.name || (isEmptyName(booking.teamLeader) ? "Unassigned" : booking.teamLeader),
       statusKey: chief ? getAssignmentStatus(chief) : "UNASSIGNED",
+      assignmentId: chief?.id,
     },
     {
       role: "Technician",
@@ -1126,6 +1137,7 @@ function TeamTab({
       role: "Operation Officer",
       name: oo?.user?.name || "Unassigned",
       statusKey: oo ? getAssignmentStatus(oo) : "UNASSIGNED",
+      assignmentId: oo?.id,
     },
     {
       role: "Team Leader",
@@ -1154,6 +1166,22 @@ function TeamTab({
     return name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
   }
 
+  const handleUnassign = (assignmentId: string, name: string) => {
+    Alert.alert("Remove assignment?", `Unassign ${name} from this booking?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => {
+          deleteAssignment.mutate(assignmentId, {
+            onError: (e) =>
+              Alert.alert("Error", e instanceof Error ? e.message : "Failed to remove assignment."),
+          });
+        },
+      },
+    ]);
+  };
+
   return (
     <Section
       title="Assigned Team"
@@ -1169,6 +1197,11 @@ function TeamTab({
       {roster.map((person) => {
         const tone = STATUS_TONE[person.statusKey];
         const unassigned = person.statusKey === "UNASSIGNED";
+        const canRemove =
+          canAssignTechnician &&
+          !!person.assignmentId &&
+          person.statusKey !== "UNASSIGNED" &&
+          person.statusKey !== "DECLINED";
         return (
           <View key={`${person.role}-${person.name}`} style={styles.personRow}>
             <View style={styles.personAvatar}>
@@ -1190,9 +1223,41 @@ function TeamTab({
               <AppText variant="eyebrow">{person.role}</AppText>
             </View>
             <ToneBadge label={person.statusKey} tone={tone} />
+            {canRemove ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${person.name}`}
+                onPress={() => handleUnassign(person.assignmentId!, person.name)}
+                style={styles.rowIconButton}
+              >
+                <Trash2 size={16} color={colors.destructive} />
+              </Pressable>
+            ) : null}
           </View>
         );
       })}
+      {canAssignTechnician && activeTech.length > 1 ? (
+        <View style={{ gap: 8, marginTop: 4 }}>
+          <AppText variant="eyebrow">Technician assignments</AppText>
+          {activeTech.map((a) => (
+            <View key={a.id} style={styles.personRow}>
+              <View style={{ flex: 1 }}>
+                <AppText style={{ fontWeight: "800" }}>{a.user?.name || "Technician"}</AppText>
+                <AppText variant="small" color={colors.text3}>
+                  {a.isTeamLead ? "Chief / lead" : "Technician"}
+                </AppText>
+              </View>
+              <Button
+                variant="ghost"
+                disabled={deleteAssignment.isPending}
+                onPress={() => handleUnassign(a.id, a.user?.name || "technician")}
+              >
+                Unassign
+              </Button>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </Section>
   );
 }
@@ -1669,10 +1734,12 @@ function FilesTab({
 
 function EvaluationsTab({
   booking,
+  canSubmitEval,
   internalEval,
   clientEval,
 }: {
   booking: Booking;
+  canSubmitEval: boolean;
   internalEval?: {
     evaluatorId?: string;
     createdAt?: string;
@@ -1687,8 +1754,7 @@ function EvaluationsTab({
     scores: Array<{ metricId?: string; label?: string; score: number; valueType?: string; description?: string }>;
   };
 }) {
-  const { can } = usePermissions();
-  const canSubmit = can(PERMISSION.EVAL_SUBMIT_INTERNAL);
+  const canSubmit = canSubmitEval;
   const { data: metrics = [] } = usePerformanceMetrics();
   const internalMetrics = metrics.filter((m) => m.category === "internal" && m.isActive);
   const submitEval = useSubmitInternalEvaluation();
@@ -1707,6 +1773,7 @@ function EvaluationsTab({
   }
 
   const handleSubmit = async () => {
+    if (!canSubmit) return;
     setEvalError(null);
     const scoreEntries = internalMetrics
       .map((m) => ({ metricId: m.id, score: Number(scores[m.id]) }))
@@ -1725,6 +1792,12 @@ function EvaluationsTab({
           scores: scoreEntries,
         },
       });
+      // Eval does not auto-transition — separate status call when permitted (web parity)
+      try {
+        await transitionBookingStatusApi(booking.id, "COMPLETED");
+      } catch {
+        // Non-fatal: eval saved even if COMPLETED transition is blocked
+      }
       setSubmitOpen(false);
       setScores({});
       setNotes("");

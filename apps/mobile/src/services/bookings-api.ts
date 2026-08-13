@@ -256,9 +256,11 @@ export async function createBookingApi(form: {
   dismantleDate?: string;
   rentedDays?: number;
   itemServiceSpec?: string;
+  arrangement?: string;
   size?: string | number;
   notes?: string;
   customValues?: Record<string, unknown>;
+  customFields?: Record<string, unknown>;
 }): Promise<Booking> {
   const customer = await client.post<{ id: string }>("/api/customers", {
     name: form.client,
@@ -296,11 +298,9 @@ export async function createBookingApi(form: {
 
   const screenSize = form.size !== "" && form.size != null ? Number(form.size) : undefined;
   const hasValidSize = screenSize !== undefined && Number.isFinite(screenSize) && screenSize >= 0;
-  const specText = form.itemServiceSpec?.trim();
-  const itemServiceSpec =
-    specText && hasValidSize
-      ? `${specText} - ${screenSize}sqm`
-      : specText || (hasValidSize ? `Screen - ${screenSize}sqm` : undefined);
+  const arrangementText = String(
+    form.arrangement ?? form.itemServiceSpec ?? "",
+  ).trim();
 
   const bookingPayload: Record<string, unknown> = {
     customerId: customer.id,
@@ -313,14 +313,20 @@ export async function createBookingApi(form: {
     assemblyEnd: assemblyEndStr,
     disassemblyStart: dismantleDateStr,
     disassemblyEnd: dismantleDateStr,
-    itemServiceSpec,
     itemServiceType: "Rental",
     notes: form.notes || "",
-    customFields: form.customValues || {},
+    customFields: form.customValues || form.customFields || {},
   };
+
+  if (arrangementText) {
+    bookingPayload.arrangementDetails = arrangementText;
+  }
 
   if (form.rentedDays != null && form.rentedDays > 0) {
     bookingPayload.rentedDays = form.rentedDays;
+  }
+  if (hasValidSize) {
+    bookingPayload.screenAreaSqm = String(screenSize);
   }
 
   const booking = await client.post<RawBooking>("/api/bookings", bookingPayload);
@@ -418,19 +424,24 @@ export async function confirmBookingWithPaymentApi(
     totalAmount: number;
     pricingDailyRate: number;
     pricingRentedDays: number;
+    pricingScreenSize: number;
   },
 ): Promise<void> {
-  const { toPaymentStatus, amount, totalAmount, pricingDailyRate, pricingRentedDays } = args;
+  const {
+    toPaymentStatus,
+    amount,
+    totalAmount,
+    pricingDailyRate,
+    pricingRentedDays,
+    pricingScreenSize,
+  } = args;
 
-  if (pricingDailyRate > 0 && pricingRentedDays > 0) {
-    await updateBookingApi(booking.id, {
-      dailyRate: String(pricingDailyRate),
-      rentedDays: pricingRentedDays,
-    });
-  } else if (pricingDailyRate > 0) {
-    await updateBookingApi(booking.id, {
-      dailyRate: String(pricingDailyRate),
-    });
+  const pricingUpdate: Record<string, unknown> = {};
+  if (pricingDailyRate > 0) pricingUpdate.dailyRate = String(pricingDailyRate);
+  if (pricingRentedDays > 0) pricingUpdate.rentedDays = pricingRentedDays;
+  if (pricingScreenSize > 0) pricingUpdate.screenAreaSqm = String(pricingScreenSize);
+  if (Object.keys(pricingUpdate).length > 0) {
+    await updateBookingApi(booking.id, pricingUpdate);
   }
 
   const needsNewPayment =

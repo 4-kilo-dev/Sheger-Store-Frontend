@@ -12,6 +12,7 @@ export {
   buildOperationItems,
   calendarYearMonth,
   compareYearMonth,
+  computeConfirmPricing,
   isCheckinAction,
   isCheckoutReverseAction,
   isDueForCheckinThisMonth,

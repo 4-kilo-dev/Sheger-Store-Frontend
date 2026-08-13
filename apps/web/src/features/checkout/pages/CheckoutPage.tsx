@@ -139,12 +139,6 @@ export function CheckoutPage() {
     queryFn: getBookingsApi,
   });
 
-  const { data: custody = [] } = useQuery({
-    queryKey: ["checkoutCustody", selectedCode],
-    queryFn: () => getBookingCustodyApi(selectedCode),
-    enabled: !!selectedCode,
-  });
-
   const eligibleBookings = useMemo(() => {
     if (mode === "checkout") {
       return bookingsList
@@ -176,6 +170,12 @@ export function CheckoutPage() {
   }, [eligibleBookings, selectedCode]);
 
   const selected = eligibleBookings.find((b) => b.code === selectedCode);
+
+  const { data: custody = [] } = useQuery({
+    queryKey: ["checkoutCustody", selected?.id],
+    queryFn: () => getBookingCustodyApi(selected!.id),
+    enabled: !!selected?.id,
+  });
   const storekeeperAwaitingEvent =
     mode === "checkin" &&
     !!selected &&
@@ -260,7 +260,7 @@ export function CheckoutPage() {
         );
         const payload = { assets };
         await checkoutBookingApi(
-          selected.code,
+          selected.id,
           payload,
           checkoutAttempt.current.keyFor(payload),
         );
@@ -276,7 +276,7 @@ export function CheckoutPage() {
             condition: itemConditions[item.id] || "AVAILABLE",
           })),
         );
-        const result = await checkinBookingApi(selected.code, { returns });
+        const result = await checkinBookingApi(selected.id, { returns });
         return result.status;
       }
     },
@@ -285,7 +285,7 @@ export function CheckoutPage() {
       toast.success(mode === "checkout" ? "Check-out completed successfully!" : "Check-in completed successfully!");
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["booking", selectedCode] });
-      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", selectedCode] });
+      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", selected?.id] });
       setCompletedStatus(status || null);
       setSubmitted(true);
     },

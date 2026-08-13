@@ -11,6 +11,7 @@ import {
   checkoutReverseApi,
   createAssignmentApi,
   declineAssignmentApi,
+  deleteAssignmentApi,
   recordBookingPaymentApi,
   transitionBookingStatusApi,
   updateBookingApi,
@@ -120,13 +121,17 @@ export function useBookingActions(
   }, [canFetchStaff]);
 
   useEffect(() => {
-    if (
+    const isAssign =
       selectedAction?.id === "assignment.assign_technician" ||
-      selectedAction?.requiresForm === "assign"
-    ) {
-      setSelectedTechnicianIds([]);
-    }
-  }, [selectedAction?.id, selectedAction?.requiresForm]);
+      selectedAction?.requiresForm === "assign";
+    if (!isAssign || !booking) return;
+
+    const currentTechIds = (booking.assignments || [])
+      .filter((a) => a.roleContext === "TECHNICIAN" && !isDeclinedAssignment(a))
+      .map((a) => a.userId)
+      .filter((id): id is string => !!id);
+    setSelectedTechnicianIds(currentTechIds);
+  }, [selectedAction?.id, selectedAction?.requiresForm, booking]);
 
   const myTechnicianAssignment = useMemo(() => {
     if (!booking?.assignments || !authUser?.id) return null;
@@ -187,10 +192,7 @@ export function useBookingActions(
     }) => {
       if (!booking) throw new Error("Booking is undefined");
       const { attachments: files = [], ...reportPayload } = payload;
-      const report = await createDamageReportApi({
-        bookingId: booking.id,
-        ...reportPayload,
-      });
+      const report = await createDamageReportApi(booking.id, reportPayload);
 
       if (files.length > 0 && report?.id) {
         await Promise.all(
@@ -348,19 +350,26 @@ export function useBookingActions(
   const assignTechnicians = useMutation({
     mutationFn: async (techIds: string[]) => {
       if (!booking) throw new Error("Booking is undefined");
-
-      const staffById = new Map(staff.map((s) => [s.id, s]));
-      const alreadyAssigned = new Set(
-        (booking.assignments || [])
-          .filter((a) => a.roleContext === "TECHNICIAN" && !isDeclinedAssignment(a))
-          .map((a) => a.userId),
-      );
-
-      const toAssign = techIds.filter((id) => !alreadyAssigned.has(id));
-      if (toAssign.length === 0) {
-        throw new Error("All selected technicians are already assigned to this booking");
+      if (techIds.length === 0) {
+        throw new Error("Select at least one technician");
       }
 
+      const staffById = new Map(staff.map((s) => [s.id, s]));
+      const activeTechAssignments = (booking.assignments || []).filter(
+        (a) => a.roleContext === "TECHNICIAN" && !isDeclinedAssignment(a),
+      );
+      const alreadyAssigned = new Set(
+        activeTechAssignments.map((a) => a.userId).filter((id): id is string => !!id),
+      );
+      const selected = new Set(techIds);
+
+      for (const assignment of activeTechAssignments) {
+        if (assignment.userId && !selected.has(assignment.userId)) {
+          await deleteAssignmentApi(assignment.id);
+        }
+      }
+
+      const toAssign = techIds.filter((id) => !alreadyAssigned.has(id));
       for (const techId of toAssign) {
         const member = staffById.get(techId);
         await createAssignmentApi(booking.id, {
@@ -371,7 +380,7 @@ export function useBookingActions(
       }
     },
     onSuccess: () => {
-      Alert.alert("Success", "Technician assignment completed!");
+      Alert.alert("Success", "Technician assignment updated!");
       invalidateBooking();
       setShowActionModal(false);
       setSelectedAction(null);
@@ -387,24 +396,23 @@ export function useBookingActions(
       totalAmount,
       pricingDailyRate,
       pricingRentedDays,
+      pricingScreenSize,
     }: {
       toPaymentStatus: "advance" | "fully_paid";
       amount: number;
       totalAmount: number;
       pricingDailyRate: number;
       pricingRentedDays: number;
+      pricingScreenSize: number;
     }) => {
       if (!booking) throw new Error("Booking is undefined");
 
-      if (pricingDailyRate > 0 && pricingRentedDays > 0) {
-        await updateBookingApi(booking.id, {
-          dailyRate: String(pricingDailyRate),
-          rentedDays: pricingRentedDays,
-        });
-      } else if (pricingDailyRate > 0) {
-        await updateBookingApi(booking.id, {
-          dailyRate: String(pricingDailyRate),
-        });
+      const pricingUpdate: Record<string, unknown> = {};
+      if (pricingDailyRate > 0) pricingUpdate.dailyRate = String(pricingDailyRate);
+      if (pricingRentedDays > 0) pricingUpdate.rentedDays = pricingRentedDays;
+      if (pricingScreenSize > 0) pricingUpdate.screenAreaSqm = String(pricingScreenSize);
+      if (Object.keys(pricingUpdate).length > 0) {
+        await updateBookingApi(booking.id, pricingUpdate);
       }
 
       const needsNewPayment =

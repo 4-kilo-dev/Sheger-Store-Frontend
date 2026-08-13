@@ -91,8 +91,12 @@ export type InventoryAvailability = "AVAILABLE" | "RESERVED" | "ONSITE";
 
 export interface InventoryItem {
   id: string;
+  /** Real UUID used for PATCH/deactivate. */
+  entityId?: string;
+  entityKind?: "pool" | "item";
   poolId?: string;
   itemId?: string;
+  categoryId?: string;
   name: string;
   category: string;
   model: string;
@@ -104,6 +108,11 @@ export interface InventoryItem {
   condition: InventoryCondition;
   availability: InventoryAvailability;
   location: string;
+  notes?: string;
+  sku?: string;
+  assetTag?: string;
+  serialNumber?: string;
+  itemCondition?: string;
   lastService: string;
   nextService: string;
 }

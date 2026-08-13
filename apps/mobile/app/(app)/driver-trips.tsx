@@ -65,6 +65,13 @@ export default function DriverTripsScreen() {
   const [leftAt, setLeftAt] = useState("");
   const [arrivedAt, setArrivedAt] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
+  const [arriveDrafts, setArriveDrafts] = useState<Record<string, string>>({});
+
+  const defaultArriveLocal = () => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
 
   const filtered = useMemo(() => {
     switch (tab) {
@@ -127,8 +134,19 @@ export default function DriverTripsScreen() {
   };
 
   const handleMarkArrived = async (id: string) => {
+    const draft = arriveDrafts[id] || defaultArriveLocal();
+    const iso = toIsoFromLocal(draft);
+    if (!iso) {
+      Alert.alert("Invalid time", "Enter arrive time as YYYY-MM-DDTHH:mm.");
+      return;
+    }
     try {
-      await updateTrip.mutateAsync({ id, payload: { arrivedAt: new Date().toISOString() } });
+      await updateTrip.mutateAsync({ id, payload: { arrivedAt: iso } });
+      setArriveDrafts((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to mark trip arrived.");
     }
@@ -274,13 +292,24 @@ export default function DriverTripsScreen() {
                 </View>
               ) : null}
               {!trip.arrivedAt && canEdit ? (
-                <Button
-                  variant="outline"
-                  onPress={() => handleMarkArrived(trip.id)}
-                  disabled={updateTrip.isPending}
-                >
-                  Mark Arrived
-                </Button>
+                <View style={{ gap: 8, marginTop: 8 }}>
+                  <Field label="Arrive time (YYYY-MM-DDTHH:mm)">
+                    <Input
+                      value={arriveDrafts[trip.id] ?? defaultArriveLocal()}
+                      onChangeText={(value) =>
+                        setArriveDrafts((prev) => ({ ...prev, [trip.id]: value }))
+                      }
+                      placeholder={defaultArriveLocal()}
+                    />
+                  </Field>
+                  <Button
+                    variant="outline"
+                    onPress={() => handleMarkArrived(trip.id)}
+                    disabled={updateTrip.isPending}
+                  >
+                    Mark Arrived
+                  </Button>
+                </View>
               ) : null}
             </View>
           </Section>

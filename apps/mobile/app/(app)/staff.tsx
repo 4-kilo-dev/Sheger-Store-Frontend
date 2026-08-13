@@ -1,4 +1,4 @@
-import { AlertTriangle, KeyRound, UserCheck, Users } from "lucide-react-native";
+import { AlertTriangle, KeyRound, UserCheck, UserPlus, Users } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { StaffCard } from "@/components/cards";
@@ -16,6 +16,8 @@ import {
   StatCard,
 } from "@/components/ui";
 import {
+  useBookings,
+  useCreateAssignment,
   useCreateStaff,
   useResetPassword,
   useRoles,
@@ -26,6 +28,32 @@ import {
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { colors } from "@/theme/tokens";
+import type { Booking, BookingStatus, StaffMember } from "@/types/domain";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { isChiefTechnicianRole } from "@/utils/staffRoles";
+
+type RoleContext = "TECHNICIAN" | "CREW" | "OO";
+
+function resolveRoleContext(person: StaffMember): RoleContext | null {
+  const role = (person.role || "").toLowerCase();
+  if (role.includes("technician") || role.includes("chief")) return "TECHNICIAN";
+  if (role.includes("operation") || role.includes("ops") || role === "oo" || role.includes("driver")) {
+    return "OO";
+  }
+  if (
+    role.includes("stagehand") ||
+    role.includes("freelancer") ||
+    person.isFreelancer
+  ) {
+    return "CREW";
+  }
+  return null;
+}
+
+function eligibleStatuses(roleContext: RoleContext): BookingStatus[] {
+  if (roleContext === "TECHNICIAN") return ["CONFIRMED", "ASSIGNED"];
+  return ["CONFIRMED", "ASSIGNED", "ACCEPTED", "PREPARATION", "ONSITE"];
+}
 
 export default function StaffScreen() {
   const { can } = usePermissions();
@@ -35,7 +63,9 @@ export default function StaffScreen() {
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<string>("All");
   const [addOpen, setAddOpen] = useState(false);
+  const [assignPerson, setAssignPerson] = useState<StaffMember | null>(null);
   const resetPassword = useResetPassword();
+  const canAssignFromStaff = can(PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN) || can(PERMISSION.ASSIGNMENT_ASSIGN_CREW);
   const toggleActive = useToggleUserActive();
   const toggleFreelancer = useSetStaffFreelancer();
   // Derived from the real staff list rather than the hardcoded STAFF_ROLES mock,
@@ -148,57 +178,202 @@ export default function StaffScreen() {
         renderItem={({ item }) => (
           <View style={{ gap: 8 }}>
             <StaffCard staff={item} />
-            {canManageStaff ? (
-              <View style={styles.rowActions}>
-                <Button
-                  variant="ghost"
-                  icon={KeyRound}
-                  disabled={resetPassword.isPending}
-                  onPress={() => handleResetPassword(item.id, item.name)}
-                >
-                  Reset PW
+            <View style={styles.rowActions}>
+              {canAssignFromStaff && resolveRoleContext(item) ? (
+                <Button variant="ghost" icon={UserPlus} onPress={() => setAssignPerson(item)}>
+                  Assign
                 </Button>
-                <Button
-                  variant="ghost"
-                  disabled={toggleFreelancer.isPending}
-                  onPress={() => handleToggleFreelancer(item.id, !item.isFreelancer)}
-                >
-                  {item.isFreelancer ? "Freelancer ✓" : "Mark Freelancer"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  icon={item.status !== "OFF DUTY" ? AlertTriangle : UserCheck}
-                  disabled={toggleActive.isPending}
-                  onPress={() => {
-                    if (item.status === "OFF DUTY") {
-                      handleToggleActive(item.id, true);
-                      return;
-                    }
-                    Alert.alert(
-                      "Deactivate this account?",
-                      `${item.name} will immediately lose access to Vortex.`,
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Deactivate",
-                          style: "destructive",
-                          onPress: () => handleToggleActive(item.id, false),
-                        },
-                      ],
-                    );
-                  }}
-                >
-                  {item.status !== "OFF DUTY" ? "Deactivate" : "Activate"}
-                </Button>
-              </View>
-            ) : null}
+              ) : null}
+              {canManageStaff ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    icon={KeyRound}
+                    disabled={resetPassword.isPending}
+                    onPress={() => handleResetPassword(item.id, item.name)}
+                  >
+                    Reset PW
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    disabled={toggleFreelancer.isPending}
+                    onPress={() => handleToggleFreelancer(item.id, !item.isFreelancer)}
+                  >
+                    {item.isFreelancer ? "Freelancer ✓" : "Mark Freelancer"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    icon={item.status !== "OFF DUTY" ? AlertTriangle : UserCheck}
+                    disabled={toggleActive.isPending}
+                    onPress={() => {
+                      if (item.status === "OFF DUTY") {
+                        handleToggleActive(item.id, true);
+                        return;
+                      }
+                      Alert.alert(
+                        "Deactivate this account?",
+                        `${item.name} will immediately lose access to Vortex.`,
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: "Deactivate",
+                            style: "destructive",
+                            onPress: () => handleToggleActive(item.id, false),
+                          },
+                        ],
+                      );
+                    }}
+                  >
+                    {item.status !== "OFF DUTY" ? "Deactivate" : "Activate"}
+                  </Button>
+                </>
+              ) : null}
+            </View>
           </View>
         )}
       />
       {canManageStaff ? (
         <AddStaffSheet visible={addOpen} onClose={() => setAddOpen(false)} />
       ) : null}
+      <AssignStaffToBookingSheet
+        person={assignPerson}
+        onClose={() => setAssignPerson(null)}
+      />
     </Screen>
+  );
+}
+
+function AssignStaffToBookingSheet({
+  person,
+  onClose,
+}: {
+  person: StaffMember | null;
+  onClose: () => void;
+}) {
+  const { formatDate } = useDateFormatter();
+  const { data: bookings = [], isLoading } = useBookings();
+  const createAssignment = useCreateAssignment();
+  const [bookingId, setBookingId] = useState("");
+  const [asTeamLead, setAsTeamLead] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const roleContext = person ? resolveRoleContext(person) : null;
+
+  const options = useMemo(() => {
+    if (!person || !roleContext) return [] as Booking[];
+    const allowed = new Set(eligibleStatuses(roleContext));
+    return bookings
+      .filter((b) => allowed.has(b.status))
+      .filter((b) => {
+        const already = (b.assignments || []).some(
+          (a) =>
+            a.userId === person.id &&
+            a.roleContext === roleContext &&
+            !a.declineReason,
+        );
+        return !already;
+      })
+      .sort((a, b) => (b.assemblyDate || "").localeCompare(a.assemblyDate || ""));
+  }, [bookings, person, roleContext]);
+
+  const handleAssign = async () => {
+    if (!person?.id) return;
+    if (!roleContext) {
+      setError(
+        `${person.name} cannot be assigned from Staff — their role is not TECHNICIAN, CREW, or OO.`,
+      );
+      return;
+    }
+    if (!bookingId) {
+      setError("Select a booking.");
+      return;
+    }
+    setError(null);
+    try {
+      await createAssignment.mutateAsync({
+        bookingId,
+        payload: {
+          userId: person.id,
+          roleContext,
+          isTeamLead:
+            roleContext === "CREW"
+              ? asTeamLead
+              : roleContext === "TECHNICIAN" && isChiefTechnicianRole(person.role),
+        },
+      });
+      setBookingId("");
+      setAsTeamLead(false);
+      onClose();
+      Alert.alert("Assigned", `${person.name} assigned to booking.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to assign staff.");
+    }
+  };
+
+  return (
+    <BottomSheet
+      visible={!!person}
+      title={person ? `Assign ${person.name}` : "Assign staff"}
+      onClose={() => {
+        setBookingId("");
+        setAsTeamLead(false);
+        setError(null);
+        onClose();
+      }}
+    >
+      {!person ? null : !roleContext ? (
+        <AppText variant="subtitle" color={colors.text2}>
+          Only technicians, stagehands/freelancers (crew), and operations officers can be assigned
+          to bookings from here.
+        </AppText>
+      ) : (
+        <>
+          <AppText variant="small" color={colors.text3}>
+            {person.role} · {roleContext}
+            {roleContext === "TECHNICIAN" ? " · CONFIRMED / ASSIGNED only" : ""}
+          </AppText>
+          <Field label="Booking">
+            {isLoading ? (
+              <LoadingState label="Loading bookings..." />
+            ) : options.length === 0 ? (
+              <AppText variant="subtitle" color={colors.text3}>
+                No eligible open bookings for this role.
+              </AppText>
+            ) : (
+              <View style={styles.chipWrap}>
+                {options.map((b) => (
+                  <Chip
+                    key={b.id}
+                    label={`${b.code} · ${b.status} · ${b.client} · ${formatDate(b.assemblyDate || b.eventDate)}`}
+                    active={bookingId === b.id}
+                    onPress={() => setBookingId(b.id)}
+                  />
+                ))}
+              </View>
+            )}
+          </Field>
+          {roleContext === "CREW" ? (
+            <Field label="Stagehand team lead">
+              <View style={styles.chipWrap}>
+                <Chip label="Yes" active={asTeamLead} onPress={() => setAsTeamLead(true)} />
+                <Chip label="No" active={!asTeamLead} onPress={() => setAsTeamLead(false)} />
+              </View>
+            </Field>
+          ) : null}
+          {error ? (
+            <AppText variant="small" color={colors.destructive}>
+              {error}
+            </AppText>
+          ) : null}
+          <Button
+            disabled={!bookingId || createAssignment.isPending}
+            onPress={handleAssign}
+          >
+            {createAssignment.isPending ? "Assigning..." : "Assign"}
+          </Button>
+        </>
+      )}
+    </BottomSheet>
   );
 }
 

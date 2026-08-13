@@ -182,7 +182,7 @@ export function useBookingActions(
     }) => {
       if (!booking) throw new Error("Booking is undefined");
       const { attachments: files = [], ...reportPayload } = payload;
-      const report = await createDamageReportApi(booking.code, reportPayload);
+      const report = await createDamageReportApi(booking.id, reportPayload);
 
       if (files.length > 0 && report?.id) {
         await Promise.all(
@@ -222,7 +222,7 @@ export function useBookingActions(
       if (!booking) throw new Error("Booking is undefined");
       
       // 1. Update logistics details
-      await updateBookingApi(booking.code, {
+      await updateBookingApi(booking.id, {
         vehiclePlate: checkoutVehiclePlate,
         mealProvision: String(checkoutMealBudget),
         vehicleText: `Driver: ${checkoutDriver}`,
@@ -238,7 +238,7 @@ export function useBookingActions(
       );
       const payload = { assets };
       return checkoutBookingApi(
-        booking.code,
+        booking.id,
         payload,
         checkoutAttempt.current.keyFor(payload),
       );
@@ -273,7 +273,7 @@ export function useBookingActions(
   const { mutate: performCheckin, isPending: isCheckingIn } = useMutation({
     mutationFn: async (returns: CheckinReturn[]) => {
       if (!booking) throw new Error("Booking is undefined");
-      return checkinBookingApi(booking.code, { returns });
+      return checkinBookingApi(booking.id, { returns });
     },
     onSuccess: (result) => {
       toast.success(
@@ -283,7 +283,7 @@ export function useBookingActions(
       );
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
-      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", booking?.code] });
+      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", booking?.id] });
       queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions", booking?.id] });
       setShowActionModal(false);
       setSelectedAction(null);
@@ -296,13 +296,13 @@ export function useBookingActions(
   const { mutate: reverseCheckout, isPending: isReversingCheckout } = useMutation({
     mutationFn: async (reason: string) => {
       if (!booking) throw new Error("Booking is undefined");
-      return checkoutReverseApi(booking.code, reason);
+      return checkoutReverseApi(booking.id, reason);
     },
     onSuccess: () => {
       toast.success("Checkout reversed and custody restored.");
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
-      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", booking?.code] });
+      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", booking?.id] });
       queryClient.invalidateQueries({ queryKey: ["booking-snapshots", booking?.id] });
       queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions", booking?.id] });
       setShowActionModal(false);

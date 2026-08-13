@@ -76,8 +76,8 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
   const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
   const [returnConditions, setReturnConditions] = useState<Record<string, InventoryCondition>>({});
   const { data: custody = [] } = useQuery({
-    queryKey: ["checkoutCustody", booking.code],
-    queryFn: () => getBookingCustodyApi(booking.code),
+    queryKey: ["checkoutCustody", booking.id],
+    queryFn: () => getBookingCustodyApi(booking.id),
     enabled: showActionModal && isCheckinAction,
   });
   const checkinItems = useMemo(

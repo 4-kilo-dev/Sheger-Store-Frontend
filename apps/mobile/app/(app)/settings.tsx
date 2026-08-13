@@ -96,6 +96,7 @@ export default function SettingsScreen() {
   } = useCalendarSystem();
 
   const [language, setLanguage] = useState("en");
+  const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">("ETB");
   const [tempCalendarSystem, setTempCalendarSystem] = useState<CalendarSystem>(calendarSystem);
   const [tempNumerals, setTempNumerals] = useState<NumeralsSystem>(numeralsSystem);
 
@@ -107,7 +108,7 @@ export default function SettingsScreen() {
     taxId: "0012345678",
     businessAddress: "Bole, Addis Ababa, Ethiopia",
     warehouseLocation: "Bole Sub-City, Warehouse Zone",
-    defaultCurrencyLabel: "ETB — Ethiopian Birr",
+    defaultCurrencyLabel: "ETB",
     sessionTimeoutMinutes: "30",
     maxLoginAttempts: "5",
     notifyOtpVerification: "true",
@@ -140,6 +141,9 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (!settingsQuery.data) return;
     if (settingsQuery.data.language) setLanguage(settingsQuery.data.language);
+    if (settingsQuery.data.currency === "ETB" || settingsQuery.data.currency === "USD") {
+      setSelectedCurrency(settingsQuery.data.currency);
+    }
     setForm((current) => ({ ...current, ...settingsQuery.data }));
   }, [settingsQuery.data]);
 
@@ -181,7 +185,7 @@ export default function SettingsScreen() {
       await updateSettings.mutateAsync({
         ...form,
         language,
-        currency: "ETB",
+        currency: selectedCurrency,
         calendar: tempCalendarSystem,
         calendarSystem: tempCalendarSystem,
         numerals: tempNumerals,
@@ -255,10 +259,18 @@ export default function SettingsScreen() {
               />
             </Field>
             <Field label="Default Currency">
-              <Input
-                value={form.defaultCurrencyLabel}
-                onChangeText={(v) => setField("defaultCurrencyLabel", v)}
-              />
+              <View style={styles.choiceWrap}>
+                <ChoiceChip
+                  label="ETB — Ethiopian Birr"
+                  active={selectedCurrency === "ETB"}
+                  onPress={() => setSelectedCurrency("ETB")}
+                />
+                <ChoiceChip
+                  label="USD — US Dollar"
+                  active={selectedCurrency === "USD"}
+                  onPress={() => setSelectedCurrency("USD")}
+                />
+              </View>
             </Field>
           </Section>
         </>

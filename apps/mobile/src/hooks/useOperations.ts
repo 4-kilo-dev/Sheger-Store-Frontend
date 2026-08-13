@@ -38,9 +38,18 @@ import {
   createInventoryCategoryApi,
   createInventoryItemApi,
   createInventoryPoolApi,
+  deactivateInventoryCategoryApi,
+  deactivateInventoryEntityApi,
   getInventoryApi,
   getInventoryCategoriesApi,
   getInventoryItemApi,
+  updateInventoryCategoryApi,
+  updateInventoryItemApi,
+  updateInventoryPoolApi,
+  type InventoryEntityKind,
+  type UpdateCategoryPayload,
+  type UpdateItemPayload,
+  type UpdatePoolPayload,
 } from "@/services/inventory-api";
 import {
   getNotificationsApi,
@@ -180,6 +189,7 @@ export function useConfirmBookingWithPayment() {
       totalAmount,
       pricingDailyRate,
       pricingRentedDays,
+      pricingScreenSize,
     }: {
       booking: Booking;
       toPaymentStatus: "advance" | "fully_paid";
@@ -187,6 +197,7 @@ export function useConfirmBookingWithPayment() {
       totalAmount: number;
       pricingDailyRate: number;
       pricingRentedDays: number;
+      pricingScreenSize: number;
     }) =>
       confirmBookingWithPaymentApi(booking, {
         toPaymentStatus,
@@ -194,6 +205,7 @@ export function useConfirmBookingWithPayment() {
         totalAmount,
         pricingDailyRate,
         pricingRentedDays,
+        pricingScreenSize,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
@@ -256,7 +268,24 @@ export function useCheckinBooking() {
 }
 
 export function useCreateDamageReport() {
-  return useMutation({ mutationFn: createDamageReportApi });
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      bookingId,
+      ...payload
+    }: {
+      bookingId?: string | null;
+      poolId?: string;
+      itemId?: string;
+      reportType: "DAMAGE" | "MISSING";
+      quantity?: string;
+      description?: string;
+    }) => createDamageReportApi(bookingId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    },
+  });
 }
 
 export function useInventory() {
@@ -296,6 +325,50 @@ export function useCreateInventoryItem() {
   return useMutation({
     mutationFn: createInventoryItemApi,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["inventory"] }),
+  });
+}
+
+export function useUpdateInventoryCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateCategoryPayload }) =>
+      updateInventoryCategoryApi(id, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["inventory-categories"] }),
+  });
+}
+
+export function useUpdateInventoryPool() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdatePoolPayload }) =>
+      updateInventoryPoolApi(id, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["inventory"] }),
+  });
+}
+
+export function useUpdateInventoryItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateItemPayload }) =>
+      updateInventoryItemApi(id, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["inventory"] }),
+  });
+}
+
+export function useDeactivateInventoryEntity() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ kind, id }: { kind: InventoryEntityKind; id: string }) =>
+      deactivateInventoryEntityApi(kind, id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["inventory"] }),
+  });
+}
+
+export function useDeactivateInventoryCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deactivateInventoryCategoryApi(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["inventory-categories"] }),
   });
 }
 

@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { to } from "@/utils/routes";
 import { Filter, Plus } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, Share, StyleSheet, View } from "react-native";
 import { BookingCard } from "@/components/cards";
 import {
   AppText,
@@ -16,17 +16,41 @@ import {
   NativeList,
   Screen,
   SegmentedTabs,
+  TextArea,
 } from "@/components/ui";
 import { alpha, colors } from "@/theme/tokens";
 import type { Booking, BookingStatus, PaymentStatus } from "@/types/domain";
-import { STATUS_ORDER } from "@/types/domain";
+import { STATUS_LABELS, STATUS_ORDER } from "@/types/domain";
 import { useBookings, useStaff } from "@/hooks/useOperations";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { useAppContext } from "@/context/AppContext";
+import { transitionBookingStatusApi } from "@/services/bookings-api";
 
 const TABS = ["All", "This Week", "Upcoming", "Onsite", "Last Week", "Assigned to Me"] as const;
 const PAYMENT_STATUSES: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
+
+async function runBulkTransitions(
+  bookings: Booking[],
+  toStatus: BookingStatus,
+  reason: string,
+  override = false,
+): Promise<{ ok: string[]; failed: { code: string; message: string }[] }> {
+  const ok: string[] = [];
+  const failed: { code: string; message: string }[] = [];
+  for (const booking of bookings) {
+    try {
+      await transitionBookingStatusApi(booking.id, toStatus, reason, override);
+      ok.push(booking.code);
+    } catch (err: unknown) {
+      failed.push({
+        code: booking.code,
+        message: err instanceof Error ? err.message : "Transition failed",
+      });
+    }
+  }
+  return { ok, failed };
+}
 
 export default function BookingsScreen() {
   const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings();
@@ -34,6 +58,7 @@ export default function BookingsScreen() {
   const { canAny, can } = usePermissions();
   const { activeProfile } = useAppContext();
   const canCreateBooking = can(PERMISSION.BOOKING_CREATE);
+  const canCancelOverride = can(PERMISSION.BOOKING_CANCEL_OVERRIDE);
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
   const [query, setQuery] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -41,10 +66,11 @@ export default function BookingsScreen() {
   const [statusFilter, setStatusFilter] = useState<BookingStatus | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | null>(null);
+  const [bulkModal, setBulkModal] = useState<"status" | "cancel" | null>(null);
+  const [bulkStatus, setBulkStatus] = useState<BookingStatus>("CONFIRMED");
+  const [bulkReason, setBulkReason] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
-  // Actors who can only see bookings they're assigned to (no view-all grant)
-  // get an implicit scope on top of whatever they typed/tapped, mirroring web's
-  // BookingsListPage isAssignedScopeOnly branch.
   const isAssignedScopeOnly =
     !canAny([PERMISSION.BOOKING_VIEW_ALL]) && canAny([PERMISSION.BOOKING_VIEW_ASSIGNED]);
 
@@ -105,6 +131,7 @@ export default function BookingsScreen() {
     }
     return result;
   }, [
+    BOOKINGS,
     query,
     tab,
     statusFilter,
@@ -113,6 +140,11 @@ export default function BookingsScreen() {
     isAssignedScopeOnly,
     activeProfile.name,
   ]);
+
+  const selectedBookings = useMemo(
+    () => BOOKINGS.filter((b) => selected.has(b.code)),
+    [BOOKINGS, selected],
+  );
 
   const activeFilterCount = [statusFilter, assigneeFilter, paymentFilter].filter(Boolean).length;
 
@@ -123,6 +155,103 @@ export default function BookingsScreen() {
       else next.add(code);
       return next;
     });
+  };
+
+  const handleExportSelected = async () => {
+    if (selectedBookings.length === 0) {
+      Alert.alert("Export", "Select at least one booking to export.");
+      return;
+    }
+    const headers = [
+      "Code",
+      "Client",
+      "Assembly",
+      "Event",
+      "Venue",
+      "Screen Type",
+      "Size",
+      "Arrangement",
+      "Assignees",
+      "Stage Hand",
+      "Payment",
+      "Status",
+      "Amount",
+    ];
+    const csvRows = selectedBookings.map((b) =>
+      [
+        b.code,
+        b.client,
+        b.assemblyDate,
+        b.eventDate,
+        b.venue,
+        b.screenType,
+        String(b.size),
+        b.arrangement || "",
+        (b.assignees || []).join("; "),
+        b.stageHand || "",
+        b.payment,
+        b.status,
+        String(b.amount ?? ""),
+      ]
+        .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
+        .join(","),
+    );
+    const csv = [headers.join(","), ...csvRows].join("\n");
+    await Share.share({
+      message: csv,
+      title: `bookings-export-${new Date().toISOString().slice(0, 10)}.csv`,
+    });
+  };
+
+  const handleBulkSubmit = async () => {
+    if (!bulkModal || selectedBookings.length === 0) return;
+    const reason = bulkReason.trim();
+    if (reason.length < 10) {
+      Alert.alert("Reason required", "Reason must be at least 10 characters.");
+      return;
+    }
+
+    const toStatus: BookingStatus = bulkModal === "cancel" ? "CANCELED" : bulkStatus;
+    const override = bulkModal === "cancel" && canCancelOverride;
+
+    setBulkBusy(true);
+    try {
+      const { ok, failed } = await runBulkTransitions(
+        selectedBookings,
+        toStatus,
+        reason,
+        override,
+      );
+      await refetch();
+
+      if (ok.length > 0) {
+        Alert.alert(
+          "Done",
+          bulkModal === "cancel"
+            ? `Canceled ${ok.length} booking${ok.length === 1 ? "" : "s"}`
+            : `Updated ${ok.length} booking${ok.length === 1 ? "" : "s"} to ${STATUS_LABELS[toStatus]}`,
+        );
+      }
+      if (failed.length > 0) {
+        const preview = failed
+          .slice(0, 3)
+          .map((f) => `${f.code}: ${f.message}`)
+          .join("; ");
+        Alert.alert(
+          "Some failed",
+          `${failed.length} failed${preview ? ` — ${preview}` : ""}${failed.length > 3 ? "…" : ""}`,
+        );
+      }
+      if (failed.length === 0) {
+        setSelected(new Set());
+        setBulkModal(null);
+        setBulkReason("");
+      } else if (ok.length > 0) {
+        setSelected(new Set(failed.map((f) => f.code)));
+      }
+    } finally {
+      setBulkBusy(false);
+    }
   };
 
   if (isLoading) {
@@ -173,6 +302,17 @@ export default function BookingsScreen() {
           <AppText variant="small" color={colors.accent} style={{ fontWeight: "800" }}>
             {selected.size} selected
           </AppText>
+          <View style={styles.bulkActions}>
+            <Button variant="outline" onPress={() => setBulkModal("status")}>
+              Change Status
+            </Button>
+            <Button variant="outline" onPress={() => setBulkModal("cancel")}>
+              Cancel Selected
+            </Button>
+            <Button variant="ghost" onPress={handleExportSelected}>
+              Share CSV
+            </Button>
+          </View>
         </View>
       ) : null}
 
@@ -247,6 +387,53 @@ export default function BookingsScreen() {
           Clear filters
         </Button>
       </BottomSheet>
+
+      <BottomSheet
+        visible={bulkModal !== null}
+        title={bulkModal === "cancel" ? "Cancel selected bookings" : "Change status"}
+        onClose={() => {
+          if (bulkBusy) return;
+          setBulkModal(null);
+          setBulkReason("");
+        }}
+      >
+        <AppText variant="subtitle">
+          {selectedBookings.length} booking{selectedBookings.length === 1 ? "" : "s"}:{" "}
+          {selectedBookings
+            .slice(0, 5)
+            .map((b) => b.code)
+            .join(", ")}
+          {selectedBookings.length > 5 ? "…" : ""}
+        </AppText>
+        {bulkModal === "status" ? (
+          <Field label="New status">
+            <View style={styles.choiceWrap}>
+              {STATUS_ORDER.map((status) => (
+                <FilterChip
+                  key={status}
+                  label={STATUS_LABELS[status]}
+                  active={bulkStatus === status}
+                  onPress={() => setBulkStatus(status)}
+                />
+              ))}
+            </View>
+          </Field>
+        ) : null}
+        <Field label="Reason (min 10 characters)">
+          <TextArea
+            value={bulkReason}
+            onChangeText={setBulkReason}
+            placeholder="Explain why these bookings are being updated..."
+          />
+        </Field>
+        <Button disabled={bulkBusy || bulkReason.trim().length < 10} onPress={handleBulkSubmit}>
+          {bulkBusy
+            ? "Working..."
+            : bulkModal === "cancel"
+              ? "Cancel bookings"
+              : `Set to ${STATUS_LABELS[bulkStatus]}`}
+        </Button>
+      </BottomSheet>
     </Screen>
   );
 }
@@ -294,6 +481,11 @@ const styles = StyleSheet.create({
     backgroundColor: alpha(colors.accent, 0.08),
     borderRadius: 8,
     padding: 10,
+    gap: 8,
+  },
+  bulkActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   listContent: {

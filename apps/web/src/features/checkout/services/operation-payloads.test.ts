@@ -5,6 +5,7 @@ import {
   IdempotencyAttempt,
   buildCheckinReturns,
   buildOperationItems,
+  computeConfirmPricing,
   isCheckinAction,
   isCheckoutReverseAction,
   isUpcomingThisMonth,
@@ -221,5 +222,29 @@ describe("shared eligibility + operation lines", () => {
         custody,
       }).map((item) => ({ id: item.id, qty: item.qty })),
     ).toEqual([{ id: "pool:pool-1", qty: 2 }]);
+  });
+});
+
+describe("computeConfirmPricing", () => {
+  it("multiplies screen size × daily rate × rented days", () => {
+    expect(
+      computeConfirmPricing({ screenSize: 12, dailyRate: 5000, rentedDays: 2 }),
+    ).toEqual({
+      total: 120000,
+      isValid: true,
+      errors: [],
+    });
+  });
+
+  it("rejects missing size, days, rate, or totals under 1000", () => {
+    expect(computeConfirmPricing({ screenSize: 0, dailyRate: 5000, rentedDays: 2 }).isValid).toBe(
+      false,
+    );
+    expect(computeConfirmPricing({ screenSize: 10, dailyRate: 0, rentedDays: 2 }).isValid).toBe(
+      false,
+    );
+    expect(computeConfirmPricing({ screenSize: 1, dailyRate: 100, rentedDays: 1 }).errors[0]).toMatch(
+      /1,000/,
+    );
   });
 });

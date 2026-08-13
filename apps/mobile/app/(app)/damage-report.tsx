@@ -21,8 +21,25 @@ import { useBookings, useCreateDamageReport, useInventory } from "@/hooks/useOpe
 import { uploadBookingAttachmentApi } from "@/services/attachments.api";
 import { alpha, colors, radius } from "@/theme/tokens";
 
+const SEVERITY_OPTIONS = [
+  "Minor · usable with caution",
+  "Moderate · needs repair",
+  "Major · unusable",
+] as const;
+
+const DISCOVERED_OPTIONS = [
+  "Warehouse inspection",
+  "Check-in return",
+  "Onsite",
+  "Transit",
+] as const;
+
 export default function DamageReportScreen() {
-  const params = useLocalSearchParams<{ itemId?: string; bookingCode?: string }>();
+  const params = useLocalSearchParams<{
+    itemId?: string;
+    poolId?: string;
+    bookingCode?: string;
+  }>();
   const {
     data: INVENTORY = [],
     isLoading: loadingInventory,
@@ -33,23 +50,20 @@ export default function DamageReportScreen() {
 
   const [submitted, setSubmitted] = useState(false);
   const [itemId, setItemId] = useState(params.itemId ?? "");
+  const [poolId, setPoolId] = useState(params.poolId ?? "");
   const [bookingCode, setBookingCode] = useState(params.bookingCode ?? "");
   const [quantity, setQuantity] = useState("1");
   const [description, setDescription] = useState("");
+  const [severity, setSeverity] = useState<string>(SEVERITY_OPTIONS[0]);
+  const [discoveredIn, setDiscoveredIn] = useState<string>(DISCOVERED_OPTIONS[0]);
   const [reportType, setReportType] = useState<"DAMAGE" | "MISSING">("DAMAGE");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<ImagePicker.ImagePickerAsset[]>([]);
 
-  // Prefill from route params once inventory/bookings resolve (mirrors web inventory→damage CTA).
   useEffect(() => {
-    if (params.itemId) {
-      setItemId(params.itemId);
-      return;
-    }
-    if (!itemId && INVENTORY[0]?.id) {
-      setItemId(INVENTORY[0].id);
-    }
-  }, [INVENTORY, itemId, params.itemId]);
+    if (params.poolId) setPoolId(params.poolId);
+    if (params.itemId) setItemId(params.itemId);
+  }, [params.poolId, params.itemId]);
 
   useEffect(() => {
     if (params.bookingCode) setBookingCode(params.bookingCode);
@@ -94,41 +108,63 @@ export default function DamageReportScreen() {
     );
   }
 
+  const selectedItem = INVENTORY.find((i) => {
+    if (poolId && (i.poolId === poolId || i.entityId === poolId)) return true;
+    if (itemId && (i.itemId === itemId || i.entityId === itemId || i.id === itemId)) return true;
+    return false;
+  });
+
+  const matchedBooking = bookingCode.trim()
+    ? BOOKINGS.find((b) => b.code.trim().toUpperCase() === bookingCode.trim().toUpperCase())
+    : undefined;
+
+  const resolvedPoolId = poolId || selectedItem?.poolId || undefined;
+  const resolvedItemId = itemId || selectedItem?.itemId || undefined;
+  const hasAsset = !!(resolvedPoolId || resolvedItemId);
+  const canSubmit = hasAsset && !!description.trim();
+
   const handleSubmit = async () => {
     setSubmitError(null);
-    const booking = BOOKINGS.find((b) => b.code === bookingCode);
-    const item = INVENTORY.find((i) => i.id === itemId);
-    if (!booking) {
-      setSubmitError("Enter a valid booking code this damage relates to.");
+    if (!hasAsset) {
+      setSubmitError("Select a valid inventory pool or item.");
       return;
     }
-    if (!item) {
-      setSubmitError("Select a valid inventory item.");
+    if (!description.trim()) {
+      setSubmitError("Description is required.");
+      return;
+    }
+    if (bookingCode.trim() && !matchedBooking) {
+      setSubmitError("Enter a valid booking code, or leave it blank for a standalone report.");
       return;
     }
     try {
+      const notes = [
+        description.trim(),
+        `Severity: ${severity}`,
+        `Discovered: ${discoveredIn}`,
+      ].join("\n");
+
       const report = await createDamageReport.mutateAsync({
-        bookingId: booking.id,
-        poolId: item.poolId,
-        itemId: item.itemId,
+        bookingId: matchedBooking?.id ?? null,
+        poolId: resolvedPoolId,
+        itemId: resolvedItemId,
         reportType,
-        quantity: item.poolId ? quantity : undefined,
-        description,
+        quantity: resolvedPoolId ? quantity : undefined,
+        description: notes,
       });
 
-      // Upload any attached photos to the damage report
-      if (attachments.length > 0 && report?.id) {
+      if (attachments.length > 0 && report?.id && matchedBooking?.id) {
         const uploads = attachments.map(
           (asset) =>
             uploadBookingAttachmentApi(
-              booking.id,
+              matchedBooking.id,
               {
                 uri: asset.uri,
                 name: asset.fileName || `damage_photo_${Date.now()}.jpg`,
                 type: asset.type || "image/jpeg",
               },
               { relatedEntity: "damage_missing_report", relatedId: report.id },
-            ).catch(() => null), // upload failures are non-fatal; don't block submission
+            ).catch(() => null),
         );
         await Promise.all(uploads);
       }
@@ -157,12 +193,6 @@ export default function DamageReportScreen() {
     );
   }
 
-  const selectedItem = INVENTORY.find((i) => i.id === itemId);
-  const matchedBooking = BOOKINGS.find(
-    (b) => b.code.trim().toUpperCase() === bookingCode.trim().toUpperCase(),
-  );
-  const canSubmit = !!matchedBooking && !!selectedItem;
-
   return (
     <Screen
       footer={
@@ -188,11 +218,11 @@ export default function DamageReportScreen() {
         <AppText variant="title">Report Equipment Damage</AppText>
       </View>
       <Section title="Equipment identification" icon={ShieldAlert}>
-        <Field label="Booking code this relates to">
+        <Field label="Booking code (optional)">
           <Input
             value={bookingCode}
             onChangeText={setBookingCode}
-            placeholder="e.g. SB047"
+            placeholder="e.g. SB047 — leave blank if none"
             autoCapitalize="characters"
           />
           {bookingCode.trim() ? (
@@ -205,23 +235,28 @@ export default function DamageReportScreen() {
                 No booking found with this code.
               </AppText>
             )
-          ) : null}
+          ) : (
+            <AppText variant="small" color={colors.text3} style={{ marginTop: 6 }}>
+              Standalone report posts to /damage-reports without a booking.
+            </AppText>
+          )}
         </Field>
-        <Field label="Inventory item">
-          <Input value={itemId} onChangeText={setItemId} placeholder="Item ID / SKU" />
-          {itemId.trim() ? (
-            selectedItem ? (
-              <AppText variant="small" color={colors.success} style={{ marginTop: 6 }}>
-                {selectedItem.name} · {selectedItem.model}
-              </AppText>
-            ) : (
-              <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
-                No inventory item found with this ID.
-              </AppText>
-            )
-          ) : null}
+        <Field label="Pool ID (UUID)">
+          <Input value={poolId} onChangeText={setPoolId} placeholder="Pool entity UUID" />
         </Field>
-        {selectedItem?.poolId ? (
+        <Field label="Item ID (UUID)">
+          <Input value={itemId} onChangeText={setItemId} placeholder="Serialized item UUID" />
+        </Field>
+        {selectedItem ? (
+          <AppText variant="small" color={colors.success}>
+            {selectedItem.name} · {selectedItem.model}
+          </AppText>
+        ) : hasAsset ? null : (
+          <AppText variant="small" color={colors.text3}>
+            Prefill from inventory, or paste pool/item UUIDs.
+          </AppText>
+        )}
+        {resolvedPoolId ? (
           <Field label="Affected quantity">
             <Input value={quantity} onChangeText={setQuantity} keyboardType="numeric" />
           </Field>
@@ -248,10 +283,42 @@ export default function DamageReportScreen() {
           </View>
         </Field>
         <Field label="Damage severity">
-          <Input defaultValue="Minor · usable with caution" />
+          <View style={styles.chipWrap}>
+            {SEVERITY_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt}
+                onPress={() => setSeverity(opt)}
+                style={[styles.typeChip, severity === opt ? styles.typeChipActive : null]}
+              >
+                <AppText
+                  variant="small"
+                  color={severity === opt ? colors.destructive : colors.text2}
+                  style={{ fontWeight: "700" }}
+                >
+                  {opt}
+                </AppText>
+              </Pressable>
+            ))}
+          </View>
         </Field>
         <Field label="Where discovered?">
-          <Input defaultValue="Warehouse inspection" />
+          <View style={styles.chipWrap}>
+            {DISCOVERED_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt}
+                onPress={() => setDiscoveredIn(opt)}
+                style={[styles.typeChip, discoveredIn === opt ? styles.typeChipActive : null]}
+              >
+                <AppText
+                  variant="small"
+                  color={discoveredIn === opt ? colors.destructive : colors.text2}
+                  style={{ fontWeight: "700" }}
+                >
+                  {opt}
+                </AppText>
+              </Pressable>
+            ))}
+          </View>
         </Field>
         <Field label="Description">
           <TextArea
@@ -365,5 +432,10 @@ const styles = StyleSheet.create({
   typeChipActive: {
     borderColor: colors.destructive,
     backgroundColor: "rgba(229,72,77,0.12)",
+  },
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
 });

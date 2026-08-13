@@ -13,13 +13,21 @@ export interface DamageReport {
   createdAt: string;
 }
 
-export async function createDamageReportApi(payload: {
-  bookingId: string;
-  poolId?: string;
-  itemId?: string;
-  reportType: "DAMAGE" | "MISSING";
-  quantity?: string;
-  description?: string;
-}): Promise<DamageReport> {
-  return client.post<DamageReport>(`/api/bookings/${payload.bookingId}/damage-reports`, payload);
+export async function createDamageReportApi(
+  bookingId: string | null | undefined,
+  payload: {
+    poolId?: string;
+    itemId?: string;
+    reportType: "DAMAGE" | "MISSING";
+    quantity?: string;
+    description?: string;
+  },
+): Promise<DamageReport> {
+  if (bookingId) {
+    return client.post<DamageReport>(`/api/bookings/${bookingId}/damage-reports`, {
+      ...payload,
+      bookingId,
+    });
+  }
+  return client.post<DamageReport>(`/api/damage-reports`, payload);
 }

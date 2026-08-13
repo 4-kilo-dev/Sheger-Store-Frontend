@@ -38,7 +38,7 @@ type BookingDraft = {
   eventDate: string;
   dismantleDate: string;
   rentedDays: number;
-  itemServiceSpec: string;
+  arrangement: string;
   size: string;
   notes: string;
 };
@@ -59,7 +59,7 @@ export default function NewBookingScreen() {
     eventDate: "",
     dismantleDate: "",
     rentedDays: 1,
-    itemServiceSpec: "",
+    arrangement: "",
     size: "",
     notes: "",
   });
@@ -118,7 +118,7 @@ export default function NewBookingScreen() {
         eventDate: form.eventDate,
         dismantleDate: form.dismantleDate,
         rentedDays: form.rentedDays,
-        itemServiceSpec: form.itemServiceSpec,
+        arrangement: form.arrangement,
         size: form.size,
         notes: form.notes,
         customValues,
@@ -261,11 +261,11 @@ export default function NewBookingScreen() {
               placeholder="e.g. 48"
             />
           </Field>
-          <Field label="Screen Specification (Text Description)">
+          <Field label="Arrangement / Screen Spec">
             <Input
-              value={form.itemServiceSpec}
-              onChangeText={(value) => set("itemServiceSpec", value)}
-              placeholder="e.g. P3.9 Outdoor LED panel"
+              value={form.arrangement}
+              onChangeText={(value) => set("arrangement", value)}
+              placeholder="e.g. P3.9 Outdoor · 6×8 wall"
             />
           </Field>
           <Field label="Intake Notes / Client Guidance" icon={MessageSquare}>
@@ -294,7 +294,7 @@ export default function NewBookingScreen() {
             ["Dismantle Date", form.dismantleDate || "-"],
             ["Number of Days", String(form.rentedDays)],
             ["Screen Size (sqm)", form.size ? `${form.size} sqm` : "-"],
-            ["Required Spec", form.itemServiceSpec || "-"],
+            ["Arrangement / Screen Spec", form.arrangement || "-"],
             ["Intake Notes", form.notes || "-"],
           ].map(([label, value]) => (
             <Field key={label} label={label}>

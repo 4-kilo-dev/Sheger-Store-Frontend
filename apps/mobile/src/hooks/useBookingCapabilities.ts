@@ -36,7 +36,9 @@ function isDeclinedAssignment(a: BookingAssignment & { declineReason?: string | 
   return !!(a as { declineReason?: string | null }).declineReason;
 }
 
-function isNonDeclinedAssignment(a: BookingAssignment & { declineReason?: string | null }): boolean {
+function isNonDeclinedAssignment(
+  a: BookingAssignment & { declineReason?: string | null },
+): boolean {
   return !isDeclinedAssignment(a);
 }
 
@@ -124,11 +126,19 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canAssignTechnician = can(PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN);
   const canAssignCrew = can(PERMISSION.ASSIGNMENT_ASSIGN_CREW);
   const canReverseCheckout = can(PERMISSION.INVENTORY_CHECKOUT_REVERSE);
+  const bomEditableStatus = booking?.status === "ACCEPTED" || booking?.status === "PREPARATION";
   const canEditBom =
-    can(PERMISSION.BOM_CREATE) ||
-    (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned && booking?.status === "ACCEPTED") ||
-    (can(PERMISSION.BOOKING_EDIT) && booking?.status === "PREPARATION");
+    !!bomEditableStatus &&
+    (can(PERMISSION.BOM_CREATE) ||
+      (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned) ||
+      can(PERMISSION.BOOKING_EDIT));
   const canWriteTechnicalHolds = can(PERMISSION.INVENTORY_RESERVE);
+  /** Writers see holds beyond RESERVED; others only at RESERVED (web registry parity). */
+  const showTechnicalHolds =
+    !!booking &&
+    (canWriteTechnicalHolds || booking.status === "RESERVED") &&
+    booking.status !== "DONE" &&
+    booking.status !== "CANCELED";
   const showOpsSidebar = canAny([
     PERMISSION.BOOKING_VIEW_ALL,
     PERMISSION.BOOKING_CONFIRM,
@@ -260,6 +270,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     canReverseCheckout,
     canEditBom,
     canWriteTechnicalHolds,
+    showTechnicalHolds,
     showOpsSidebar,
     showTechAcceptedWorkspace,
     statusActions,

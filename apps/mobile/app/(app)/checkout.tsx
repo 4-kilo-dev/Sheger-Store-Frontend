@@ -10,7 +10,7 @@ import {
   Truck,
 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, Share, StyleSheet, View } from "react-native";
 import {
   IdempotencyAttempt,
   INVENTORY_CONDITIONS,
@@ -49,6 +49,7 @@ import { useAppContext } from "@/context/AppContext";
 import { useCalendarSystem } from "@/context/CalendarSystemContext";
 import { ApiError } from "@/lib/api/client";
 import { colors, radius } from "@/theme/tokens";
+import { bookingToPackingSlip, buildPackingSlipText } from "@/utils/printPackingSlip";
 
 type Mode = "checkout" | "checkin";
 
@@ -260,7 +261,26 @@ export default function CheckoutScreen() {
                 {submitError}
               </AppText>
             ) : null}
-            <Button variant="outline" icon={Printer}>
+            <Button
+              variant="outline"
+              icon={Printer}
+              onPress={async () => {
+                if (!selected) return;
+                try {
+                  const slip = bookingToPackingSlip(selected);
+                  const message = buildPackingSlipText(slip);
+                  await Share.share({
+                    message,
+                    title: `Packing Slip · ${selected.code}`,
+                  });
+                } catch (error) {
+                  Alert.alert(
+                    "Packing slip",
+                    error instanceof Error ? error.message : "Could not build packing slip.",
+                  );
+                }
+              }}
+            >
               Print Packing Slip
             </Button>
           </View>

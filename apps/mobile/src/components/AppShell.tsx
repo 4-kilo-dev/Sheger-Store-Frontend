@@ -90,11 +90,21 @@ function canOpen(canAny: (keys: string[]) => boolean, href: string) {
 
 export function AppShell() {
   const pathname = usePathname();
-  const { activeProfile, profiles, setActiveProfile, theme, toggleTheme, logout } = useAppContext();
+  const { activeProfile, authUser, theme, toggleTheme, logout } = useAppContext();
   const { canAny } = usePermissions();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  const displayName = authUser?.name || activeProfile.name;
+  const displayRole = authUser?.role || activeProfile.role;
+  const displayInitials =
+    authUser?.name
+      ?.split(" ")
+      .map((p) => p[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || activeProfile.initials;
 
   const navTitle = titleFromPath(pathname);
   const { unreadCount } = useNotificationsContext();
@@ -114,7 +124,7 @@ export function AppShell() {
         <View style={styles.header}>
           <IconButton icon={Menu} label="Open navigation" onPress={() => setDrawerOpen(true)} />
           <View style={styles.headerTitle}>
-            <AppText variant="eyebrow">{activeProfile.role} workspace</AppText>
+            <AppText variant="eyebrow">{displayRole} workspace</AppText>
             <AppText style={styles.titleText} numberOfLines={1}>
               {navTitle}
             </AppText>
@@ -162,16 +172,17 @@ export function AppShell() {
               <IconButton icon={X} label="Close navigation" onPress={() => setDrawerOpen(false)} />
             </View>
 
-            <Pressable style={styles.profileCard} onPress={() => setProfileOpen(true)}>
+            <Pressable style={styles.profileCard} onPress={() => setAccountOpen(true)}>
               <View style={styles.avatar}>
                 <AppText style={styles.avatarText} color={colors.accentForeground}>
-                  {activeProfile.initials}
+                  {displayInitials}
                 </AppText>
               </View>
               <View style={{ flex: 1 }}>
-                <AppText style={{ fontWeight: "800" }}>{activeProfile.name}</AppText>
+                <AppText style={{ fontWeight: "800" }}>{displayName}</AppText>
                 <AppText variant="small" color={colors.text3}>
-                  {activeProfile.role}
+                  {displayRole}
+                  {authUser?.email ? ` · ${authUser.email}` : ""}
                 </AppText>
               </View>
             </Pressable>
@@ -211,48 +222,40 @@ export function AppShell() {
       </Modal>
 
       <Modal
-        visible={profileOpen}
+        visible={accountOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => setProfileOpen(false)}
+        onRequestClose={() => setAccountOpen(false)}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setProfileOpen(false)} />
+        <Pressable style={styles.modalBackdrop} onPress={() => setAccountOpen(false)} />
         <View style={styles.profileSheet}>
           <View style={styles.sheetHandle} />
-          <AppText style={styles.sheetTitle}>Control Workspaces</AppText>
-          {profiles.map((profile) => {
-            const active = profile.role === activeProfile.role;
-            return (
-              <Pressable
-                key={profile.role}
-                onPress={() => {
-                  setActiveProfile(profile);
-                  setProfileOpen(false);
-                }}
-                style={[styles.profileOption, active ? styles.profileOptionActive : null]}
-              >
-                <View style={[styles.avatar, active ? styles.avatarActive : null]}>
-                  <AppText
-                    style={styles.avatarText}
-                    color={active ? colors.accentForeground : colors.foreground}
-                  >
-                    {profile.initials}
-                  </AppText>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <AppText
-                    color={active ? colors.accent : colors.foreground}
-                    style={{ fontWeight: "800" }}
-                  >
-                    {profile.name}
-                  </AppText>
-                  <AppText variant="small" color={colors.text3}>
-                    {profile.description}
-                  </AppText>
-                </View>
-              </Pressable>
-            );
-          })}
+          <AppText style={styles.sheetTitle}>Account</AppText>
+          <View style={[styles.profileOption, styles.profileOptionActive]}>
+            <View style={[styles.avatar, styles.avatarActive]}>
+              <AppText style={styles.avatarText} color={colors.accentForeground}>
+                {displayInitials}
+              </AppText>
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText color={colors.accent} style={{ fontWeight: "800" }}>
+                {displayName}
+              </AppText>
+              <AppText variant="small" color={colors.text3}>
+                {authUser?.email || activeProfile.description || displayRole}
+              </AppText>
+            </View>
+          </View>
+          <Button
+            variant="outline"
+            onPress={() => {
+              setAccountOpen(false);
+              logout();
+              router.replace(to("/login"));
+            }}
+          >
+            Sign out
+          </Button>
         </View>
       </Modal>
 
