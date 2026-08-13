@@ -9,8 +9,21 @@ import {
   Printer,
   Truck,
 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import {
+  IdempotencyAttempt,
+  INVENTORY_CONDITIONS,
+  buildCheckinReturns,
+  buildOperationItems,
+  CHECKIN_STATUSES,
+  CHECKOUT_STATUSES,
+  isDueForCheckinThisMonth,
+  isEventPassedOrComplete,
+  isUpcomingThisMonth,
+  normalizeCheckoutAssets,
+  type InventoryCondition,
+} from "@vortex/utils";
 import { StatusBadge, ToneBadge } from "@/components/status";
 import {
   AppText,
@@ -27,12 +40,14 @@ import {
   TextArea,
 } from "@/components/ui";
 import {
-  useBomLines,
   useBookings,
+  useBookingCustody,
   useCheckinBooking,
   useCheckoutBooking,
 } from "@/hooks/useOperations";
 import { useAppContext } from "@/context/AppContext";
+import { useCalendarSystem } from "@/context/CalendarSystemContext";
+import { ApiError } from "@/lib/api/client";
 import { colors, radius } from "@/theme/tokens";
 
 type Mode = "checkout" | "checkin";
@@ -40,36 +55,61 @@ type Mode = "checkout" | "checkin";
 export default function CheckoutScreen() {
   const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings();
   const { activeProfile } = useAppContext();
+  const { calendarSystem } = useCalendarSystem();
   const userRole = activeProfile.role;
   const [mode, setMode] = useState<Mode>("checkout");
   const [selectedCode, setSelectedCode] = useState("");
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState(false);
+  const [completedStatus, setCompletedStatus] = useState<string | null>(null);
+  const [poolQuantities, setPoolQuantities] = useState<Record<string, string>>({});
+  const [itemConditions, setItemConditions] = useState<Record<string, InventoryCondition>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const checkoutAttempt = useRef(new IdempotencyAttempt());
   const checkoutMutation = useCheckoutBooking();
   const checkinMutation = useCheckinBooking();
-  const eligibleBookings = useMemo(
-    () =>
-      mode === "checkout"
-        ? BOOKINGS.filter((booking) =>
-            ["PREPARATION", "ACCEPTED", "RESERVED", "CONFIRMED"].includes(booking.status),
-          )
-        : BOOKINGS.filter(
-            (booking) => booking.status === "COMPLETED" || booking.status === "ONSITE",
-          ),
-    [BOOKINGS, mode],
-  );
-  const selected = eligibleBookings.find((booking) => booking.code === selectedCode);
-  const { data: backendBomLines = [] } = useBomLines(selected?.id || "");
-  const storekeeperOnsiteHold =
-    mode === "checkin" && selected?.status === "ONSITE" && userRole === "SK";
 
-  // An item can only move forward one step at a time: checkout requires it still
-  // Reserved, checkin requires it already Checked Out. Prevents double-processing
-  // the same material and makes its current state visible before acting on it.
-  const isEligible = (item: { status: string }) =>
-    mode === "checkout" ? item.status === "Reserved" : item.status === "Checked Out";
-  const eligibleItems = selected?.bomItems.filter(isEligible) ?? [];
+  const eligibleBookings = useMemo(() => {
+    if (mode === "checkout") {
+      return BOOKINGS.filter(
+        (booking) =>
+          CHECKOUT_STATUSES.has(booking.status) && isUpcomingThisMonth(booking, calendarSystem),
+      ).sort((a, b) => (a.assemblyDate || "").localeCompare(b.assemblyDate || ""));
+    }
+    return BOOKINGS.filter(
+      (booking) =>
+        CHECKIN_STATUSES.has(booking.status) && isDueForCheckinThisMonth(booking, calendarSystem),
+    ).sort((a, b) =>
+      (a.dismantleDate || a.eventDate || "").localeCompare(b.dismantleDate || b.eventDate || ""),
+    );
+  }, [BOOKINGS, calendarSystem, mode]);
+
+  useEffect(() => {
+    if (selectedCode && !eligibleBookings.some((booking) => booking.code === selectedCode)) {
+      setSelectedCode("");
+      setCheckedItems(new Set());
+    }
+  }, [eligibleBookings, selectedCode]);
+
+  const selected = eligibleBookings.find((booking) => booking.code === selectedCode);
+  const { data: custody = [] } = useBookingCustody(selected?.id || "");
+
+  const storekeeperAwaitingEvent =
+    mode === "checkin" &&
+    !!selected &&
+    selected.status === "ONSITE" &&
+    userRole === "SK" &&
+    !isEventPassedOrComplete(selected);
+
+  const operationItems = useMemo(() => {
+    if (!selected) return [];
+    return buildOperationItems({
+      mode,
+      bookingStatus: selected.status,
+      bomItems: selected.bomItems,
+      custody,
+    });
+  }, [custody, mode, selected]);
 
   const toggleItem = (id: string) => {
     setCheckedItems((current) => {
@@ -80,9 +120,20 @@ export default function CheckoutScreen() {
     });
   };
 
+  const toggleAll = () => {
+    if (checkedItems.size === operationItems.length) {
+      setCheckedItems(new Set());
+    } else {
+      setCheckedItems(new Set(operationItems.map((item) => item.id)));
+    }
+  };
+
   const reset = () => {
     setSelectedCode("");
     setCheckedItems(new Set());
+    setPoolQuantities({});
+    setItemConditions({});
+    setCompletedStatus(null);
     setSubmitted(false);
     setSubmitError(null);
   };
@@ -90,37 +141,55 @@ export default function CheckoutScreen() {
   const handleSubmit = async () => {
     if (!selected) return;
     setSubmitError(null);
-    const items = selected.bomItems.filter((item) => checkedItems.has(item.id));
-    // Cross-reference the live BOM lines so a stale cached bomItems snapshot
-    // never sends the wrong pool/item id — mirrors web's CheckoutPage matching.
-    const matchLine = (item: (typeof items)[number]) =>
-      backendBomLines.find(
-        (line) =>
-          line.id === item.id || line.item?.name === item.name || line.pool?.name === item.name,
-      );
+    const selectedItems = operationItems.filter((item) => checkedItems.has(item.id));
+
     try {
       if (mode === "checkout") {
-        const assets = items.map((item) => {
-          const line = matchLine(item);
-          return line?.itemId
-            ? { itemId: line.itemId }
-            : { poolId: line?.poolId || null, quantity: String(item.qty) };
+        const assets = normalizeCheckoutAssets(
+          selectedItems.map((item) =>
+            item.itemId
+              ? { itemId: item.itemId }
+              : {
+                  poolId: item.poolId,
+                  quantity: poolQuantities[item.id] || String(item.qty),
+                },
+          ),
+        );
+        const payload = { assets };
+        await checkoutMutation.mutateAsync({
+          bookingId: selected.id,
+          assets,
+          idempotencyKey: checkoutAttempt.current.keyFor(payload),
         });
-        await checkoutMutation.mutateAsync({ bookingId: selected.id, assets });
+        checkoutAttempt.current.complete();
+        setCompletedStatus("ONSITE");
       } else {
-        const returns = items.map((item) => {
-          const line = matchLine(item);
-          return {
-            poolId: line?.poolId || null,
-            itemId: line?.itemId || null,
-            quantityReturned: String(item.qty),
-            condition: "AVAILABLE" as const,
-          };
+        const returns = buildCheckinReturns(
+          operationItems.map((item) => ({
+            selected: checkedItems.has(item.id),
+            poolId: item.poolId,
+            itemId: item.itemId,
+            outstandingQuantity: item.outstandingQuantity,
+            quantity: poolQuantities[item.id] || String(item.qty),
+            condition: itemConditions[item.id] || "AVAILABLE",
+          })),
+        );
+        const result = await checkinMutation.mutateAsync({
+          bookingId: selected.id,
+          returns,
         });
-        await checkinMutation.mutateAsync({ bookingId: selected.id, returns });
+        setCompletedStatus(result.status);
       }
       setSubmitted(true);
     } catch (error) {
+      if (
+        mode === "checkout" &&
+        error instanceof ApiError &&
+        error.status >= 400 &&
+        error.status < 500
+      ) {
+        checkoutAttempt.current.failDefinitively();
+      }
       setSubmitError(error instanceof Error ? error.message : "Failed to process the request.");
     }
   };
@@ -154,7 +223,9 @@ export default function CheckoutScreen() {
             booking {selected.code}.{" "}
             {mode === "checkout"
               ? "Materials are now marked as 'Out'. The booking status has advanced to ONSITE."
-              : "All items have been verified and returned to warehouse. The booking status has been marked as DONE."}
+              : completedStatus === "PARTIALLY_RETURNED"
+                ? "The selected items were returned. Remaining custody is still outstanding."
+                : "All checked-out items were returned and the booking is now DONE."}
           </AppText>
           <Button onPress={reset}>Process Another</Button>
           <Button variant="outline" onPress={() => router.push(to(`/bookings/${selected.code}`))}>
@@ -165,6 +236,8 @@ export default function CheckoutScreen() {
     );
   }
 
+  const isPending = checkoutMutation.isPending || checkinMutation.isPending;
+
   return (
     <Screen
       footer={
@@ -172,16 +245,11 @@ export default function CheckoutScreen() {
           <View style={{ gap: 8 }}>
             <Button
               icon={mode === "checkout" ? Truck : PackageCheck}
-              disabled={
-                checkedItems.size === 0 ||
-                checkoutMutation.isPending ||
-                checkinMutation.isPending ||
-                storekeeperOnsiteHold
-              }
+              disabled={checkedItems.size === 0 || isPending || storekeeperAwaitingEvent}
               variant={mode === "checkout" ? "primary" : "success"}
               onPress={handleSubmit}
             >
-              {checkoutMutation.isPending || checkinMutation.isPending
+              {isPending
                 ? "Submitting..."
                 : mode === "checkout"
                   ? "Confirm Check-Out"
@@ -211,6 +279,8 @@ export default function CheckoutScreen() {
             setMode("checkout");
             setSelectedCode("");
             setCheckedItems(new Set());
+            setPoolQuantities({});
+            setItemConditions({});
           }}
         />
         <ModeCard
@@ -220,6 +290,8 @@ export default function CheckoutScreen() {
             setMode("checkin");
             setSelectedCode("");
             setCheckedItems(new Set());
+            setPoolQuantities({});
+            setItemConditions({});
           }}
         />
       </View>
@@ -231,15 +303,15 @@ export default function CheckoutScreen() {
           {(mode === "checkout"
             ? [
                 "Select the booking to process",
-                "Count and verify each BOM item",
-                "Check off each verified item",
+                "Count and verify each custody line",
+                "Adjust pool quantities when needed",
                 "Enter responsible party",
                 "Submit to register materials out",
               ]
             : [
                 "Select the booking to process",
-                "Count and verify each returned item",
-                "Check off each verified item",
+                "Count and verify outstanding custody",
+                "Set return qty or item condition",
                 "Note any missing or damaged items",
                 "Submit to register materials in",
               ]
@@ -256,98 +328,143 @@ export default function CheckoutScreen() {
         </Section>
       ) : null}
       <Section title="Select Booking" icon={ClipboardCheck}>
-        {eligibleBookings.map((booking) => (
-          <Pressable
-            key={booking.code}
-            onPress={() => {
-              setSelectedCode(booking.code);
-              setCheckedItems(new Set());
-            }}
-            style={[
-              styles.bookingOption,
-              selectedCode === booking.code ? styles.bookingOptionActive : null,
-            ]}
-          >
-            <View style={{ flex: 1 }}>
-              <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
-                {booking.code}
-              </AppText>
-              <AppText style={{ fontWeight: "800" }}>{booking.client}</AppText>
-              <AppText variant="small" color={colors.text2}>
-                {booking.venue} · {booking.eventDate}
-              </AppText>
-            </View>
-            <StatusBadge status={booking.status} />
-          </Pressable>
-        ))}
+        {eligibleBookings.length === 0 ? (
+          <AppText variant="small" color={colors.text3}>
+            {mode === "checkout"
+              ? "No PREPARATION/ONSITE bookings due this calendar month."
+              : "No ONSITE/COMPLETED/PARTIALLY_RETURNED bookings due for return."}
+          </AppText>
+        ) : (
+          eligibleBookings.map((booking) => (
+            <Pressable
+              key={booking.code}
+              onPress={() => {
+                setSelectedCode(booking.code);
+                setCheckedItems(new Set());
+                setPoolQuantities({});
+                setItemConditions({});
+              }}
+              style={[
+                styles.bookingOption,
+                selectedCode === booking.code ? styles.bookingOptionActive : null,
+              ]}
+            >
+              <View style={{ flex: 1 }}>
+                <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
+                  {booking.code}
+                </AppText>
+                <AppText style={{ fontWeight: "800" }}>{booking.client}</AppText>
+                <AppText variant="small" color={colors.text2}>
+                  {booking.venue} · {booking.eventDate}
+                </AppText>
+              </View>
+              <StatusBadge status={booking.status} />
+            </Pressable>
+          ))
+        )}
       </Section>
       {selected ? (
         <>
           <Section
-            title="Bill of Materials — Verify Each Item"
+            title="Bill of Materials — Verify Each Asset"
             icon={Package}
             action={
-              <Button
-                variant="ghost"
-                onPress={() => setCheckedItems(new Set(eligibleItems.map((item) => item.id)))}
-              >
-                Check All
+              <Button variant="ghost" onPress={toggleAll}>
+                {checkedItems.size === operationItems.length ? "Uncheck All" : "Check All"}
               </Button>
             }
           >
-            {selected.bomItems.map((item) => {
-              const checked = checkedItems.has(item.id);
-              const eligible = isEligible(item);
-              return (
-                <Pressable
-                  key={item.id}
-                  disabled={!eligible}
-                  onPress={() => toggleItem(item.id)}
-                  style={[
-                    styles.bomRow,
-                    checked ? styles.bomRowChecked : null,
-                    !eligible ? styles.bomRowDisabled : null,
-                  ]}
-                >
-                  <View style={[styles.checkbox, checked ? styles.checkboxChecked : null]}>
-                    {checked ? (
-                      <Check
-                        size={15}
-                        color={mode === "checkout" ? colors.accentForeground : colors.white}
-                      />
-                    ) : null}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
-                      {item.id}
-                    </AppText>
-                    <AppText>{item.name}</AppText>
-                  </View>
-                  <View style={{ alignItems: "flex-end", gap: 4 }}>
-                    <AppText variant="data" style={{ fontWeight: "900" }}>
-                      {item.qty}
-                    </AppText>
-                    <ToneBadge
-                      label={item.status}
-                      tone={
-                        item.status === "Checked Out"
-                          ? colors.destructive
-                          : item.status === "Returned"
-                            ? colors.success
-                            : colors.text2
-                      }
-                    />
-                  </View>
-                </Pressable>
-              );
-            })}
-            <KV label="Verified" value={`${checkedItems.size} of ${eligibleItems.length} items`} />
+            {operationItems.length === 0 ? (
+              <AppText variant="small" color={colors.text3}>
+                {mode === "checkin" || selected.status === "ONSITE"
+                  ? "No outstanding custody for this booking."
+                  : "No BOM assets available to check out."}
+              </AppText>
+            ) : (
+              operationItems.map((item) => {
+                const checked = checkedItems.has(item.id);
+                return (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => toggleItem(item.id)}
+                    style={[styles.bomRow, checked ? styles.bomRowChecked : null]}
+                  >
+                    <View style={[styles.checkbox, checked ? styles.checkboxChecked : null]}>
+                      {checked ? (
+                        <Check
+                          size={15}
+                          color={mode === "checkout" ? colors.accentForeground : colors.white}
+                        />
+                      ) : null}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
+                        {item.code}
+                      </AppText>
+                      <AppText>{item.name}</AppText>
+                    </View>
+                    <View style={{ alignItems: "flex-end", gap: 4, minWidth: 96 }}>
+                      {item.poolId ? (
+                        <Input
+                          accessibilityLabel={`Quantity for ${item.name}`}
+                          keyboardType="decimal-pad"
+                          value={poolQuantities[item.id] ?? String(item.qty)}
+                          onChangeText={(value) =>
+                            setPoolQuantities((current) => ({ ...current, [item.id]: value }))
+                          }
+                          style={styles.qtyInput}
+                        />
+                      ) : mode === "checkin" ? (
+                        <View style={styles.conditionWrap}>
+                          {INVENTORY_CONDITIONS.map((condition) => {
+                            const active = (itemConditions[item.id] ?? "AVAILABLE") === condition;
+                            return (
+                              <Pressable
+                                key={condition}
+                                onPress={(event) => {
+                                  event.stopPropagation?.();
+                                  setItemConditions((current) => ({
+                                    ...current,
+                                    [item.id]: condition,
+                                  }));
+                                }}
+                                style={[
+                                  styles.conditionChip,
+                                  active ? styles.conditionChipActive : null,
+                                ]}
+                              >
+                                <AppText
+                                  variant="small"
+                                  color={active ? colors.accentForeground : colors.text2}
+                                  style={{ fontWeight: "800", fontSize: 9 }}
+                                >
+                                  {condition === "UNDER_MAINTENANCE" ? "MAINT" : condition}
+                                </AppText>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      ) : (
+                        <AppText variant="data" style={{ fontWeight: "900" }}>
+                          1
+                        </AppText>
+                      )}
+                      <ToneBadge label={item.poolId ? "units" : "serialized"} tone={colors.text2} />
+                    </View>
+                  </Pressable>
+                );
+              })
+            )}
+            <KV
+              label="Verified"
+              value={`${checkedItems.size} of ${operationItems.length} assets`}
+            />
             <ProgressBar
-              value={eligibleItems.length ? (checkedItems.size / eligibleItems.length) * 100 : 0}
+              value={operationItems.length ? (checkedItems.size / operationItems.length) * 100 : 0}
               tone={mode === "checkout" ? colors.accent : colors.success}
             />
           </Section>
-          {storekeeperOnsiteHold ? (
+          {storekeeperAwaitingEvent ? (
             <View style={styles.holdBox}>
               <AppText variant="small" style={{ fontWeight: "800" }} color={colors.status.ONSITE}>
                 Gear is on-site. Awaiting event completion and warehouse return.
@@ -372,10 +489,10 @@ export default function CheckoutScreen() {
             <KV label="Client" value={selected.client} />
             <KV label="Venue" value={selected.venue} />
             <KV label="Event" value={selected.eventDate} mono />
-            <KV label="BOM Items" value={selected.bomItems.length} mono />
+            <KV label="Assets" value={operationItems.length} mono />
             <KV
               label="Total Units"
-              value={selected.bomItems.reduce((sum, item) => sum + item.qty, 0)}
+              value={operationItems.reduce((sum, item) => sum + item.qty, 0)}
               mono
             />
           </Section>
@@ -459,9 +576,6 @@ const styles = StyleSheet.create({
   bomRowChecked: {
     opacity: 1,
   },
-  bomRowDisabled: {
-    opacity: 0.4,
-  },
   checkbox: {
     width: 28,
     height: 28,
@@ -472,6 +586,31 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   checkboxChecked: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accent,
+  },
+  qtyInput: {
+    minHeight: 34,
+    width: 84,
+    paddingHorizontal: 8,
+    textAlign: "right",
+  },
+  conditionWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 4,
+    maxWidth: 160,
+  },
+  conditionChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    backgroundColor: colors.surface2,
+  },
+  conditionChipActive: {
     borderColor: colors.accent,
     backgroundColor: colors.accent,
   },

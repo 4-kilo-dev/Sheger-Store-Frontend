@@ -1,16 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { AlertCircle, Check, Package } from "lucide-react-native";
 import {
-  AppText,
-  BottomSheet,
-  Button,
-  Field,
-  Input,
-  TextArea,
-} from "@/components/ui";
+  buildCheckinReturns,
+  isCheckinAction as isInventoryCheckinAction,
+  isCheckoutReverseAction,
+  type InventoryCondition,
+} from "@vortex/utils";
+import { AppText, BottomSheet, Button, Field, Input, TextArea } from "@/components/ui";
 import { useAppContext } from "@/context/AppContext";
 import type { BookingActions } from "@/hooks/useBookingActions";
+import { useBookingCustody } from "@/hooks/useOperations";
 import type { Booking } from "@/types/domain";
 import { isAssignableTechnician, isChiefTechnicianRole } from "@/utils/staffRoles";
 import { isDeclinedAssignment } from "@/utils/assignmentHelpers";
@@ -57,6 +57,10 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
     isAssigningTechnicians,
     performCheckout,
     isCheckingOut,
+    performCheckin,
+    isCheckingIn,
+    reverseCheckout,
+    isReversingCheckout,
     transitionStatus,
     isTransitioning,
     isRecordingPayment,
@@ -64,17 +68,41 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
     isConfirmingWithPayment,
   } = actions;
 
-  const isCheckinAction =
-    !!selectedAction &&
-    (selectedAction.id === "inventory.checkin" ||
-      selectedAction.id === "booking.done" ||
-      selectedAction.id === "booking.partial_return" ||
-      selectedAction.permissionKey === "inventory.checkin");
+  const isCheckinAction = isInventoryCheckinAction(selectedAction);
+  const isReverseAction = isCheckoutReverseAction(selectedAction);
 
   const [checkedCheckinItems, setCheckedCheckinItems] = useState<Set<string>>(new Set());
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
+  const [returnConditions, setReturnConditions] = useState<Record<string, InventoryCondition>>({});
+  const { data: custody = [] } = useBookingCustody(
+    showActionModal && isCheckinAction ? booking.id : "",
+  );
+  const checkinItems = useMemo(
+    () =>
+      custody
+        .filter((line) => Number.parseFloat(line.outstandingQuantity) > 0)
+        .map((line) => {
+          const source = booking.bomItems.find((item) =>
+            line.poolId ? item.poolId === line.poolId : item.itemId === line.itemId,
+          );
+          return {
+            id: line.poolId ? `pool:${line.poolId}` : `item:${line.itemId}`,
+            poolId: line.poolId || undefined,
+            itemId: line.itemId || undefined,
+            name: source?.name || "Equipment",
+            code: source?.code || line.poolId || line.itemId || "asset",
+            outstandingQuantity: line.outstandingQuantity,
+          };
+        }),
+    [booking.bomItems, custody],
+  );
 
   useEffect(() => {
-    if (!showActionModal || !isCheckinAction) setCheckedCheckinItems(new Set());
+    if (!showActionModal || !isCheckinAction) {
+      setCheckedCheckinItems(new Set());
+      setReturnQuantities({});
+      setReturnConditions({});
+    }
   }, [showActionModal, isCheckinAction, selectedAction?.id]);
 
   if (!selectedAction) return null;
@@ -110,15 +138,14 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
   };
 
   const toggleAllCheckinItems = () => {
-    if (checkedCheckinItems.size === booking.bomItems.length) {
+    if (checkedCheckinItems.size === checkinItems.length) {
       setCheckedCheckinItems(new Set());
     } else {
-      setCheckedCheckinItems(new Set(booking.bomItems.map((item) => item.id)));
+      setCheckedCheckinItems(new Set(checkinItems.map((item) => item.id)));
     }
   };
 
-  const allCheckinItemsVerified =
-    booking.bomItems.length === 0 || checkedCheckinItems.size === booking.bomItems.length;
+  const hasCheckinItemsSelected = checkedCheckinItems.size > 0;
 
   const stagehandLeaderName = booking.teamLeader || "— Not assigned —";
   const screenTypeLabel = booking.screenType || "—";
@@ -135,6 +162,8 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
     isRecordingPayment ||
     isConfirmingWithPayment ||
     isCheckingOut ||
+    isCheckingIn ||
+    isReversingCheckout ||
     isAssigningTechnicians;
 
   const confirmDisabled =
@@ -148,7 +177,8 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
         rentedDays <= 0 ||
         (paymentType === "advance" && advancePayment > computedTotal) ||
         (paymentType === "advance" && advancePayment <= 0))) ||
-    (isCheckinAction && !allCheckinItemsVerified);
+    (isCheckinAction && !hasCheckinItemsSelected) ||
+    (isReverseAction && cancellationReason.trim().length < 10);
 
   const handleConfirm = () => {
     if (
@@ -161,6 +191,31 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
         return;
       }
       performCheckout();
+      return;
+    }
+
+    if (isCheckinAction) {
+      try {
+        performCheckin(
+          buildCheckinReturns(
+            checkinItems.map((item) => ({
+              selected: checkedCheckinItems.has(item.id),
+              poolId: item.poolId,
+              itemId: item.itemId,
+              outstandingQuantity: item.outstandingQuantity,
+              quantity: returnQuantities[item.id] ?? item.outstandingQuantity,
+              condition: returnConditions[item.id] ?? "AVAILABLE",
+            })),
+          ),
+        );
+      } catch (error) {
+        Alert.alert("Error", error instanceof Error ? error.message : "Invalid check-in selection");
+      }
+      return;
+    }
+
+    if (isReverseAction) {
+      reverseCheckout(cancellationReason.trim());
       return;
     }
 
@@ -303,7 +358,9 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
             {rentedDays > 0 && (computedTotal < 1000 || dailyRate <= 0) ? (
               <Warning text="Daily rate is required (computed total min ETB 1,000)." />
             ) : null}
-            {paymentType === "advance" && advancePayment > computedTotal && computedTotal >= 1000 ? (
+            {paymentType === "advance" &&
+            advancePayment > computedTotal &&
+            computedTotal >= 1000 ? (
               <Warning text="Advance Payment can't be greater than total payment." />
             ) : null}
             {paymentType === "advance" && computedTotal >= 1000 && advancePayment <= 0 ? (
@@ -421,22 +478,20 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
                 <Package size={14} color={colors.success} />
                 <AppText variant="eyebrow">Checked-Out Materials — Verify Returns</AppText>
               </View>
-              {booking.bomItems.length > 0 ? (
+              {checkinItems.length > 0 ? (
                 <Pressable onPress={toggleAllCheckinItems}>
                   <AppText variant="small" color={colors.success} style={{ fontWeight: "800" }}>
-                    {checkedCheckinItems.size === booking.bomItems.length
-                      ? "Uncheck All"
-                      : "Check All"}
+                    {checkedCheckinItems.size === checkinItems.length ? "Uncheck All" : "Check All"}
                   </AppText>
                 </Pressable>
               ) : null}
             </View>
-            {booking.bomItems.length === 0 ? (
+            {checkinItems.length === 0 ? (
               <AppText variant="small" color={colors.text3}>
-                No BOM lines on this booking.
+                No inventory is currently outstanding for this booking.
               </AppText>
             ) : (
-              booking.bomItems.map((item) => {
+              checkinItems.map((item) => {
                 const checked = checkedCheckinItems.has(item.id);
                 return (
                   <Pressable
@@ -453,13 +508,59 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
                     <AppText style={{ flex: 1 }} numberOfLines={1}>
                       {item.name}
                     </AppText>
-                    <AppText variant="data">×{item.qty}</AppText>
+                    {item.poolId ? (
+                      <Input
+                        accessibilityLabel={`Return quantity for ${item.name}`}
+                        keyboardType="decimal-pad"
+                        value={returnQuantities[item.id] ?? item.outstandingQuantity}
+                        onChangeText={(value) =>
+                          setReturnQuantities((current) => ({ ...current, [item.id]: value }))
+                        }
+                        style={styles.returnQty}
+                      />
+                    ) : (
+                      <View style={styles.conditionRow}>
+                        {(
+                          [
+                            "AVAILABLE",
+                            "DAMAGED",
+                            "LOST",
+                            "UNDER_MAINTENANCE",
+                          ] as InventoryCondition[]
+                        ).map((condition) => {
+                          const active = (returnConditions[item.id] ?? "AVAILABLE") === condition;
+                          return (
+                            <Pressable
+                              key={condition}
+                              onPress={() =>
+                                setReturnConditions((current) => ({
+                                  ...current,
+                                  [item.id]: condition,
+                                }))
+                              }
+                              style={[
+                                styles.conditionChip,
+                                active ? styles.conditionChipActive : null,
+                              ]}
+                            >
+                              <AppText
+                                variant="small"
+                                color={active ? colors.accentForeground : colors.text2}
+                                style={{ fontWeight: "800", fontSize: 9 }}
+                              >
+                                {condition === "UNDER_MAINTENANCE" ? "MAINT" : condition}
+                              </AppText>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
                   </Pressable>
                 );
               })
             )}
             <AppText variant="small" color={colors.text2}>
-              {checkedCheckinItems.size} of {booking.bomItems.length} items verified
+              {checkedCheckinItems.size} of {checkinItems.length} assets selected
             </AppText>
           </View>
         ) : null}
@@ -508,7 +609,10 @@ function Choice({
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.choice, active ? { borderColor: colors.accent, backgroundColor: colors.accentDim } : null]}
+      style={[
+        styles.choice,
+        active ? { borderColor: colors.accent, backgroundColor: colors.accentDim } : null,
+      ]}
     >
       <AppText
         variant="small"
@@ -594,5 +698,30 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     gap: 8,
+  },
+  returnQty: {
+    minHeight: 32,
+    width: 72,
+    paddingHorizontal: 6,
+    textAlign: "right",
+  },
+  conditionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 4,
+    maxWidth: 150,
+  },
+  conditionChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    backgroundColor: colors.surface,
+  },
+  conditionChipActive: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accent,
   },
 });

@@ -3,15 +3,17 @@ import { useMemo } from "react";
 import { View, StyleSheet } from "react-native";
 import { StatCard } from "@/components/ui";
 import { useAppContext } from "@/context/AppContext";
-import { useBookings, useStaff } from "@/hooks/useOperations";
+import { useSystemCurrency } from "@/hooks/use-system-currency";
+import { useBookings, useInventory, useStaff } from "@/hooks/useOperations";
 import { colors } from "@/theme/tokens";
-import { formatCompactCurrency } from "@/utils/format";
 
 export function StatsOverviewWidget() {
   const { activeProfile } = useAppContext();
   const role = activeProfile.role;
+  const { formatMoneyCompact } = useSystemCurrency();
   const { data: BOOKINGS = [] } = useBookings();
   const { data: STAFF = [] } = useStaff();
+  const { data: INVENTORY = [] } = useInventory();
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -50,6 +52,13 @@ export function StatsOverviewWidget() {
         booking.assignees.some((name) => activeProfile.name.startsWith(name)),
     ).length;
     const inPrep = BOOKINGS.filter((booking) => booking.status === "PREPARATION").length;
+    const completed = BOOKINGS.filter(
+      (booking) => booking.status === "COMPLETED" || booking.status === "PARTIALLY_RETURNED",
+    ).length;
+    const mealBudgetsActive = BOOKINGS.filter(
+      (booking) => booking.status === "ONSITE" && Number(booking.mealBudget || 0) > 0,
+    ).length;
+    const inventoryDamaged = INVENTORY.reduce((sum, item) => sum + (item.damaged || 0), 0);
     const availableStaff = STAFF.filter((member) => member.status === "ACTIVE").length;
     return {
       thisMonth: thisMonth.length,
@@ -64,9 +73,12 @@ export function StatsOverviewWidget() {
       assigned,
       assignedToMe,
       inPrep,
+      completed,
+      mealBudgetsActive,
+      inventoryDamaged,
       availableStaff,
     };
-  }, [activeProfile.name, BOOKINGS, STAFF]);
+  }, [activeProfile.name, BOOKINGS, INVENTORY, STAFF]);
 
   const cards = useMemo(() => {
     if (role === "CCR") {
@@ -84,7 +96,12 @@ export function StatsOverviewWidget() {
           icon: DollarSign,
           tone: colors.destructive,
         },
-        { label: "Confirmed", value: stats.confirmed, note: "Ready for tech review", icon: Clock },
+        {
+          label: "Confirmed",
+          value: stats.confirmed,
+          note: "Open confirmed bookings awaiting assignment",
+          icon: Clock,
+        },
       ];
     }
     if (role === "CTO") {
@@ -121,22 +138,28 @@ export function StatsOverviewWidget() {
           tone: colors.status.ACCEPTED,
         },
         {
-          label: "Available staff",
-          value: stats.availableStaff,
-          note: "Ready for assignment",
-          icon: Users,
+          label: "Meal budgets active",
+          value: stats.mealBudgetsActive,
+          note: "Onsite with meal provision",
+          icon: DollarSign,
         },
       ];
     }
     if (role === "SK") {
       return [
-        { label: "Ready for checkout", value: stats.inPrep, note: "BOM verified", icon: Package },
+        { label: "Materials out", value: stats.onsite, note: "Active check-outs", icon: Package },
         {
-          label: "Screens onsite",
-          value: stats.onsite,
-          note: "Active right now",
+          label: "Pending return",
+          value: stats.completed,
+          note: "Waiting for check-in",
           icon: Package,
-          tone: colors.status.ACCEPTED,
+        },
+        {
+          label: "Damaged units",
+          value: stats.inventoryDamaged,
+          note: "From inventory damage counts",
+          icon: Package,
+          tone: colors.destructive,
         },
       ];
     }
@@ -149,7 +172,7 @@ export function StatsOverviewWidget() {
       },
       {
         label: "Revenue",
-        value: formatCompactCurrency(stats.revenue),
+        value: formatMoneyCompact(stats.revenue),
         note:
           stats.revenueChangePct === null
             ? "No prior month data"
@@ -175,7 +198,7 @@ export function StatsOverviewWidget() {
         tone: colors.payment.ADVANCE,
       },
     ];
-  }, [role, stats]);
+  }, [formatMoneyCompact, role, stats]);
 
   return (
     <View style={styles.grid}>

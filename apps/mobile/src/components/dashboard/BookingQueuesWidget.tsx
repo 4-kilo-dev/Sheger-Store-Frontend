@@ -141,7 +141,9 @@ export function BookingQueuesWidget() {
   if (role === "OO") {
     const dispatch = BOOKINGS.filter((booking) => booking.status === "PREPARATION");
     const onsite = BOOKINGS.filter((booking) => booking.status === "ONSITE");
-    const checkinPending = BOOKINGS.filter((booking) => booking.status === "COMPLETED");
+    const checkinPending = BOOKINGS.filter(
+      (booking) => booking.status === "COMPLETED" || booking.status === "PARTIALLY_RETURNED",
+    );
     return (
       <View style={{ gap: 16 }}>
         <QueueSection title="Ready for dispatch" icon={Truck} bookings={dispatch} />
@@ -153,7 +155,9 @@ export function BookingQueuesWidget() {
 
   if (role === "SK") {
     const checkouts = BOOKINGS.filter((booking) => booking.status === "PREPARATION");
-    const checkins = BOOKINGS.filter((booking) => booking.status === "COMPLETED");
+    const checkins = BOOKINGS.filter(
+      (booking) => booking.status === "COMPLETED" || booking.status === "PARTIALLY_RETURNED",
+    );
     return (
       <View style={{ gap: 16 }}>
         <QueueSection title="Ready for check-out" icon={Package} bookings={checkouts} />

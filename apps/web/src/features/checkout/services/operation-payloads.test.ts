@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHECKIN_STATUSES,
+  CHECKOUT_STATUSES,
   IdempotencyAttempt,
   buildCheckinReturns,
+  buildOperationItems,
   isCheckinAction,
   isCheckoutReverseAction,
+  isUpcomingThisMonth,
   normalizeCheckoutAssets,
 } from "./operation-payloads";
 
@@ -131,5 +135,91 @@ describe("inventory action routing", () => {
     expect(
       isCheckoutReverseAction({ id: "booking.checkout", permissionKey: "inventory.checkout" }),
     ).toBe(false);
+  });
+});
+
+describe("shared eligibility + operation lines", () => {
+  it("limits checkout to PREPARATION/ONSITE in the current calendar month", () => {
+    const now = new Date(2026, 7, 13);
+    expect(
+      isUpcomingThisMonth(
+        { status: "PREPARATION", assemblyDate: "2026-08-20", eventDate: "2026-08-21" },
+        "gregorian",
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      isUpcomingThisMonth(
+        { status: "PREPARATION", assemblyDate: "2026-07-20", eventDate: "2026-07-21" },
+        "gregorian",
+        now,
+      ),
+    ).toBe(false);
+    expect(CHECKOUT_STATUSES.has("ACCEPTED")).toBe(false);
+    expect(CHECKIN_STATUSES.has("PARTIALLY_RETURNED")).toBe(true);
+  });
+
+  it("builds custody-backed operation items for onsite check-in and top-up checkout", () => {
+    const bomItems = [
+      { id: "b1", code: "SC-1", name: "Panels", qty: 10, poolId: "pool-1" },
+      { id: "b2", code: "CT-1", name: "Controller", qty: 1, itemId: "item-1" },
+    ];
+    const custody = [
+      {
+        poolId: "pool-1",
+        itemId: null,
+        snapshotQuantity: "10.00",
+        outQuantity: "8.00",
+        inQuantity: "2.00",
+        outstandingQuantity: "6.00",
+        availableToCheckoutQuantity: "2.00",
+      },
+      {
+        poolId: null,
+        itemId: "item-1",
+        snapshotQuantity: "1.00",
+        outQuantity: "1.00",
+        inQuantity: "0.00",
+        outstandingQuantity: "1.00",
+        availableToCheckoutQuantity: "0.00",
+      },
+    ];
+
+    expect(
+      buildOperationItems({
+        mode: "checkin",
+        bookingStatus: "ONSITE",
+        bomItems,
+        custody,
+      }),
+    ).toEqual([
+      {
+        id: "pool:pool-1",
+        code: "SC-1",
+        name: "Panels",
+        qty: 6,
+        poolId: "pool-1",
+        itemId: undefined,
+        outstandingQuantity: "6.00",
+      },
+      {
+        id: "item:item-1",
+        code: "CT-1",
+        name: "Controller",
+        qty: 1,
+        poolId: undefined,
+        itemId: "item-1",
+        outstandingQuantity: "1.00",
+      },
+    ]);
+
+    expect(
+      buildOperationItems({
+        mode: "checkout",
+        bookingStatus: "ONSITE",
+        bomItems,
+        custody,
+      }).map((item) => ({ id: item.id, qty: item.qty })),
+    ).toEqual([{ id: "pool:pool-1", qty: 2 }]);
   });
 });

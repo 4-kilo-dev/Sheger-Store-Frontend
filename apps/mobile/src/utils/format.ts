@@ -1,11 +1,14 @@
-export function formatCurrency(value: number) {
-  return `ETB ${value.toLocaleString()}`;
+import { formatCurrency as formatSharedCurrency } from "@vortex/utils";
+
+/** Default ETB formatter for call sites that don't need the settings hook. */
+export function formatCurrency(value: number, currency: "ETB" | "USD" = "ETB") {
+  return formatSharedCurrency(value, currency);
 }
 
-export function formatCompactCurrency(value: number) {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M ETB`;
-  if (value >= 1_000) return `${Math.round(value / 1_000)}K ETB`;
-  return formatCurrency(value);
+export function formatCompactCurrency(value: number, currency: "ETB" | "USD" = "ETB") {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M ${currency}`;
+  if (value >= 1_000) return `${Math.round(value / 1_000)}K ${currency}`;
+  return formatCurrency(value, currency);
 }
 
 export function initials(name: string) {

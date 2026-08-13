@@ -15,7 +15,8 @@ export function EquipmentPoolWidget() {
     const total = INVENTORY.reduce((sum, item) => sum + item.total, 0);
     const available = INVENTORY.reduce((sum, item) => sum + item.available, 0);
     const onsite = INVENTORY.reduce((sum, item) => sum + item.onsite, 0);
-    return { total, available, onsite };
+    const reserved = INVENTORY.reduce((sum, item) => sum + item.reserved, 0);
+    return { total, available, onsite, reserved };
   }, [INVENTORY]);
 
   if (isLoading) return <LoadingState label="Loading equipment pool..." />;
@@ -39,11 +40,7 @@ export function EquipmentPoolWidget() {
         </View>
         <View style={{ flex: 1, gap: 10 }}>
           <PoolLine label="Available" value={stats.available} tone={colors.success} />
-          <PoolLine
-            label="Reserved"
-            value={stats.total - stats.available - stats.onsite}
-            tone={colors.payment.ADVANCE}
-          />
+          <PoolLine label="Reserved" value={stats.reserved} tone={colors.payment.ADVANCE} />
           <PoolLine label="Onsite" value={stats.onsite} tone={colors.status.ACCEPTED} />
         </View>
       </View>

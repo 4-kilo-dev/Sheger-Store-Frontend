@@ -29,6 +29,7 @@ import {
 import {
   checkinBookingApi,
   checkoutBookingApi,
+  getBookingCustodyApi,
   type CheckinReturn,
   type CheckoutAsset,
 } from "@/services/checkout-api";
@@ -215,12 +216,30 @@ export function useCreateAssignment() {
   });
 }
 
+export function useBookingCustody(bookingId: string) {
+  return useQuery({
+    queryKey: ["checkoutCustody", bookingId],
+    queryFn: () => getBookingCustodyApi(bookingId),
+    enabled: !!bookingId,
+  });
+}
+
 export function useCheckoutBooking() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ bookingId, assets }: { bookingId: string; assets: CheckoutAsset[] }) =>
-      checkoutBookingApi(bookingId, assets),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bookings"] }),
+    mutationFn: ({
+      bookingId,
+      assets,
+      idempotencyKey,
+    }: {
+      bookingId: string;
+      assets: CheckoutAsset[];
+      idempotencyKey?: string;
+    }) => checkoutBookingApi(bookingId, { assets }, idempotencyKey),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", variables.bookingId] });
+    },
   });
 }
 
@@ -228,8 +247,11 @@ export function useCheckinBooking() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ bookingId, returns }: { bookingId: string; returns: CheckinReturn[] }) =>
-      checkinBookingApi(bookingId, returns),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bookings"] }),
+      checkinBookingApi(bookingId, { returns }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", variables.bookingId] });
+    },
   });
 }
 

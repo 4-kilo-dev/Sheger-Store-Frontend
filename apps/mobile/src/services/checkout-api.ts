@@ -1,28 +1,47 @@
 import { client } from "@/lib/api/client";
+import type { CheckoutAsset, InventoryCondition } from "@vortex/utils";
 
-export interface CheckoutAsset {
-  poolId?: string | null;
-  itemId?: string | null;
-  quantity?: string;
-}
+export type { CheckoutAsset, InventoryCondition };
 
-export interface CheckinReturn {
-  poolId?: string | null;
-  itemId?: string | null;
+export type CustodyLine = {
+  poolId: string | null;
+  itemId: string | null;
+  snapshotQuantity: string;
+  outQuantity: string;
+  inQuantity: string;
+  outstandingQuantity: string;
+  availableToCheckoutQuantity: string;
+};
+
+export type CheckinReturn = {
+  poolId?: string;
+  itemId?: string;
   quantityReturned?: string;
-  condition?: "AVAILABLE" | "DAMAGED" | "LOST" | "UNDER_MAINTENANCE";
-}
+  condition?: InventoryCondition;
+};
+
+export type CheckinResult = {
+  movements: unknown[];
+  status: "PARTIALLY_RETURNED" | "DONE";
+};
 
 export async function checkoutBookingApi(
   bookingId: string,
-  assets: CheckoutAsset[],
+  payload: { assets: CheckoutAsset[] },
+  idempotencyKey?: string,
 ): Promise<{ status: string }> {
-  return client.post(`/api/bookings/${bookingId}/checkout`, { assets });
+  return client.post(`/api/bookings/${bookingId}/checkout`, payload, {
+    headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+  });
 }
 
 export async function checkinBookingApi(
   bookingId: string,
-  returns: CheckinReturn[],
-): Promise<{ status: string }> {
-  return client.post(`/api/bookings/${bookingId}/checkin`, { returns });
+  payload: { returns: CheckinReturn[] },
+): Promise<CheckinResult> {
+  return client.post(`/api/bookings/${bookingId}/checkin`, payload);
+}
+
+export async function getBookingCustodyApi(bookingId: string): Promise<CustodyLine[]> {
+  return client.get(`/api/bookings/${bookingId}/checkout/custody`);
 }

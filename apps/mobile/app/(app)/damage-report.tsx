@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { to } from "@/utils/routes";
 import * as ImagePicker from "expo-image-picker";
 import { AlertTriangle, Camera, CheckCircle2, ShieldAlert, X } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import {
   AppText,
@@ -32,13 +32,28 @@ export default function DamageReportScreen() {
   const createDamageReport = useCreateDamageReport();
 
   const [submitted, setSubmitted] = useState(false);
-  const [itemId, setItemId] = useState(params.itemId ?? INVENTORY[0]?.id ?? "");
+  const [itemId, setItemId] = useState(params.itemId ?? "");
   const [bookingCode, setBookingCode] = useState(params.bookingCode ?? "");
   const [quantity, setQuantity] = useState("1");
   const [description, setDescription] = useState("");
   const [reportType, setReportType] = useState<"DAMAGE" | "MISSING">("DAMAGE");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<ImagePicker.ImagePickerAsset[]>([]);
+
+  // Prefill from route params once inventory/bookings resolve (mirrors web inventory→damage CTA).
+  useEffect(() => {
+    if (params.itemId) {
+      setItemId(params.itemId);
+      return;
+    }
+    if (!itemId && INVENTORY[0]?.id) {
+      setItemId(INVENTORY[0].id);
+    }
+  }, [INVENTORY, itemId, params.itemId]);
+
+  useEffect(() => {
+    if (params.bookingCode) setBookingCode(params.bookingCode);
+  }, [params.bookingCode]);
 
   const handlePickPhotos = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -103,12 +118,17 @@ export default function DamageReportScreen() {
 
       // Upload any attached photos to the damage report
       if (attachments.length > 0 && report?.id) {
-        const uploads = attachments.map((asset) =>
-          uploadBookingAttachmentApi(
-            booking.id,
-            { uri: asset.uri, name: asset.fileName || `damage_photo_${Date.now()}.jpg`, type: asset.type || "image/jpeg" },
-            { relatedEntity: "damage_missing_report", relatedId: report.id },
-          ).catch(() => null), // upload failures are non-fatal; don't block submission
+        const uploads = attachments.map(
+          (asset) =>
+            uploadBookingAttachmentApi(
+              booking.id,
+              {
+                uri: asset.uri,
+                name: asset.fileName || `damage_photo_${Date.now()}.jpg`,
+                type: asset.type || "image/jpeg",
+              },
+              { relatedEntity: "damage_missing_report", relatedId: report.id },
+            ).catch(() => null), // upload failures are non-fatal; don't block submission
         );
         await Promise.all(uploads);
       }
@@ -214,10 +234,7 @@ export default function DamageReportScreen() {
               <Pressable
                 key={type}
                 onPress={() => setReportType(type)}
-                style={[
-                  styles.typeChip,
-                  reportType === type ? styles.typeChipActive : null,
-                ]}
+                style={[styles.typeChip, reportType === type ? styles.typeChipActive : null]}
               >
                 <AppText
                   variant="small"
@@ -272,7 +289,8 @@ export default function DamageReportScreen() {
         ) : null}
         {attachments.length > 0 ? (
           <AppText variant="small" color={colors.payment.ADVANCE}>
-            {attachments.length} photo{attachments.length === 1 ? "" : "s"} attached — will upload when you submit the report.
+            {attachments.length} photo{attachments.length === 1 ? "" : "s"} attached — will upload
+            when you submit the report.
           </AppText>
         ) : null}
       </Card>

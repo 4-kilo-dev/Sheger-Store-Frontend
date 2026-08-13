@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Alert } from "react-native";
+import { IdempotencyAttempt, normalizeCheckoutAssets } from "@vortex/utils";
 import { to } from "@/utils/routes";
 import { useAppContext } from "@/context/AppContext";
 import { ApiError } from "@/lib/api/client";
 import {
   acceptAssignmentApi,
+  checkoutReverseApi,
   createAssignmentApi,
   declineAssignmentApi,
   recordBookingPaymentApi,
@@ -14,7 +16,7 @@ import {
   updateBookingApi,
 } from "@/services/bookings-api";
 import type { Booking, BookingStatus } from "@/types/domain";
-import { checkoutBookingApi } from "@/services/checkout-api";
+import { checkinBookingApi, checkoutBookingApi, type CheckinReturn } from "@/services/checkout-api";
 import { createDamageReportApi } from "@/services/damage-api";
 import { uploadBookingAttachmentApi } from "@/services/attachments.api";
 import { getStaffApi } from "@/services/staff-api";
@@ -67,6 +69,7 @@ export function useBookingActions(
   const [checkoutDriver, setCheckoutDriver] = useState("");
   const [checkoutVehiclePlate, setCheckoutVehiclePlate] = useState("");
   const [checkoutMealBudget, setCheckoutMealBudget] = useState(0);
+  const checkoutAttempt = useRef(new IdempotencyAttempt());
 
   const [showDeclineModal, setShowDeclineModal] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
@@ -80,9 +83,7 @@ export function useBookingActions(
     Array<{ uri: string; name: string; type: string }>
   >([]);
 
-  const [staff, setStaff] = useState<
-    Array<{ id: string; name: string; role: string }>
-  >([]);
+  const [staff, setStaff] = useState<Array<{ id: string; name: string; role: string }>>([]);
   const [selectedTechnicianIds, setSelectedTechnicianIds] = useState<string[]>([]);
   const [checkoutConflicts, setCheckoutConflicts] = useState<UnfulfilledBomLine[]>([]);
   const [showCheckoutConflictModal, setShowCheckoutConflictModal] = useState(false);
@@ -233,20 +234,29 @@ export function useBookingActions(
         driver: checkoutDriver,
       });
 
-      const assets = booking.bomItems.map((item) => {
-        if (item.itemId) return { itemId: item.itemId };
-        return { poolId: item.poolId, quantity: String(item.qty) };
-      });
-      return checkoutBookingApi(booking.id, assets);
+      const assets = normalizeCheckoutAssets(
+        booking.bomItems.map((item) =>
+          item.itemId
+            ? { itemId: item.itemId }
+            : { poolId: item.poolId, quantity: String(item.qty) },
+        ),
+      );
+      const payload = { assets };
+      return checkoutBookingApi(booking.id, payload, checkoutAttempt.current.keyFor(payload));
     },
     onSuccess: () => {
+      checkoutAttempt.current.complete();
       Alert.alert("Success", "Checkout completed successfully! Booking status updated to ONSITE.");
       invalidateBooking();
+      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", booking?.id] });
       setShowActionModal(false);
       setSelectedAction(null);
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
+        if (err.status >= 400 && err.status < 500) {
+          checkoutAttempt.current.failDefinitively();
+        }
         const data = err.data as
           | {
               unfulfilledLines?: UnfulfilledBomLine[];
@@ -268,6 +278,42 @@ export function useBookingActions(
     },
   });
 
+  const performCheckin = useMutation({
+    mutationFn: async (returns: CheckinReturn[]) => {
+      if (!booking) throw new Error("Booking is undefined");
+      return checkinBookingApi(booking.id, { returns });
+    },
+    onSuccess: (result) => {
+      Alert.alert(
+        "Success",
+        result.status === "DONE"
+          ? "All checked-out inventory was returned."
+          : "Partial return recorded. Remaining custody is still outstanding.",
+      );
+      invalidateBooking();
+      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", booking?.id] });
+      setShowActionModal(false);
+      setSelectedAction(null);
+    },
+    onError: (err: Error) => Alert.alert("Error", err.message || "Check-in failed"),
+  });
+
+  const reverseCheckout = useMutation({
+    mutationFn: async (reason: string) => {
+      if (!booking) throw new Error("Booking is undefined");
+      return checkoutReverseApi(booking.id, reason);
+    },
+    onSuccess: () => {
+      Alert.alert("Success", "Checkout reversed and custody restored.");
+      invalidateBooking();
+      queryClient.invalidateQueries({ queryKey: ["checkoutCustody", booking?.id] });
+      queryClient.invalidateQueries({ queryKey: ["booking-snapshots", booking?.id] });
+      setShowActionModal(false);
+      setSelectedAction(null);
+    },
+    onError: (err: Error) => Alert.alert("Error", err.message || "Failed to reverse checkout"),
+  });
+
   const transitionStatus = useMutation({
     mutationFn: ({
       toStatus,
@@ -284,8 +330,7 @@ export function useBookingActions(
       setShowActionModal(false);
       setSelectedAction(null);
     },
-    onError: (err: Error) =>
-      Alert.alert("Error", err.message || "Failed to advance booking state"),
+    onError: (err: Error) => Alert.alert("Error", err.message || "Failed to advance booking state"),
   });
 
   const recordPayment = useMutation({
@@ -466,6 +511,10 @@ export function useBookingActions(
     submittingDamage: submitDamageReport.isPending,
     performCheckout: () => performCheckout.mutate(),
     isCheckingOut: performCheckout.isPending,
+    performCheckin: performCheckin.mutate,
+    isCheckingIn: performCheckin.isPending,
+    reverseCheckout: reverseCheckout.mutate,
+    isReversingCheckout: reverseCheckout.isPending,
     transitionStatus: transitionStatus.mutate,
     isTransitioning: transitionStatus.isPending,
     recordPayment: recordPayment.mutate,
