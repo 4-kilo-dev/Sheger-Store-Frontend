@@ -1,11 +1,13 @@
 import { AlertTriangle, Package, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Section } from "@/features/bookings/components/shared/Section";
+import { EquipmentPoolCombobox } from "@/features/bookings/components/EquipmentPoolCombobox";
 import type { Booking } from "@/features/bookings/services/bookings.api";
 import type { BookingCapabilities } from "@/features/bookings/hooks/useBookingCapabilities";
 import { useBookingBom } from "@/features/bookings/hooks/useBookingBom";
 import { bookingToPackingSlip, printPackingSlip } from "@/features/bookings/utils/printPackingSlip";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { useMemo } from "react";
 
 function AvailabilityHint({
   available,
@@ -64,6 +66,16 @@ export function EquipmentTab({
   const isEditable = caps.canEditBom;
   const bom = useBookingBom(b, true);
 
+  const selectablePools = useMemo(
+    () =>
+      bom.pools.filter(
+        (p: any) =>
+          !bom.staged.some((s) => s.poolId === p.id) &&
+          (p.category?.trackingType == null || p.category.trackingType === "bulk"),
+      ),
+    [bom.pools, bom.staged],
+  );
+
   function handlePrintPackingSlip() {
     if (!b.bomItems.length) {
       toast.error("Add at least one BOM item before printing a packing slip");
@@ -105,32 +117,12 @@ export function EquipmentTab({
               >
                 Select Equipment / Pool
               </label>
-              <select
+              <EquipmentPoolCombobox
+                pools={selectablePools}
                 value={bom.selectedPoolId}
-                onChange={(e) => bom.setSelectedPoolId(e.target.value)}
-                aria-label="Select equipment pool"
-                className="h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
-                style={{ borderColor: "var(--border)" }}
-              >
-                <option value="">-- Choose Equipment --</option>
-                {bom.pools
-                  .filter(
-                    (p: any) =>
-                      !bom.staged.some((s) => s.poolId === p.id) &&
-                      (p.category?.trackingType == null || p.category.trackingType === "bulk"),
-                  )
-                  .map((p: any) => {
-                    const avail = bom.getPoolAvailabilityLabel(p.id);
-                    const unit = p.unit || p.category?.unit || "";
-                    const availLabel =
-                      avail != null ? ` — stock ${avail}${unit ? ` ${unit}` : ""}` : "";
-                    return (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.category?.name || "General"}){availLabel}
-                      </option>
-                    );
-                  })}
-              </select>
+                onChange={bom.setSelectedPoolId}
+                getStockLabel={(id) => bom.getPoolAvailabilityLabel(id)}
+              />
             </div>
             <div className="w-full md:w-32">
               <label

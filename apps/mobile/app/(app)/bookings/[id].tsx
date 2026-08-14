@@ -1287,6 +1287,7 @@ function EquipmentTab({
   const [selectedPoolId, setSelectedPoolId] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [bomError, setBomError] = useState<string | null>(null);
+  const [poolQuery, setPoolQuery] = useState("");
 
   const items = bomLines.map((line) => ({
     id: line.id,
@@ -1294,6 +1295,12 @@ function EquipmentTab({
     qty: parseFloat(line.quantity),
     status: line.acceptedShortfall ? "Checked Out" : "Reserved",
   }));
+
+  const filteredPools = useMemo(() => {
+    const q = poolQuery.trim().toLowerCase();
+    if (!q) return pools;
+    return pools.filter((pool) => (pool.name || "").toLowerCase().includes(q));
+  }, [pools, poolQuery]);
 
   const handleAddLine = async () => {
     if (!selectedPoolId) return;
@@ -1306,6 +1313,7 @@ function EquipmentTab({
       setAddOpen(false);
       setSelectedPoolId("");
       setQuantity("1");
+      setPoolQuery("");
     } catch (e) {
       setBomError(e instanceof Error ? e.message : "Failed to add equipment line.");
     }
@@ -1387,10 +1395,24 @@ function EquipmentTab({
         </View>
       ))}
 
-      <BottomSheet visible={addOpen} title="Add Equipment Line" onClose={() => setAddOpen(false)}>
+      <BottomSheet
+        visible={addOpen}
+        title="Add Equipment Line"
+        onClose={() => {
+          setAddOpen(false);
+          setPoolQuery("");
+        }}
+      >
+        <Field label="Search equipment">
+          <Input
+            value={poolQuery}
+            onChangeText={setPoolQuery}
+            placeholder="Type to filter pools…"
+          />
+        </Field>
         <Field label="Equipment Pool">
           <View style={styles.choiceWrap}>
-            {pools.map((pool) => (
+            {filteredPools.map((pool) => (
               <Choice
                 key={pool.id}
                 label={pool.name}
@@ -1398,6 +1420,11 @@ function EquipmentTab({
                 onPress={() => setSelectedPoolId(pool.poolId || pool.id)}
               />
             ))}
+            {filteredPools.length === 0 ? (
+              <AppText variant="small" color={colors.text3}>
+                No equipment matches.
+              </AppText>
+            ) : null}
           </View>
         </Field>
         <Field label="Quantity">
