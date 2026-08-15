@@ -659,7 +659,7 @@ export async function createAssignmentApi(bookingId: string, payload: { userId: 
 }
 
 export async function getBookingReservationsApi(bookingId: string): Promise<any> {
-  return client.get(`/api/bookings/${bookingId}/reservations`);
+  return client.get(`/api/bookings/${bookingId}/reservations?active=true`);
 }
 
 export async function deleteReservationApi(bookingId: string, id: string): Promise<any> {
