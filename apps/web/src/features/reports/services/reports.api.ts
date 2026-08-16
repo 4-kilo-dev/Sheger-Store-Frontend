@@ -331,6 +331,7 @@ export interface FreelancerWorkloadRow {
   userId: string;
   name: string;
   email: string | null;
+  isFreelancer: boolean;
   bookingsCount: number;
   /** Rounded to 2 decimals by the backend */
   sqmCovered: number;

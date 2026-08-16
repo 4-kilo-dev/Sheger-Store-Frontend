@@ -1057,10 +1057,10 @@ export function ReportsPage() {
             <div className="rounded-lg border p-4 space-y-3 no-print" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4" style={{ color: "var(--accent)" }} />
-                <span className="text-[13px] font-bold">Freelancer Workload Period</span>
+                <span className="text-[13px] font-bold">Staff & Freelancer Workload Period</span>
               </div>
               <p className="text-[11px] text-zinc-500">
-                DONE bookings only. Each assigned freelancer receives the full booking square meters. Changing dates reloads automatically.
+                DONE bookings only. Each assigned staff or freelancer receives the full booking square meters. Changing dates reloads automatically.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                 <div className="text-[11px] font-semibold block w-full text-left" style={{ color: "var(--text-2)" }}>
@@ -1092,9 +1092,9 @@ export function ReportsPage() {
             <div className="rounded-lg border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 border-b pb-2.5 gap-2" style={{ borderColor: "var(--border)" }}>
                 <div>
-                  <h4 className="text-[13px] font-bold text-foreground">Freelancer Workload & Screen Coverage</h4>
+                  <h4 className="text-[13px] font-bold text-foreground">Staff & Freelancer Workload & Screen Coverage</h4>
                   <p className="text-[11px] text-zinc-500 mt-0.5">
-                    Bookings worked and total screen square meters per freelancer
+                    Bookings worked and total screen square meters per crew member
                     {sheetStartDate || sheetEndDate
                       ? ` · ${sheetStartDate || "…"} → ${sheetEndDate || "…"}`
                       : " · all time"}
@@ -1115,11 +1115,11 @@ export function ReportsPage() {
               {loadingFreelancerWorkload ? (
                 <div className="h-72 flex items-center justify-center text-zinc-500 text-[11px]">
                   <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                  Loading freelancer workload...
+                  Loading crew workload...
                 </div>
               ) : freelancerWorkload.length === 0 ? (
                 <div className="h-72 flex items-center justify-center text-zinc-500 text-[11px]">
-                  No freelancer DONE assignments found for this period.
+                  No crew DONE assignments found for this period.
                 </div>
               ) : (
                 <div className="h-80 w-full text-[11px]">
@@ -1187,14 +1187,15 @@ export function ReportsPage() {
               <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
                 <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
                   <span className="text-[12px] font-bold uppercase tracking-wider text-[var(--text-3)]">
-                    Freelancer totals ({freelancerWorkload.length})
+                    Crew totals ({freelancerWorkload.length})
                   </span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-[12px]">
                     <thead>
                       <tr className="border-b" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
-                        <th className="px-4 py-2.5 label-eyebrow">Freelancer</th>
+                        <th className="px-4 py-2.5 label-eyebrow">Name</th>
+                        <th className="px-4 py-2.5 label-eyebrow">Classification</th>
                         <th className="px-4 py-2.5 label-eyebrow">Email</th>
                         <th className="px-4 py-2.5 label-eyebrow text-right">Bookings</th>
                         <th className="px-4 py-2.5 label-eyebrow text-right">Sqm Covered</th>
@@ -1204,6 +1205,18 @@ export function ReportsPage() {
                       {freelancerWorkload.map((row) => (
                         <tr key={row.userId} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
                           <td className="px-4 py-3 font-semibold">{row.name}</td>
+                          <td className="px-4 py-3">
+                            <span 
+                              className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase"
+                              style={{ 
+                                background: row.isFreelancer ? "rgba(249, 115, 22, 0.1)" : "rgba(59, 130, 246, 0.1)",
+                                color: row.isFreelancer ? "#f97316" : "#3b82f6",
+                                border: row.isFreelancer ? "1px solid rgba(249, 115, 22, 0.2)" : "1px solid rgba(59, 130, 246, 0.2)"
+                              }}
+                            >
+                              {row.isFreelancer ? "Freelancer" : "Staff"}
+                            </span>
+                          </td>
                           <td className="px-4 py-3 text-zinc-400 font-mono text-[11px]">{row.email || "—"}</td>
                           <td className="px-4 py-3 text-right font-mono font-bold">{row.bookingsCount}</td>
                           <td className="px-4 py-3 text-right font-mono font-bold" style={{ color: "var(--accent)" }}>
