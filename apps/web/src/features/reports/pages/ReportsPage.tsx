@@ -1096,7 +1096,7 @@ export function ReportsPage() {
                   <p className="text-[11px] text-zinc-500 mt-0.5">
                     Bookings worked and total screen square meters per crew member
                     {sheetStartDate || sheetEndDate
-                      ? ` · ${sheetStartDate || "…"} → ${sheetEndDate || "…"}`
+                      ? ` · ${formatDate(sheetStartDate) || "…"} → ${formatDate(sheetEndDate) || "…"}`
                       : " · all time"}
                   </p>
                 </div>
