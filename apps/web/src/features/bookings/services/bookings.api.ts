@@ -45,7 +45,15 @@ function formatArrangementLabel(value?: string | null): string {
   return raw;
 }
 
-function formatMountStyleLabel(value?: string | null): string {
+function formatMountStyleLabel(value?: string | string[] | null): string {
+  // multi_select: ["hanging", "sitting"] → "Hanging & Sitting"
+  if (Array.isArray(value)) {
+    const labels = value
+      .map((v) => String(v).trim())
+      .filter((v) => isMountStyle(v))
+      .map((v) => v.charAt(0).toUpperCase() + v.slice(1).toLowerCase());
+    return labels.length > 0 ? labels.join(" & ") : "";
+  }
   const raw = String(value ?? "").trim();
   if (!isMountStyle(raw)) return "";
   return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
