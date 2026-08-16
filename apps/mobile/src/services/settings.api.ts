@@ -28,6 +28,15 @@ export interface CustomFieldDefinition {
   updatedAt: string;
 }
 
+export interface UpdateCustomFieldDefinitionDto {
+  name?: string;
+  key?: string;
+  type?: "boolean" | "number" | "string" | "date" | "enum" | "multi_select";
+  options?: string[];
+  required?: boolean;
+}
+
+
 export async function getRolesApi(): Promise<Role[]> {
   return client.get<Role[]>("/api/roles");
 }
@@ -77,3 +86,11 @@ export async function createCustomFieldDefinitionApi(
 export async function deleteCustomFieldDefinitionApi(id: string): Promise<void> {
   return client.delete(`/api/custom-field-definitions/${id}`);
 }
+
+export async function updateCustomFieldDefinitionApi(
+  id: string,
+  payload: UpdateCustomFieldDefinitionDto,
+): Promise<CustomFieldDefinition> {
+  return client.patch<CustomFieldDefinition>(`/api/custom-field-definitions/${id}`, payload);
+}
+

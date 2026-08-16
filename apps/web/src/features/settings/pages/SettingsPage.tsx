@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Globe2, Save, UsersRound, Check, X, ClipboardCheck, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Globe2, Save, UsersRound, Check, X, ClipboardCheck, Plus, SlidersHorizontal, Trash2, Pencil } from "lucide-react";
 import { useState, useEffect, Fragment } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -17,6 +17,7 @@ import {
   getCustomFieldDefinitionsApi,
   createCustomFieldDefinitionApi,
   deleteCustomFieldDefinitionApi,
+  updateCustomFieldDefinitionApi,
 } from "@/features/bookings/services/bookings.api";
 import {
   getRolesWithPermissionsApi,
@@ -788,6 +789,7 @@ function CustomFieldsPanel() {
   const isAdmin = activeProfile.role === "Admin";
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
 
   // Form States
   const [name, setName] = useState("");
@@ -795,17 +797,48 @@ function CustomFieldsPanel() {
   const [type, setType] = useState<"boolean" | "number" | "string" | "date" | "enum" | "multi_select">("string");
   const [optionsList, setOptionsList] = useState<string[]>([]);
   const [currentOption, setCurrentOption] = useState("");
+  const [editingOptionIdx, setEditingOptionIdx] = useState<number | null>(null);
   const [required, setRequired] = useState(false);
 
-  // Auto-derive snake_case key from name
+  const resetForm = () => {
+    setEditingFieldId(null);
+    setName("");
+    setKey("");
+    setType("string");
+    setOptionsList([]);
+    setCurrentOption("");
+    setEditingOptionIdx(null);
+    setRequired(false);
+  };
+
+  const handleOpenAddModal = () => {
+    resetForm();
+    setShowAddModal(true);
+  };
+
+  const handleOpenEditModal = (field: any) => {
+    setEditingFieldId(field.id);
+    setName(field.name || "");
+    setKey(field.key || "");
+    setType(field.type || "string");
+    setOptionsList(field.options ? [...field.options] : []);
+    setCurrentOption("");
+    setEditingOptionIdx(null);
+    setRequired(field.required ?? false);
+    setShowAddModal(true);
+  };
+
+  // Auto-derive snake_case key from name when creating a new field
   const handleNameChange = (val: string) => {
     setName(val);
-    const derivedKey = val
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9_]/g, "_")
-      .replace(/_+/g, "_");
-    setKey(derivedKey);
+    if (!editingFieldId) {
+      const derivedKey = val
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9_]/g, "_")
+        .replace(/_+/g, "_");
+      setKey(derivedKey);
+    }
   };
 
   // Query definitions
@@ -821,15 +854,25 @@ function CustomFieldsPanel() {
       toast.success("Custom field created successfully!");
       queryClient.invalidateQueries({ queryKey: ["custom-field-definitions"] });
       setShowAddModal(false);
-      setName("");
-      setKey("");
-      setType("string");
-      setOptionsList([]);
-      setCurrentOption("");
-      setRequired(false);
+      resetForm();
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to create custom field");
+    },
+  });
+
+  // Mutation for updating field
+  const { mutate: updateField, isPending: updating } = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: any }) =>
+      updateCustomFieldDefinitionApi(id, payload),
+    onSuccess: () => {
+      toast.success("Custom field updated successfully!");
+      queryClient.invalidateQueries({ queryKey: ["custom-field-definitions"] });
+      setShowAddModal(false);
+      resetForm();
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to update custom field");
     },
   });
 
@@ -844,6 +887,25 @@ function CustomFieldsPanel() {
       toast.error(err.message || "Failed to delete custom field");
     },
   });
+
+  const handleAddOrUpdateOption = () => {
+    const val = currentOption.trim();
+    if (!val) return;
+    if (editingOptionIdx !== null) {
+      setOptionsList((prev) => prev.map((o, idx) => (idx === editingOptionIdx ? val : o)));
+      setEditingOptionIdx(null);
+    } else {
+      if (!optionsList.includes(val)) {
+        setOptionsList((prev) => [...prev, val]);
+      }
+    }
+    setCurrentOption("");
+  };
+
+  const handleStartEditOption = (idx: number) => {
+    setEditingOptionIdx(idx);
+    setCurrentOption(optionsList[idx]);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -868,15 +930,28 @@ function CustomFieldsPanel() {
       return;
     }
 
-    const options = type === "enum" || type === "multi_select" ? optionsList : undefined;
+    const options = type === "enum" || type === "multi_select" ? optionsList : [];
 
-    createField({
-      name: name.trim(),
-      key: key.trim(),
-      type,
-      options,
-      required,
-    });
+    if (editingFieldId) {
+      updateField({
+        id: editingFieldId,
+        payload: {
+          name: name.trim(),
+          key: key.trim(),
+          type,
+          options,
+          required,
+        },
+      });
+    } else {
+      createField({
+        name: name.trim(),
+        key: key.trim(),
+        type,
+        options,
+        required,
+      });
+    }
   };
 
   return (
@@ -885,12 +960,12 @@ function CustomFieldsPanel() {
         <div>
           <h3 className="text-[15px] font-bold">Booking Custom Fields</h3>
           <p className="text-[11px]" style={{ color: "var(--text-3)" }}>
-            Define custom specifications (e.g. Venue Type, Arrangement, VIP) dynamically requested on bookings.
+            Define dynamic fields (e.g. Venue Type, Arrangement, VIP) requested on bookings.
           </p>
         </div>
         {isAdmin && (
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={handleOpenAddModal}
             className="flex items-center gap-1.5 rounded px-3 py-1.5 text-[11px] font-bold transition hover:brightness-110"
             style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
           >
@@ -940,7 +1015,9 @@ function CustomFieldsPanel() {
                     {field.type}
                   </td>
                   <td className="p-3 max-w-[200px] truncate" style={{ color: "var(--text-3)" }}>
-                    {field.options && field.options.length > 0 ? field.options.join(", ") : "—"}
+                    {(field.type === "enum" || field.type === "multi_select") && field.options && field.options.length > 0
+                      ? field.options.join(", ")
+                      : "—"}
                   </td>
                   <td className="p-3 text-center">
                     <span
@@ -955,17 +1032,28 @@ function CustomFieldsPanel() {
                   </td>
                   {isAdmin && (
                     <td className="p-3 text-right">
-                      <button
-                        onClick={() => {
-                          if (confirm(`Are you sure you want to delete "${field.name}"?`)) {
-                            deleteField(field.id);
-                          }
-                        }}
-                        className="p-1 hover:text-destructive transition-colors"
-                        style={{ color: "var(--text-3)" }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleOpenEditModal(field)}
+                          className="p-1 hover:text-[var(--accent)] transition-colors"
+                          style={{ color: "var(--text-3)" }}
+                          title="Edit custom field definition"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Are you sure you want to delete "${field.name}"?`)) {
+                              deleteField(field.id);
+                            }
+                          }}
+                          className="p-1 hover:text-destructive transition-colors"
+                          style={{ color: "var(--text-3)" }}
+                          title="Delete custom field"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -975,7 +1063,7 @@ function CustomFieldsPanel() {
         </div>
       )}
 
-      {/* Add Custom Field Modal */}
+      {/* Add / Edit Custom Field Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <form
@@ -987,10 +1075,15 @@ function CustomFieldsPanel() {
               className="flex items-center justify-between border-b pb-3 mb-4"
               style={{ borderColor: "var(--border)" }}
             >
-              <h3 className="text-[15px] font-bold">Add Booking Custom Field</h3>
+              <h3 className="text-[15px] font-bold">
+                {editingFieldId ? "Edit Custom Field Definition" : "Add Booking Custom Field"}
+              </h3>
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  resetForm();
+                }}
                 className="text-[12px] font-semibold hover:opacity-80"
                 style={{ color: "var(--text-3)" }}
               >
@@ -1004,7 +1097,7 @@ function CustomFieldsPanel() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Venue Type"
+                  placeholder="e.g. Hanging or Sitting"
                   value={name}
                   onChange={(e) => handleNameChange(e.target.value)}
                   className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
@@ -1017,7 +1110,7 @@ function CustomFieldsPanel() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. venue_type"
+                  placeholder="e.g. hanging_or_sitting"
                   value={key}
                   onChange={(e) => setKey(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
                   className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] font-mono"
@@ -1037,7 +1130,7 @@ function CustomFieldsPanel() {
                   <option value="number">Number</option>
                   <option value="boolean">Boolean (Yes/No)</option>
                   <option value="date">Date</option>
-                  <option value="enum">Dropdown Selection (Enum)</option>
+                  <option value="enum">Single-Select Dropdown (Enum)</option>
                   <option value="multi_select">Multi-Select List</option>
                 </select>
               </label>
@@ -1045,21 +1138,17 @@ function CustomFieldsPanel() {
               {(type === "enum" || type === "multi_select") && (
                 <div className="space-y-2 animate-in fade-in duration-200">
                   <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                    Add Options (Press Enter or click Add)
+                    {editingOptionIdx !== null ? "Edit Option" : "Add Options (Press Enter or click Add)"}
                     <div className="flex gap-2 mt-1">
                       <input
                         type="text"
-                        placeholder="e.g. Indoor"
+                        placeholder="e.g. hanging"
                         value={currentOption}
                         onChange={(e) => setCurrentOption(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault();
-                            const val = currentOption.trim();
-                            if (val && !optionsList.includes(val)) {
-                              setOptionsList((prev) => [...prev, val]);
-                              setCurrentOption("");
-                            }
+                            handleAddOrUpdateOption();
                           }
                         }}
                         className="h-9 flex-1 rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
@@ -1067,37 +1156,67 @@ function CustomFieldsPanel() {
                       />
                       <button
                         type="button"
-                        onClick={() => {
-                          const val = currentOption.trim();
-                          if (val && !optionsList.includes(val)) {
-                            setOptionsList((prev) => [...prev, val]);
-                            setCurrentOption("");
-                          }
-                        }}
-                        className="rounded px-3 py-1.5 text-[11px] font-bold border"
+                        onClick={handleAddOrUpdateOption}
+                        className="rounded px-3 py-1.5 text-[11px] font-bold border hover:bg-[var(--surface-2)]"
                         style={{ borderColor: "var(--border)" }}
                       >
-                        Add
+                        {editingOptionIdx !== null ? "Update" : "Add"}
                       </button>
+                      {editingOptionIdx !== null && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingOptionIdx(null);
+                            setCurrentOption("");
+                          }}
+                          className="rounded px-2.5 py-1.5 text-[11px] border"
+                          style={{ borderColor: "var(--border)", color: "var(--text-3)" }}
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </div>
                   </label>
 
                   {optionsList.length > 0 && (
                     <div
-                      className="flex flex-wrap gap-1.5 p-2.5 rounded border bg-[var(--surface-2)] max-h-24 overflow-y-auto"
+                      className="flex flex-wrap gap-1.5 p-2.5 rounded border bg-[var(--surface-2)] max-h-32 overflow-y-auto"
                       style={{ borderColor: "var(--border)" }}
                     >
-                      {optionsList.map((opt) => (
+                      {optionsList.map((opt, idx) => (
                         <span
-                          key={opt}
-                          className="flex items-center gap-1 rounded bg-[var(--surface)] border pl-2 pr-1 py-0.5 text-[11px] font-medium"
-                          style={{ borderColor: "var(--border)" }}
+                          key={idx}
+                          className="flex items-center gap-1.5 rounded bg-[var(--surface)] border pl-2.5 pr-1 py-0.5 text-[11px] font-medium"
+                          style={{
+                            borderColor: editingOptionIdx === idx ? "var(--accent)" : "var(--border)",
+                          }}
                         >
-                          {opt}
+                          <span
+                            className="cursor-pointer hover:underline"
+                            onClick={() => handleStartEditOption(idx)}
+                            title="Click to edit option"
+                          >
+                            {opt}
+                          </span>
                           <button
                             type="button"
-                            onClick={() => setOptionsList((prev) => prev.filter((o) => o !== opt))}
+                            onClick={() => handleStartEditOption(idx)}
+                            className="hover:text-[var(--accent)] p-0.5"
+                            title="Edit option"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (editingOptionIdx === idx) {
+                                setEditingOptionIdx(null);
+                                setCurrentOption("");
+                              }
+                              setOptionsList((prev) => prev.filter((_, i) => i !== idx));
+                            }}
                             className="hover:text-destructive p-0.5"
+                            title="Remove option"
                           >
                             <X className="h-3 w-3" />
                           </button>
@@ -1124,15 +1243,24 @@ function CustomFieldsPanel() {
             >
               <button
                 type="submit"
-                disabled={creating}
+                disabled={creating || updating}
                 className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
               >
-                {creating ? "Creating..." : "Create Custom Field"}
+                {editingFieldId
+                  ? updating
+                    ? "Saving..."
+                    : "Save Changes"
+                  : creating
+                  ? "Creating..."
+                  : "Create Custom Field"}
               </button>
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  resetForm();
+                }}
                 className="rounded border px-4 py-2 text-[12px]"
                 style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
               >

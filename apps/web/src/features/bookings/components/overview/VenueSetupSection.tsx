@@ -40,11 +40,17 @@ export function VenueSetupSection({ b }: OverviewSectionProps) {
           const val = b.customFields?.[def.key];
           if (val === undefined || val === null || val === "") return null;
           let displayVal = val;
-          if (def.type === "multi_select" && Array.isArray(val)) {
-            displayVal = val.join(", ");
+          if (def.type === "multi_select") {
+            const selectedValues = Array.isArray(val)
+              ? val
+              : typeof val === "string" && val
+              ? [val]
+              : [];
+            displayVal = selectedValues.join(", ");
           } else if (def.type === "boolean") {
             displayVal = val ? "Yes" : "No";
           }
+          if (!displayVal) return null;
           return <KV key={def.id} label={def.name} value={String(displayVal)} />;
         })}
       </div>

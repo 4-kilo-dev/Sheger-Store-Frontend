@@ -417,8 +417,9 @@ export function NewBooking() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {customFieldDefs.map((def: any) => {
+                      const rawFieldValue = form.customFields[def.key];
                       const value =
-                        form.customFields[def.key] ??
+                        rawFieldValue ??
                         (def.type === "boolean" ? false : def.type === "multi_select" ? [] : "");
 
                       const setCustomField = (val: any) => {
@@ -444,7 +445,7 @@ export function NewBooking() {
                             </select>
                           ) : def.type === "enum" ? (
                             <select
-                              value={value}
+                              value={typeof value === "string" ? value : ""}
                               onChange={(e) => setCustomField(e.target.value)}
                               className={inputCls}
                             >
@@ -461,8 +462,12 @@ export function NewBooking() {
                               style={{ borderColor: "var(--border)" }}
                             >
                               {def.options?.map((opt: string) => {
-                                const arr = Array.isArray(value) ? value : [];
-                                const checked = arr.includes(opt);
+                                const selectedValues = Array.isArray(rawFieldValue)
+                                  ? rawFieldValue
+                                  : typeof rawFieldValue === "string" && rawFieldValue
+                                  ? [rawFieldValue]
+                                  : [];
+                                const checked = selectedValues.includes(opt);
                                 return (
                                   <label key={opt} className="flex items-center gap-1.5 text-[11px] cursor-pointer">
                                     <input
@@ -470,8 +475,8 @@ export function NewBooking() {
                                       checked={checked}
                                       onChange={() => {
                                         const nextArr = checked
-                                          ? arr.filter((x) => x !== opt)
-                                          : [...arr, opt];
+                                          ? selectedValues.filter((x) => x !== opt)
+                                          : [...selectedValues, opt];
                                         setCustomField(nextArr);
                                       }}
                                     />

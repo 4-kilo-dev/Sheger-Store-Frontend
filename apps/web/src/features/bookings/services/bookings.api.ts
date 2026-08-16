@@ -327,6 +327,15 @@ export interface CustomFieldDefinition {
   isActive?: boolean;
 }
 
+export interface UpdateCustomFieldDefinitionDto {
+  name?: string;
+  key?: string;
+  type?: "boolean" | "number" | "string" | "date" | "enum" | "multi_select";
+  options?: string[];
+  required?: boolean;
+}
+
+
 export interface StatusHistoryItem {
   id: string;
   fromStatus: string | null;
@@ -744,3 +753,11 @@ export async function createCustomFieldDefinitionApi(
 export async function deleteCustomFieldDefinitionApi(id: string): Promise<void> {
   return client.delete<void>(`/api/custom-field-definitions/${id}`);
 }
+
+export async function updateCustomFieldDefinitionApi(
+  id: string,
+  payload: UpdateCustomFieldDefinitionDto,
+): Promise<CustomFieldDefinition> {
+  return client.patch<CustomFieldDefinition>(`/api/custom-field-definitions/${id}`, payload);
+}
+

@@ -262,8 +262,9 @@ export function BookingSpecificationsEditor({ b, code, caps }: OverviewSectionPr
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {customFieldDefs.map((def) => {
+            const rawVal = customFieldsEdits[def.key];
             const value =
-              customFieldsEdits[def.key] ??
+              rawVal ??
               (def.type === "boolean" ? false : def.type === "multi_select" ? [] : "");
 
             if (
@@ -299,7 +300,7 @@ export function BookingSpecificationsEditor({ b, code, caps }: OverviewSectionPr
                   </select>
                 ) : def.type === "enum" ? (
                   <select
-                    value={value}
+                    value={typeof value === "string" ? value : ""}
                     onChange={(e) =>
                       setCustomFieldsEdits((prev) => ({ ...prev, [def.key]: e.target.value }))
                     }
@@ -319,8 +320,12 @@ export function BookingSpecificationsEditor({ b, code, caps }: OverviewSectionPr
                     style={{ borderColor: "var(--border)" }}
                   >
                     {def.options?.map((opt) => {
-                      const arr = Array.isArray(value) ? value : [];
-                      const checked = arr.includes(opt);
+                      const selectedValues = Array.isArray(rawVal)
+                        ? rawVal
+                        : typeof rawVal === "string" && rawVal
+                        ? [rawVal]
+                        : [];
+                      const checked = selectedValues.includes(opt);
                       return (
                         <label key={opt} className="flex items-center gap-1.5 text-[11px] cursor-pointer">
                           <input
@@ -328,8 +333,8 @@ export function BookingSpecificationsEditor({ b, code, caps }: OverviewSectionPr
                             checked={checked}
                             onChange={() => {
                               const nextArr = checked
-                                ? arr.filter((x) => x !== opt)
-                                : [...arr, opt];
+                                ? selectedValues.filter((x) => x !== opt)
+                                : [...selectedValues, opt];
                               setCustomFieldsEdits((prev) => ({ ...prev, [def.key]: nextArr }));
                             }}
                           />

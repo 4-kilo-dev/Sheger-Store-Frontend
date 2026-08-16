@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Languages,
   LockKeyhole,
+  Pencil,
   Plus,
   Save,
   SlidersHorizontal,
@@ -39,6 +40,7 @@ import {
   useUpdateSettings,
   useCustomFieldDefinitions,
   useCreateCustomField,
+  useUpdateCustomField,
   useDeleteCustomField,
 } from "@/hooks/useOperations";
 import {
@@ -163,6 +165,8 @@ export default function SettingsScreen() {
   const customFields = customFieldsQuery.data ?? [];
 
   const [addFieldOpen, setAddFieldOpen] = useState(false);
+  const [editingField, setEditingField] = useState<CustomFieldDefinition | null>(null);
+
 
   const rolePermKeys = new Map<string, Set<string>>(
     roles.map((r) => [r.id, new Set((r.permissions || []).map((p) => p.key))]),
@@ -564,29 +568,41 @@ export default function SettingsScreen() {
                     <AppText variant="small" color={colors.text3}>
                       {field.key} · {field.type}
                     </AppText>
-                    {field.options && field.options.length > 0 && (
+                    {(field.type === "enum" || field.type === "multi_select") && field.options && field.options.length > 0 && (
                       <AppText variant="small" color={colors.text3}>
                         {field.options.join(", ")}
                       </AppText>
                     )}
                   </View>
                   {isAdmin ? (
-                    <Button
-                      variant="ghost"
-                      icon={Trash2}
-                      onPress={() => {
-                        Alert.alert("Delete Field", `Delete "${field.name}"?`, [
-                          { text: "Cancel", style: "cancel" },
-                          {
-                            text: "Delete",
-                            style: "destructive",
-                            onPress: () => deleteCustomField.mutate(field.id),
-                          },
-                        ]);
-                      }}
-                    >
-                      Delete
-                    </Button>
+                    <View style={{ flexDirection: "row", gap: 4 }}>
+                      <Button
+                        variant="ghost"
+                        icon={Pencil}
+                        onPress={() => {
+                          setEditingField(field);
+                          setAddFieldOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        icon={Trash2}
+                        onPress={() => {
+                          Alert.alert("Delete Field", `Delete "${field.name}"?`, [
+                            { text: "Cancel", style: "cancel" },
+                            {
+                              text: "Delete",
+                              style: "destructive",
+                              onPress: () => deleteCustomField.mutate(field.id),
+                            },
+                          ]);
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </View>
                   ) : null}
                 </View>
               ))}
@@ -595,21 +611,31 @@ export default function SettingsScreen() {
         </Section>
       ) : null}
 
-      <AddCustomFieldSheet visible={addFieldOpen} onClose={() => setAddFieldOpen(false)} />
+      <CustomFieldSheet
+        visible={addFieldOpen}
+        field={editingField}
+        onClose={() => {
+          setAddFieldOpen(false);
+          setEditingField(null);
+        }}
+      />
     </Screen>
   );
 }
 
 const FIELD_TYPES = ["string", "number", "boolean", "date", "enum", "multi_select"] as const;
 
-function AddCustomFieldSheet({
+function CustomFieldSheet({
   visible,
+  field,
   onClose,
 }: {
   visible: boolean;
+  field?: CustomFieldDefinition | null;
   onClose: () => void;
 }) {
   const createCustomField = useCreateCustomField();
+  const updateCustomField = useUpdateCustomField();
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
   const [type, setType] = useState<(typeof FIELD_TYPES)[number]>("string");
@@ -617,46 +643,83 @@ function AddCustomFieldSheet({
   const [required, setRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (field) {
+      setName(field.name || "");
+      setKey(field.key || "");
+      setType((field.type as any) || "string");
+      setOptionsText(field.options ? field.options.join(", ") : "");
+      setRequired(field.required ?? false);
+    } else {
+      setName("");
+      setKey("");
+      setType("string");
+      setOptionsText("");
+      setRequired(false);
+    }
+  }, [field, visible]);
+
   const handleSubmit = async () => {
     const trimmedName = name.trim();
     const autoKey = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
     const trimmedKey = key.trim() || autoKey;
     if (!trimmedName) { setError("Field name is required."); return; }
     if (!trimmedKey) { setError("Field key is required."); return; }
+    if ((type === "enum" || type === "multi_select") && !optionsText.trim()) {
+      setError("Options are required for enum / multi_select fields.");
+      return;
+    }
     const options =
-      (type === "enum" || type === "multi_select") && optionsText.trim()
+      type === "enum" || type === "multi_select"
         ? optionsText.split(",").map((o) => o.trim()).filter(Boolean)
-        : undefined;
+        : [];
     setError(null);
     try {
-      await createCustomField.mutateAsync({
-        name: trimmedName,
-        key: trimmedKey,
-        type,
-        options,
-        required,
-      });
+      if (field) {
+        await updateCustomField.mutateAsync({
+          id: field.id,
+          payload: {
+            name: trimmedName,
+            key: trimmedKey,
+            type,
+            options,
+            required,
+          },
+        });
+      } else {
+        await createCustomField.mutateAsync({
+          name: trimmedName,
+          key: trimmedKey,
+          type,
+          options,
+          required,
+        });
+      }
       setName(""); setKey(""); setType("string"); setOptionsText(""); setRequired(false);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create custom field.");
+      setError(e instanceof Error ? e.message : "Failed to save custom field.");
     }
   };
 
+  const isPending = createCustomField.isPending || updateCustomField.isPending;
+
   return (
-    <BottomSheet visible={visible} title="Add Custom Field" onClose={onClose}>
+    <BottomSheet visible={visible} title={field ? "Edit Custom Field" : "Add Custom Field"} onClose={onClose}>
       <Field label="Field name">
         <Input
           value={name}
           onChangeText={(v) => {
             setName(v);
-            setKey(v.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
+            if (!field) {
+              setKey(v.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
+            }
           }}
-          placeholder="e.g. Event Type"
+          placeholder="e.g. Hanging or Sitting"
         />
       </Field>
       <Field label="Field key (editable)">
-        <Input value={key} onChangeText={setKey} placeholder="e.g. event_type" autoCapitalize="none" />
+        <Input value={key} onChangeText={setKey} placeholder="e.g. hanging_or_sitting" autoCapitalize="none" />
       </Field>
       <Field label="Type">
         <View style={styles.choiceWrap}>
@@ -667,7 +730,7 @@ function AddCustomFieldSheet({
       </Field>
       {(type === "enum" || type === "multi_select") ? (
         <Field label="Options (comma-separated)">
-          <Input value={optionsText} onChangeText={setOptionsText} placeholder="Indoor, Outdoor, Hybrid" />
+          <Input value={optionsText} onChangeText={setOptionsText} placeholder="hanging, sitting, folding" />
         </Field>
       ) : null}
       <Field label="Required">
@@ -677,8 +740,8 @@ function AddCustomFieldSheet({
         </View>
       </Field>
       {error ? <AppText variant="small" color={colors.destructive}>{error}</AppText> : null}
-      <Button disabled={createCustomField.isPending} onPress={handleSubmit}>
-        {createCustomField.isPending ? "Creating..." : "Create Custom Field"}
+      <Button disabled={isPending} onPress={handleSubmit}>
+        {isPending ? "Saving..." : field ? "Save Changes" : "Create Custom Field"}
       </Button>
     </BottomSheet>
   );

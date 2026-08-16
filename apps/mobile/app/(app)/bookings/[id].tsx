@@ -944,13 +944,27 @@ function OverviewTab({
       </Section>
       {(customFieldsQuery.data || []).length > 0 ? (
         <Section title="Booking Specifications" icon={MessageSquare}>
-          {(customFieldsQuery.data || []).map((field) => (
-            <KV
-              key={field.id}
-              label={field.name}
-              value={String(booking.customFields?.[field.key] ?? "—")}
-            />
-          ))}
+          {(customFieldsQuery.data || []).map((field) => {
+            const rawVal = booking.customFields?.[field.key];
+            let displayVal = rawVal;
+            if (field.type === "multi_select") {
+              const selectedValues = Array.isArray(rawVal)
+                ? rawVal
+                : typeof rawVal === "string" && rawVal
+                ? rawVal.split(",").map((s) => s.trim()).filter(Boolean)
+                : [];
+              displayVal = selectedValues.length > 0 ? selectedValues.join(", ") : "—";
+            } else if (field.type === "boolean") {
+              displayVal = rawVal === true || rawVal === "true" ? "Yes" : rawVal === false || rawVal === "false" ? "No" : "—";
+            }
+            return (
+              <KV
+                key={field.id}
+                label={field.name}
+                value={String(displayVal ?? "—")}
+              />
+            );
+          })}
         </Section>
       ) : null}
       <Section title="Notes & Special Requirements" icon={MessageSquare}>

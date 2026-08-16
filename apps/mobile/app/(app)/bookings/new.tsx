@@ -332,7 +332,12 @@ export default function NewBookingScreen() {
                   ) : field.type === "multi_select" && field.options && field.options.length > 0 ? (
                     <View style={styles.choiceWrap}>
                       {field.options.map((opt) => {
-                        const selected = (customValues[field.key] || "").split(",").filter(Boolean);
+                        const raw = customValues[field.key];
+                        const selected = Array.isArray(raw)
+                          ? raw
+                          : typeof raw === "string" && raw
+                          ? raw.split(",").map((s) => s.trim()).filter(Boolean)
+                          : [];
                         const active = selected.includes(opt);
                         return (
                           <Choice

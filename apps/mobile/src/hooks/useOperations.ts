@@ -84,7 +84,9 @@ import {
   getRolesWithPermissionsApi,
   getSettingsApi,
   removeRolePermissionApi,
+  updateCustomFieldDefinitionApi,
   updateSettingsApi,
+  UpdateCustomFieldDefinitionDto,
 } from "@/services/settings.api";
 import {
   deleteAttachmentApi,
@@ -533,6 +535,16 @@ export function useDeleteCustomField() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["custom-field-definitions"] }),
   });
 }
+
+export function useUpdateCustomField() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateCustomFieldDefinitionDto }) =>
+      updateCustomFieldDefinitionApi(id, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["custom-field-definitions"] }),
+  });
+}
+
 
 export function useToggleRolePermission() {
   const queryClient = useQueryClient();
