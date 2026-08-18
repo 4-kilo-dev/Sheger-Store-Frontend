@@ -1,18 +1,25 @@
 import { CalendarRange, Clock, DollarSign, Package, TrendingUp, Users } from "lucide-react-native";
 import { useMemo } from "react";
-import { View, StyleSheet } from "react-native";
+import { Pressable, View, StyleSheet } from "react-native";
+import { router } from "expo-router";
+import { to } from "@/utils/routes";
 import { StatCard } from "@/components/ui";
 import { useAppContext } from "@/context/AppContext";
 import { useSystemCurrency } from "@/hooks/use-system-currency";
-import { useBookings, useInventory, useStaff } from "@/hooks/useOperations";
+import { useBookings, useInventory } from "@/hooks/useOperations";
 import { colors } from "@/theme/tokens";
+
+function namesMatch(assignee: string, profileName: string) {
+  const a = assignee.trim().toLowerCase();
+  const p = profileName.trim().toLowerCase();
+  return a === p || a.startsWith(p) || p.startsWith(a);
+}
 
 export function StatsOverviewWidget() {
   const { activeProfile } = useAppContext();
   const role = activeProfile.role;
   const { formatMoneyCompact } = useSystemCurrency();
   const { data: BOOKINGS = [] } = useBookings();
-  const { data: STAFF = [] } = useStaff();
   const { data: INVENTORY = [] } = useInventory();
 
   const stats = useMemo(() => {
@@ -46,11 +53,9 @@ export function StatsOverviewWidget() {
     ).length;
     const confirmed = BOOKINGS.filter((booking) => booking.status === "CONFIRMED").length;
     const assigned = BOOKINGS.filter((booking) => booking.status === "ASSIGNED").length;
-    const assignedToMe = BOOKINGS.filter(
-      (booking) =>
-        booking.status === "ASSIGNED" &&
-        booking.assignees.some((name) => activeProfile.name.startsWith(name)),
-    ).length;
+    const assignedToMe = BOOKINGS.filter((booking) =>
+      booking.assignees.some((name) => namesMatch(name, activeProfile.name)),
+    ).filter((booking) => booking.status === "ASSIGNED").length;
     const inPrep = BOOKINGS.filter((booking) => booking.status === "PREPARATION").length;
     const completed = BOOKINGS.filter(
       (booking) => booking.status === "COMPLETED" || booking.status === "PARTIALLY_RETURNED",
@@ -59,7 +64,6 @@ export function StatsOverviewWidget() {
       (booking) => booking.status === "ONSITE" && Number(booking.mealBudget || 0) > 0,
     ).length;
     const inventoryDamaged = INVENTORY.reduce((sum, item) => sum + (item.damaged || 0), 0);
-    const availableStaff = STAFF.filter((member) => member.status === "ACTIVE").length;
     return {
       thisMonth: thisMonth.length,
       revenue,
@@ -76,9 +80,8 @@ export function StatsOverviewWidget() {
       completed,
       mealBudgetsActive,
       inventoryDamaged,
-      availableStaff,
     };
-  }, [activeProfile.name, BOOKINGS, INVENTORY, STAFF]);
+  }, [activeProfile.name, BOOKINGS, INVENTORY]);
 
   const cards = useMemo(() => {
     if (role === "CCR") {
@@ -86,21 +89,24 @@ export function StatsOverviewWidget() {
         {
           label: "Reserved",
           value: stats.reserved,
-          note: "Awaiting confirmation",
+          note: "Need confirming",
           icon: CalendarRange,
+          href: "/bookings",
         },
         {
           label: "Unpaid / Advance",
           value: stats.unpaid,
-          note: "Needs follow-up",
+          note: "Follow up",
           icon: DollarSign,
           tone: colors.destructive,
+          href: "/bookings",
         },
         {
           label: "Confirmed",
           value: stats.confirmed,
-          note: "Open confirmed bookings awaiting assignment",
+          note: "Waiting assignment",
           icon: Clock,
+          href: "/bookings",
         },
       ];
     }
@@ -109,93 +115,133 @@ export function StatsOverviewWidget() {
         {
           label: "Confirmed",
           value: stats.confirmed,
-          note: "Awaiting crew assignment",
+          note: "Assign crew",
           icon: CalendarRange,
+          href: "/bookings",
         },
-        { label: "Assigned", value: stats.assigned, note: "Awaiting acceptance", icon: Users },
-        { label: "In preparation", value: stats.inPrep, note: "BOM in progress", icon: Package },
+        {
+          label: "Assigned",
+          value: stats.assigned,
+          note: "Awaiting accept",
+          icon: Users,
+          href: "/bookings",
+        },
+        {
+          label: "In preparation",
+          value: stats.inPrep,
+          note: "BOM in progress",
+          icon: Package,
+          href: "/bookings",
+        },
       ];
     }
-    if (role === "TO") {
+    if (role === "TO" || role === "SH" || role === "FL") {
       return [
         {
           label: "Assigned to you",
           value: stats.assignedToMe,
-          note: "Waiting for acceptance",
+          note: "Accept these",
           icon: CalendarRange,
+          href: "/bookings",
         },
-        { label: "In preparation", value: stats.inPrep, note: "BOM and drawings", icon: Package },
+        {
+          label: "In preparation",
+          value: stats.inPrep,
+          note: "BOM and drawings",
+          icon: Package,
+          href: "/bookings",
+        },
       ];
     }
     if (role === "OO") {
       return [
-        { label: "In preparation", value: stats.inPrep, note: "Ready for dispatch", icon: Package },
         {
-          label: "Screens onsite",
-          value: stats.onsite,
-          note: "Active right now",
+          label: "In preparation",
+          value: stats.inPrep,
+          note: "Ready to dispatch",
           icon: Package,
-          tone: colors.status.ACCEPTED,
+          href: "/operations",
         },
         {
-          label: "Meal budgets active",
+          label: "Onsite",
+          value: stats.onsite,
+          note: "Live now",
+          icon: Package,
+          tone: colors.status.ACCEPTED,
+          href: "/bookings",
+        },
+        {
+          label: "Meal budgets",
           value: stats.mealBudgetsActive,
-          note: "Onsite with meal provision",
+          note: "Onsite provision",
           icon: DollarSign,
+          href: "/operations",
         },
       ];
     }
     if (role === "SK") {
       return [
-        { label: "Materials out", value: stats.onsite, note: "Active check-outs", icon: Package },
+        {
+          label: "Materials out",
+          value: stats.onsite,
+          note: "Active check-outs",
+          icon: Package,
+          href: "/checkout",
+        },
         {
           label: "Pending return",
           value: stats.completed,
-          note: "Waiting for check-in",
+          note: "Ready to check in",
           icon: Package,
+          href: "/checkout",
         },
         {
           label: "Damaged units",
           value: stats.inventoryDamaged,
-          note: "From inventory damage counts",
+          note: "Needs a look",
           icon: Package,
           tone: colors.destructive,
+          href: "/inventory",
         },
       ];
     }
     return [
       {
-        label: "Bookings this month",
+        label: "This month",
         value: stats.thisMonth,
         note: `${stats.paid} paid`,
         icon: CalendarRange,
+        href: "/bookings",
       },
       {
         label: "Revenue",
         value: formatMoneyCompact(stats.revenue),
         note:
           stats.revenueChangePct === null
-            ? "No prior month data"
-            : `${stats.revenueChangePct >= 0 ? "+" : ""}${stats.revenueChangePct.toFixed(1)}% from last month`,
+            ? "No prior month"
+            : `${stats.revenueChangePct >= 0 ? "+" : ""}${stats.revenueChangePct.toFixed(0)}% vs last month`,
         icon: TrendingUp,
         tone:
           stats.revenueChangePct !== null && stats.revenueChangePct < 0
             ? colors.destructive
             : colors.success,
+        href: "/reports",
       },
       {
-        label: "Screens onsite",
+        label: "Onsite",
         value: stats.onsite,
-        note: "Active right now",
+        note: "Live now",
         icon: Package,
         tone: colors.status.ACCEPTED,
+        href: "/bookings",
       },
       {
-        label: "Assemblies this week",
+        label: "This week",
         value: stats.upcoming,
-        note: "Next 7 days",
+        note: "Assemblies in 7 days",
         icon: Clock,
         tone: colors.payment.ADVANCE,
+        href: "/bookings",
       },
     ];
   }, [formatMoneyCompact, role, stats]);
@@ -203,7 +249,15 @@ export function StatsOverviewWidget() {
   return (
     <View style={styles.grid}>
       {cards.map((card) => (
-        <StatCard key={card.label} {...card} />
+        <Pressable
+          key={card.label}
+          accessibilityRole="button"
+          accessibilityLabel={`${card.label}: ${card.value}`}
+          onPress={() => router.push(to(card.href))}
+          style={({ pressed }) => [styles.statTile, pressed ? styles.statTilePressed : null]}
+        >
+          <StatCard label={card.label} value={card.value} note={card.note} icon={card.icon} tone={card.tone} />
+        </Pressable>
       ))}
     </View>
   );
@@ -211,6 +265,15 @@ export function StatsOverviewWidget() {
 
 const styles = StyleSheet.create({
   grid: {
-    gap: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  statTile: {
+    width: "47%",
+    flexGrow: 1,
+  },
+  statTilePressed: {
+    opacity: 0.72,
   },
 });

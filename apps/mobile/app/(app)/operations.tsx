@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { to } from "@/utils/routes";
-import { AlertCircle, RotateCcw, Truck, User, Users } from "lucide-react-native";
+import { AlertCircle, ChevronDown, ChevronRight, RotateCcw, Truck, User, Users } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { StatusBadge } from "@/components/status";
@@ -65,6 +65,10 @@ const COLUMNS: {
 export default function OperationsScreen() {
   const { data: bookings = [], isLoading, isError, refetch } = useBookings();
   const [search, setSearch] = useState("");
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  const toggleCollapse = (title: string) =>
+    setCollapsed((prev) => ({ ...prev, [title]: !prev[title] }));
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -121,35 +125,47 @@ export default function OperationsScreen() {
           const items = filtered
             .filter((b) => col.statuses.includes(b.status))
             .filter((b) => (col.upcomingOnly ? isActiveOrUpcoming(b) : true));
+          const isCollapsed = collapsed[col.title] ?? false;
+          const Chevron = isCollapsed ? ChevronRight : ChevronDown;
           return (
             <View key={col.title} style={styles.column}>
-              <View style={[styles.columnHeader, { borderLeftColor: col.color }]}>
-                <View style={styles.columnDot} >
+              <Pressable
+                onPress={() => toggleCollapse(col.title)}
+                style={[styles.columnHeader, { borderLeftColor: col.color }]}
+                accessibilityRole="button"
+                accessibilityLabel={`${col.title}, ${items.length} items, ${isCollapsed ? "collapsed" : "expanded"}`}
+              >
+                <View style={styles.columnDot}>
                   <View style={[styles.dot, { backgroundColor: col.color }]} />
                   <AppText variant="eyebrow" style={{ color: col.color }}>
                     {col.title}
                   </AppText>
                 </View>
-                <View style={[styles.countBadge, { backgroundColor: `${col.color}22` }]}>
-                  <AppText variant="data" style={{ color: col.color, fontWeight: "900" }}>
-                    {items.length}
-                  </AppText>
+                <View style={styles.columnHeaderRight}>
+                  <View style={[styles.countBadge, { backgroundColor: `${col.color}22` }]}>
+                    <AppText variant="data" style={{ color: col.color, fontWeight: "900" }}>
+                      {items.length}
+                    </AppText>
+                  </View>
+                  <Chevron size={15} color={col.color} />
                 </View>
-              </View>
-              <View style={styles.columnBody}>
-                {items.map((booking) => (
-                  <BookingCard key={booking.id} booking={booking} accentColor={col.color} />
-                ))}
-                {items.length === 0 && (
-                  <AppText
-                    variant="small"
-                    color={colors.text3}
-                    style={{ padding: 20, textAlign: "center" }}
-                  >
-                    {col.emptyMsg}
-                  </AppText>
-                )}
-              </View>
+              </Pressable>
+              {!isCollapsed ? (
+                <View style={styles.columnBody}>
+                  {items.map((booking) => (
+                    <BookingCard key={booking.id} booking={booking} accentColor={col.color} />
+                  ))}
+                  {items.length === 0 && (
+                    <AppText
+                      variant="small"
+                      color={colors.text3}
+                      style={{ padding: 16, textAlign: "center" }}
+                    >
+                      {col.emptyMsg}
+                    </AppText>
+                  )}
+                </View>
+              ) : null}
             </View>
           );
         })}
@@ -288,6 +304,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  columnHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   countBadge: {
     borderRadius: radius.round,

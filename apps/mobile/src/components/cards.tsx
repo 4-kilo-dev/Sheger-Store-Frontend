@@ -4,8 +4,9 @@ import { alpha, colors, radius } from "@/theme/tokens";
 import type { Booking, InventoryItem, StaffMember } from "@/types/domain";
 import { STATUS_LABELS } from "@/types/domain";
 import { pct } from "@/utils/format";
-import { AppText, Card, KV, ProgressBar } from "@/components/ui";
+import { AppText, Card, ProgressBar } from "@/components/ui";
 import { StatusBadge, ToneBadge } from "@/components/status";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 import { push } from "@/utils/routes";
 import type { LucideIcon } from "lucide-react-native";
 
@@ -14,26 +15,44 @@ export function BookingCard({
   selectable,
   selected,
   onToggle,
+  plain = false,
 }: {
   booking: Booking;
   selectable?: boolean;
   selected?: boolean;
   onToggle?: () => void;
+  /** Flattened row for lists inside a section. */
+  plain?: boolean;
 }) {
+  const { formatDate } = useDateFormatter();
+  const dateLabel = booking.eventDate ? formatDate(booking.eventDate) : "";
+  const sizeLabel = booking.size > 0 ? `${booking.size} sqm` : "";
+  const meta = [dateLabel, sizeLabel].filter(Boolean).join(" · ");
+
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${booking.code}, ${booking.client}, ${STATUS_LABELS[booking.status]}`}
+      accessibilityLabel={`${booking.code}, ${booking.client}, ${meta}, ${STATUS_LABELS[booking.status]}`}
       accessibilityState={{ selected: Boolean(selected) }}
       onPress={() => push(`/bookings/${booking.code}`)}
       onLongPress={selectable ? onToggle : undefined}
       delayLongPress={350}
-      style={[styles.bookingCard, selected ? styles.selectedCard : null]}
+      style={[
+        plain ? styles.bookingRow : styles.bookingCard,
+        selected ? styles.selectedCard : null,
+      ]}
     >
       <View style={styles.bookingBody}>
-        <AppText variant="data" color={colors.accent} style={styles.code}>
-          {booking.code}
-        </AppText>
+        <View style={styles.bookingTopRow}>
+          <AppText variant="data" color={colors.accent} style={styles.code} numberOfLines={1}>
+            {booking.code}
+          </AppText>
+          {meta ? (
+            <AppText variant="data" color={colors.text3} style={styles.bookingMeta} numberOfLines={1}>
+              {meta}
+            </AppText>
+          ) : null}
+        </View>
         <AppText style={styles.cardTitle} numberOfLines={1}>
           {booking.client}
         </AppText>
@@ -44,46 +63,38 @@ export function BookingCard({
 }
 
 export function InventoryCard({ item }: { item: InventoryItem }) {
-  const utilized = pct(item.reserved + item.onsite, item.total);
   const tone =
     item.condition === "DAMAGED"
       ? colors.destructive
       : item.condition === "SERVICE DUE"
         ? colors.payment.ADVANCE
         : colors.success;
+  const code = item.sku || item.assetTag || item.id;
+  const stock = `${item.available} / ${item.total}`;
+
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${item.name}, ${item.id}, condition ${item.condition}`}
+      accessibilityLabel={`${item.name}, ${stock} available, ${item.condition}`}
       onPress={() => push(`/inventory/${item.id}`)}
-      style={styles.cardPress}
+      style={styles.bookingCard}
     >
-      <View style={styles.cardHeader}>
-        <View style={{ flex: 1 }}>
-          <AppText style={styles.cardTitle}>{item.name}</AppText>
-          <AppText variant="data" color={colors.text3}>
-            {item.id} · {item.model}
+      <View style={styles.bookingBody}>
+        <View style={styles.bookingTopRow}>
+          <AppText style={[styles.cardTitle, styles.inventoryName]} numberOfLines={1}>
+            {item.name}
+          </AppText>
+          <AppText variant="data" color={colors.text3} style={styles.bookingMeta} numberOfLines={1}>
+            {stock}
           </AppText>
         </View>
-        <ToneBadge label={item.condition} tone={tone} />
-      </View>
-      <KV label="Category" value={item.category} />
-      <KV label="Location" value={item.location} />
-      <View style={{ gap: 7 }}>
-        <View style={styles.cardFooter}>
-          <AppText variant="small" color={colors.text2}>
-            {item.reserved} reserved · {item.onsite} onsite
+        {code ? (
+          <AppText variant="data" color={colors.text3} numberOfLines={1}>
+            {code}
           </AppText>
-          <AppText variant="data">{item.total}</AppText>
-        </View>
-        <ProgressBar value={utilized} />
+        ) : null}
       </View>
-      <View style={styles.inventoryStats}>
-        <MiniStat label="Available" value={item.available} tone={colors.success} />
-        <MiniStat label="Reserved" value={item.reserved} tone={colors.payment.ADVANCE} />
-        <MiniStat label="Onsite" value={item.onsite} tone={colors.status.ACCEPTED} />
-        <MiniStat label="Damaged" value={item.damaged} tone={colors.destructive} />
-      </View>
+      <ToneBadge label={item.condition} tone={tone} />
     </Pressable>
   );
 }
@@ -150,19 +161,6 @@ function InfoLine({ icon: Icon, text, mono }: { icon: LucideIcon; text: string; 
   );
 }
 
-function MiniStat({ label, value, tone }: { label: string; value: number; tone: string }) {
-  return (
-    <View style={styles.miniStat}>
-      <AppText variant="eyebrow" color={colors.text3} style={{ fontSize: 8 }}>
-        {label}
-      </AppText>
-      <AppText variant="data" color={tone} style={{ fontWeight: "900" }}>
-        {value}
-      </AppText>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   bookingCard: {
     flexDirection: "row",
@@ -176,18 +174,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     minHeight: 56,
   },
+  bookingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 52,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
   bookingBody: {
     flex: 1,
     minWidth: 0,
     gap: 2,
   },
-  cardPress: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: 14,
-    gap: 12,
+  bookingTopRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+    minWidth: 0,
+  },
+  bookingMeta: {
+    flexShrink: 1,
+    fontSize: 11,
+    fontWeight: "600",
   },
   selectedCard: {
     borderColor: colors.accent,
@@ -203,10 +213,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.4,
+    flexShrink: 0,
   },
   cardTitle: {
     fontSize: 14,
     fontWeight: "800",
+  },
+  inventoryName: {
+    flex: 1,
+    minWidth: 0,
   },
   metaGrid: {
     gap: 7,
@@ -222,17 +237,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-  },
-  inventoryStats: {
-    flexDirection: "row",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    paddingTop: 10,
-    gap: 8,
-  },
-  miniStat: {
-    flex: 1,
-    gap: 2,
   },
   staffCard: {
     padding: 14,

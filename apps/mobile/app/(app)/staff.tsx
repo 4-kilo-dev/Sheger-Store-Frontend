@@ -185,6 +185,7 @@ export default function StaffScreen() {
       <NativeList
         data={rows}
         keyExtractor={(item) => item.id}
+        extraData={`${query}|${role}`}
         contentContainerStyle={styles.list}
         ListHeaderComponent={ListHeader}
         renderItem={({ item }) => (

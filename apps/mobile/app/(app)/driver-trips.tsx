@@ -73,18 +73,33 @@ export default function DriverTripsScreen() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
+  const [tripSearch, setTripSearch] = useState("");
+
   const filtered = useMemo(() => {
+    let result = trips;
     switch (tab) {
       case "Pending":
-        return trips.filter((t) => t.isApproved === null);
+        result = result.filter((t) => t.isApproved === null);
+        break;
       case "Approved":
-        return trips.filter((t) => t.isApproved === true);
+        result = result.filter((t) => t.isApproved === true);
+        break;
       case "Rejected":
-        return trips.filter((t) => t.isApproved === false);
-      default:
-        return trips;
+        result = result.filter((t) => t.isApproved === false);
+        break;
     }
-  }, [trips, tab]);
+    if (tripSearch.trim()) {
+      const q = tripSearch.trim().toLowerCase();
+      result = result.filter(
+        (t) =>
+          (t.driver?.name || "").toLowerCase().includes(q) ||
+          (t.booking?.bookingCode || "").toLowerCase().includes(q) ||
+          (t.booking?.eventLocation || t.reason || "").toLowerCase().includes(q) ||
+          (t.plate || "").toLowerCase().includes(q),
+      );
+    }
+    return result;
+  }, [trips, tab, tripSearch]);
 
   const handleCreate = async () => {
     setCreateError(null);
@@ -226,6 +241,14 @@ export default function DriverTripsScreen() {
           </Button>
         ) : null}
       </Section>
+      <Input
+        value={tripSearch}
+        onChangeText={setTripSearch}
+        placeholder="Search driver, booking, location..."
+        autoCapitalize="none"
+        autoCorrect={false}
+        clearButtonMode="while-editing"
+      />
       <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
 
       <View style={{ gap: 12 }}>

@@ -20,7 +20,7 @@ export function ScreenAvailabilityWidget() {
   if (isLoading) return <LoadingState label="Loading screen availability..." />;
 
   return (
-    <Section title="Screen availability" icon={Monitor}>
+    <Section title="Screens in use" icon={Monitor}>
       <View style={styles.grid}>
         {SCREEN_TYPES.map((type) => {
           const count = bookings.filter(
@@ -32,7 +32,7 @@ export function ScreenAvailabilityWidget() {
                 {type}
               </AppText>
               <AppText variant="small" color={colors.text2}>
-                {count} active bookings
+                {count} in active jobs
               </AppText>
             </View>
           );

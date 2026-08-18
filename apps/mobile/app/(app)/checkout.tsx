@@ -1,14 +1,6 @@
 import { router } from "expo-router";
 import { to } from "@/utils/routes";
-import {
-  Check,
-  CheckCircle2,
-  ClipboardCheck,
-  Package,
-  PackageCheck,
-  Printer,
-  Truck,
-} from "lucide-react-native";
+import { Check, CheckCircle2, Package, PackageCheck, Printer, Truck, type LucideIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, Share, StyleSheet, View } from "react-native";
 import {
@@ -24,20 +16,18 @@ import {
   normalizeCheckoutAssets,
   type InventoryCondition,
 } from "@vortex/utils";
-import { StatusBadge, ToneBadge } from "@/components/status";
+import { StatusBadge } from "@/components/status";
 import {
   AppText,
   Button,
   Card,
   ErrorState,
-  Field,
   Input,
   KV,
   LoadingState,
   ProgressBar,
   Screen,
   Section,
-  TextArea,
 } from "@/components/ui";
 import {
   useBookings,
@@ -46,9 +36,9 @@ import {
   useCheckoutBooking,
 } from "@/hooks/useOperations";
 import { useAppContext } from "@/context/AppContext";
-import { useCalendarSystem } from "@/context/CalendarSystemContext";
+import { useCalendarSystem, useDateFormatter } from "@/context/CalendarSystemContext";
 import { ApiError } from "@/lib/api/client";
-import { colors, radius } from "@/theme/tokens";
+import { alpha, colors, radius } from "@/theme/tokens";
 import { bookingToPackingSlip, buildPackingSlipText } from "@/utils/printPackingSlip";
 
 type Mode = "checkout" | "checkin";
@@ -57,9 +47,11 @@ export default function CheckoutScreen() {
   const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings();
   const { activeProfile } = useAppContext();
   const { calendarSystem } = useCalendarSystem();
+  const { formatDate } = useDateFormatter();
   const userRole = activeProfile.role;
   const [mode, setMode] = useState<Mode>("checkout");
   const [selectedCode, setSelectedCode] = useState("");
+  const [bookingSearch, setBookingSearch] = useState("");
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState(false);
   const [completedStatus, setCompletedStatus] = useState<string | null>(null);
@@ -131,6 +123,7 @@ export default function CheckoutScreen() {
 
   const reset = () => {
     setSelectedCode("");
+    setBookingSearch("");
     setCheckedItems(new Set());
     setPoolQuantities({});
     setItemConditions({});
@@ -138,6 +131,28 @@ export default function CheckoutScreen() {
     setSubmitted(false);
     setSubmitError(null);
   };
+
+  const switchMode = (next: Mode) => {
+    if (next === mode) return;
+    setMode(next);
+    setSelectedCode("");
+    setBookingSearch("");
+    setCheckedItems(new Set());
+    setPoolQuantities({});
+    setItemConditions({});
+    setSubmitError(null);
+  };
+
+  const searchedBookings = useMemo(() => {
+    const q = bookingSearch.trim().toLowerCase();
+    if (!q) return eligibleBookings;
+    return eligibleBookings.filter(
+      (b) =>
+        b.code.toLowerCase().includes(q) ||
+        b.client.toLowerCase().includes(q) ||
+        (b.venue || "").toLowerCase().includes(q),
+    );
+  }, [eligibleBookings, bookingSearch]);
 
   const handleSubmit = async () => {
     if (!selected) return;
@@ -215,22 +230,21 @@ export default function CheckoutScreen() {
     return (
       <Screen>
         <Card style={styles.successCard}>
-          <CheckCircle2 size={48} color={colors.success} />
-          <AppText variant="title" style={{ textAlign: "center", fontSize: 22 }}>
-            {mode === "checkout" ? "Material Check-Out Completed" : "Material Check-In Completed"}
+          <CheckCircle2 size={40} color={colors.success} />
+          <AppText variant="title" style={{ textAlign: "center", fontSize: 20 }}>
+            {mode === "checkout" ? "Checked out" : "Checked in"}
           </AppText>
           <AppText variant="subtitle" style={{ textAlign: "center" }}>
-            {checkedItems.size} items {mode === "checkout" ? "checked out" : "checked in"} for
-            booking {selected.code}.{" "}
+            {checkedItems.size} item{checkedItems.size === 1 ? "" : "s"} for {selected.code}
             {mode === "checkout"
-              ? "Materials are now marked as 'Out'. The booking status has advanced to ONSITE."
+              ? " · booking is now ONSITE."
               : completedStatus === "PARTIALLY_RETURNED"
-                ? "The selected items were returned. Remaining custody is still outstanding."
-                : "All checked-out items were returned and the booking is now DONE."}
+                ? " · remaining gear is still out."
+                : " · booking is now DONE."}
           </AppText>
-          <Button onPress={reset}>Process Another</Button>
-          <Button variant="outline" onPress={() => router.push(to(`/bookings/${selected.code}`))}>
-            View Booking
+          <Button onPress={reset}>Next booking</Button>
+          <Button variant="ghost" onPress={() => router.push(to(`/bookings/${selected.code}`))}>
+            Open booking
           </Button>
         </Card>
       </Screen>
@@ -253,152 +267,132 @@ export default function CheckoutScreen() {
               {isPending
                 ? "Submitting..."
                 : mode === "checkout"
-                  ? "Confirm Check-Out"
-                  : "Confirm Check-In"}
+                  ? `Check out ${checkedItems.size || ""}`.trim()
+                  : `Check in ${checkedItems.size || ""}`.trim()}
             </Button>
             {submitError ? (
               <AppText variant="small" color={colors.destructive}>
                 {submitError}
               </AppText>
             ) : null}
-            <Button
-              variant="outline"
-              icon={Printer}
-              onPress={async () => {
-                if (!selected) return;
-                try {
-                  const slip = bookingToPackingSlip(selected);
-                  const message = buildPackingSlipText(slip);
-                  await Share.share({
-                    message,
-                    title: `Packing Slip · ${selected.code}`,
-                  });
-                } catch (error) {
-                  Alert.alert(
-                    "Packing slip",
-                    error instanceof Error ? error.message : "Could not build packing slip.",
-                  );
-                }
-              }}
-            >
-              Print Packing Slip
-            </Button>
           </View>
         ) : null
       }
     >
-      <View>
-        <AppText variant="eyebrow">Warehouse Operations</AppText>
-        <AppText variant="title">Material Check-In / Check-Out</AppText>
-      </View>
-      <View style={styles.modeGrid}>
-        <ModeCard
-          mode="checkout"
+      <View style={styles.modeRow}>
+        <ModeButton
+          label="Check-Out"
+          icon={Truck}
           active={mode === "checkout"}
-          onPress={() => {
-            setMode("checkout");
-            setSelectedCode("");
-            setCheckedItems(new Set());
-            setPoolQuantities({});
-            setItemConditions({});
-          }}
+          tone={colors.accent}
+          onPress={() => switchMode("checkout")}
         />
-        <ModeCard
-          mode="checkin"
+        <ModeButton
+          label="Check-In"
+          icon={PackageCheck}
           active={mode === "checkin"}
-          onPress={() => {
-            setMode("checkin");
-            setSelectedCode("");
-            setCheckedItems(new Set());
-            setPoolQuantities({});
-            setItemConditions({});
-          }}
+          tone={colors.success}
+          onPress={() => switchMode("checkin")}
         />
       </View>
-      {!selected ? (
-        <Section
-          title={mode === "checkout" ? "Check-Out Process" : "Check-In Process"}
-          icon={ClipboardCheck}
+
+      {selected ? (
+        <Pressable
+          onPress={() => {
+            setSelectedCode("");
+            setCheckedItems(new Set());
+            setPoolQuantities({});
+            setItemConditions({});
+          }}
+          style={styles.selectedBar}
         >
-          {(mode === "checkout"
-            ? [
-                "Select the booking to process",
-                "Count and verify each custody line",
-                "Adjust pool quantities when needed",
-                "Enter responsible party",
-                "Submit to register materials out",
-              ]
-            : [
-                "Select the booking to process",
-                "Count and verify outstanding custody",
-                "Set return qty or item condition",
-                "Note any missing or damaged items",
-                "Submit to register materials in",
-              ]
-          ).map((step, index) => (
-            <View key={step} style={styles.processStep}>
-              <View style={styles.processIndex}>
-                <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
-                  {index + 1}
-                </AppText>
-              </View>
-              <AppText style={{ flex: 1 }}>{step}</AppText>
-            </View>
-          ))}
-        </Section>
-      ) : null}
-      <Section title="Select Booking" icon={ClipboardCheck}>
-        {eligibleBookings.length === 0 ? (
-          <AppText variant="small" color={colors.text3}>
-            {mode === "checkout"
-              ? "No PREPARATION/ONSITE bookings due this calendar month."
-              : "No ONSITE/COMPLETED/PARTIALLY_RETURNED bookings due for return."}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <AppText variant="data" color={colors.accent} style={{ fontWeight: "800" }}>
+              {selected.code}
+            </AppText>
+            <AppText numberOfLines={1} style={{ fontWeight: "700" }}>
+              {selected.client}
+            </AppText>
+          </View>
+          <StatusBadge status={selected.status} />
+          <AppText variant="small" color={colors.accent} style={{ fontWeight: "800" }}>
+            Change
           </AppText>
-        ) : (
-          eligibleBookings.map((booking) => (
-            <Pressable
-              key={booking.code}
-              onPress={() => {
-                setSelectedCode(booking.code);
-                setCheckedItems(new Set());
-                setPoolQuantities({});
-                setItemConditions({});
-              }}
-              style={[
-                styles.bookingOption,
-                selectedCode === booking.code ? styles.bookingOptionActive : null,
-              ]}
-            >
-              <View style={{ flex: 1 }}>
-                <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
-                  {booking.code}
-                </AppText>
-                <AppText style={{ fontWeight: "800" }}>{booking.client}</AppText>
-                <AppText variant="small" color={colors.text2}>
-                  {booking.venue} · {booking.eventDate}
-                </AppText>
-              </View>
-              <StatusBadge status={booking.status} />
-            </Pressable>
-          ))
-        )}
-      </Section>
+        </Pressable>
+      ) : (
+        <View style={styles.pickBlock}>
+          <View style={styles.pickHeader}>
+            <AppText style={{ fontWeight: "800" }}>Select booking</AppText>
+            <AppText variant="small" color={colors.text3}>
+              {eligibleBookings.length} ready
+            </AppText>
+          </View>
+          <Input
+            value={bookingSearch}
+            onChangeText={setBookingSearch}
+            placeholder="Search code, client, venue..."
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
+          {searchedBookings.length === 0 ? (
+            <AppText variant="small" color={colors.text3}>
+              {eligibleBookings.length === 0
+                ? mode === "checkout"
+                  ? "No bookings ready to check out this month."
+                  : "No bookings ready to check in this month."
+                : "No bookings match your search."}
+            </AppText>
+          ) : (
+            searchedBookings.map((booking) => (
+              <Pressable
+                key={booking.code}
+                onPress={() => {
+                  setSelectedCode(booking.code);
+                  setCheckedItems(new Set());
+                  setPoolQuantities({});
+                  setItemConditions({});
+                }}
+                style={styles.bookingOption}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={styles.bookingTopRow}>
+                    <AppText variant="data" color={colors.accent} style={styles.bookingCode}>
+                      {booking.code}
+                    </AppText>
+                    <AppText variant="data" color={colors.text3} style={styles.bookingMeta} numberOfLines={1}>
+                      {formatDate(booking.eventDate)}
+                    </AppText>
+                  </View>
+                  <AppText numberOfLines={1} style={{ fontWeight: "800" }}>
+                    {booking.client}
+                  </AppText>
+                </View>
+                <StatusBadge status={booking.status} />
+              </Pressable>
+            ))
+          )}
+        </View>
+      )}
+
       {selected ? (
         <>
           <Section
-            title="Bill of Materials — Verify Each Asset"
+            title="Assets"
             icon={Package}
             action={
-              <Button variant="ghost" onPress={toggleAll}>
-                {checkedItems.size === operationItems.length ? "Uncheck All" : "Check All"}
-              </Button>
+              operationItems.length > 0 ? (
+                <Button variant="ghost" onPress={toggleAll}>
+                  {checkedItems.size === operationItems.length ? "Clear" : "All"}
+                </Button>
+              ) : null
             }
           >
             {operationItems.length === 0 ? (
               <AppText variant="small" color={colors.text3}>
                 {mode === "checkin" || selected.status === "ONSITE"
-                  ? "No outstanding custody for this booking."
-                  : "No BOM assets available to check out."}
+                  ? "Nothing outstanding for this booking."
+                  : "No assets to check out."}
               </AppText>
             ) : (
               operationItems.map((item) => {
@@ -409,7 +403,16 @@ export default function CheckoutScreen() {
                     onPress={() => toggleItem(item.id)}
                     style={[styles.bomRow, checked ? styles.bomRowChecked : null]}
                   >
-                    <View style={[styles.checkbox, checked ? styles.checkboxChecked : null]}>
+                    <View
+                      style={[
+                        styles.checkbox,
+                        checked
+                          ? mode === "checkin"
+                            ? styles.checkboxCheckedIn
+                            : styles.checkboxChecked
+                          : null,
+                      ]}
+                    >
                       {checked ? (
                         <Check
                           size={15}
@@ -417,13 +420,13 @@ export default function CheckoutScreen() {
                         />
                       ) : null}
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <AppText variant="data" color={colors.accent} style={{ fontWeight: "800" }}>
                         {item.code}
                       </AppText>
-                      <AppText>{item.name}</AppText>
+                      <AppText numberOfLines={1}>{item.name}</AppText>
                     </View>
-                    <View style={{ alignItems: "flex-end", gap: 4, minWidth: 96 }}>
+                    <View style={{ alignItems: "flex-end", gap: 4, minWidth: 88 }}>
                       {item.poolId ? (
                         <Input
                           accessibilityLabel={`Quantity for ${item.name}`}
@@ -465,124 +468,159 @@ export default function CheckoutScreen() {
                           })}
                         </View>
                       ) : (
-                        <AppText variant="data" style={{ fontWeight: "900" }}>
+                        <AppText variant="data" style={{ fontWeight: "800" }}>
                           1
                         </AppText>
                       )}
-                      <ToneBadge label={item.poolId ? "units" : "serialized"} tone={colors.text2} />
                     </View>
                   </Pressable>
                 );
               })
             )}
-            <KV
-              label="Verified"
-              value={`${checkedItems.size} of ${operationItems.length} assets`}
-            />
-            <ProgressBar
-              value={operationItems.length ? (checkedItems.size / operationItems.length) * 100 : 0}
-              tone={mode === "checkout" ? colors.accent : colors.success}
-            />
+            {operationItems.length > 0 ? (
+              <>
+                <KV
+                  label="Verified"
+                  value={`${checkedItems.size} of ${operationItems.length}`}
+                />
+                <ProgressBar
+                  value={
+                    operationItems.length ? (checkedItems.size / operationItems.length) * 100 : 0
+                  }
+                  tone={mode === "checkout" ? colors.accent : colors.success}
+                />
+              </>
+            ) : null}
           </Section>
           {storekeeperAwaitingEvent ? (
             <View style={styles.holdBox}>
               <AppText variant="small" style={{ fontWeight: "800" }} color={colors.status.ONSITE}>
-                Gear is on-site. Awaiting event completion and warehouse return.
+                Still on-site. Check in after the event.
               </AppText>
             </View>
           ) : null}
-          <Section title="Responsible Party" icon={ClipboardCheck}>
-            <Field label={mode === "checkout" ? "Checked out by" : "Received by"}>
-              <Input editable={false} value={activeProfile.name} />
-            </Field>
-            <Field label="Timestamp">
-              <Input defaultValue={new Date().toISOString().slice(0, 16)} />
-            </Field>
-            {mode === "checkin" ? (
-              <Field label="Return Notes">
-                <TextArea placeholder="Note any missing or damaged items..." />
-              </Field>
-            ) : null}
-          </Section>
-          <Section title="Booking Summary" icon={ClipboardCheck}>
-            <KV label="Code" value={selected.code} mono />
-            <KV label="Client" value={selected.client} />
-            <KV label="Venue" value={selected.venue} />
-            <KV label="Event" value={selected.eventDate} mono />
-            <KV label="Assets" value={operationItems.length} mono />
-            <KV
-              label="Total Units"
-              value={operationItems.reduce((sum, item) => sum + item.qty, 0)}
-              mono
-            />
-          </Section>
+          <Button
+            variant="ghost"
+            icon={Printer}
+            onPress={async () => {
+              try {
+                const slip = bookingToPackingSlip(selected);
+                await Share.share({
+                  message: buildPackingSlipText(slip),
+                  title: `Packing Slip · ${selected.code}`,
+                });
+              } catch (error) {
+                Alert.alert(
+                  "Packing slip",
+                  error instanceof Error ? error.message : "Could not build packing slip.",
+                );
+              }
+            }}
+          >
+            Packing slip
+          </Button>
         </>
       ) : null}
     </Screen>
   );
 }
 
-function ModeCard({ mode, active, onPress }: { mode: Mode; active: boolean; onPress: () => void }) {
-  const checkout = mode === "checkout";
-  const tone = checkout ? colors.accent : colors.success;
-  const Icon = checkout ? Truck : PackageCheck;
+function ModeButton({
+  label,
+  icon: Icon,
+  active,
+  tone,
+  onPress,
+}: {
+  label: string;
+  icon: LucideIcon;
+  active: boolean;
+  tone: string;
+  onPress: () => void;
+}) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
       onPress={onPress}
-      style={[styles.modeCard, active ? { borderColor: tone, backgroundColor: `${tone}14` } : null]}
+      style={[
+        styles.modeBtn,
+        active ? { borderColor: tone, backgroundColor: alpha(tone, 0.14) } : null,
+      ]}
     >
-      <View style={[styles.modeIcon, active ? { backgroundColor: tone } : null]}>
-        <Icon
-          size={20}
-          color={active ? (checkout ? colors.accentForeground : colors.white) : colors.text2}
-        />
-      </View>
-      <View style={{ flex: 1 }}>
-        <AppText style={{ fontWeight: "900" }}>{checkout ? "Check-Out" : "Check-In"}</AppText>
-        <AppText variant="small" color={colors.text2}>
-          {checkout
-            ? "Materials leaving warehouse for a job"
-            : "Materials returning from a completed job"}
-        </AppText>
-      </View>
+      <Icon size={16} color={active ? tone : colors.text2} strokeWidth={2.4} />
+      <AppText style={{ fontWeight: "800" }} color={active ? colors.foreground : colors.text2}>
+        {label}
+      </AppText>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  modeGrid: {
+  modeRow: {
+    flexDirection: "row",
     gap: 10,
   },
-  modeCard: {
-    minHeight: 78,
+  modeBtn: {
+    flex: 1,
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: 12,
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
-  },
-  modeIcon: {
-    width: 42,
-    height: 42,
     borderRadius: radius.md,
-    backgroundColor: colors.surface2,
+    paddingHorizontal: 10,
+  },
+  pickBlock: {
+    gap: 10,
+  },
+  pickHeader: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  selectedBar: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: alpha(colors.accent, 0.08),
+    borderRadius: radius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
   bookingOption: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minHeight: 56,
   },
-  bookingOptionActive: {
-    borderColor: colors.accent,
-    backgroundColor: "rgba(245,183,49,0.08)",
+  bookingTopRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+    minWidth: 0,
+  },
+  bookingCode: {
+    fontWeight: "800",
+    flexShrink: 0,
+  },
+  bookingMeta: {
+    flexShrink: 1,
+    fontSize: 11,
+    fontWeight: "600",
   },
   bomRow: {
     flexDirection: "row",
@@ -608,6 +646,10 @@ const styles = StyleSheet.create({
   checkboxChecked: {
     borderColor: colors.accent,
     backgroundColor: colors.accent,
+  },
+  checkboxCheckedIn: {
+    borderColor: colors.success,
+    backgroundColor: colors.success,
   },
   qtyInput: {
     minHeight: 34,
@@ -637,26 +679,12 @@ const styles = StyleSheet.create({
   successCard: {
     padding: 24,
     alignItems: "center",
-    gap: 16,
-  },
-  processStep: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  processIndex: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    alignItems: "center",
-    justifyContent: "center",
+    gap: 14,
   },
   holdBox: {
     borderWidth: 1,
     borderColor: colors.status.ONSITE,
-    backgroundColor: `${colors.status.ONSITE}1a`,
+    backgroundColor: alpha(colors.status.ONSITE, 0.12),
     borderRadius: radius.md,
     padding: 12,
   },

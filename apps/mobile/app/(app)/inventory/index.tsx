@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   listContent: {
-    gap: 12,
+    gap: 10,
   },
   chipWrap: {
     flexDirection: "row",

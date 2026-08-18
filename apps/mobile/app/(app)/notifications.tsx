@@ -19,6 +19,7 @@ import {
   AppText,
   Button,
   EmptyState,
+  Input,
   LoadingState,
   Screen,
   Section,
@@ -49,6 +50,7 @@ export default function NotificationsScreen() {
     markAllRead,
   } = useNotificationsContext();
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
+  const [search, setSearch] = useState("");
 
   const displayItems = useMemo(
     () => NOTIFICATIONS.map((item) => ({ item, display: getNotificationDisplay(item) })),
@@ -59,8 +61,15 @@ export default function NotificationsScreen() {
     let items = displayItems;
     if (tab === "Unread") items = items.filter(({ display }) => display.unread);
     else if (tab !== "All") items = items.filter(({ display }) => display.type === tab);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      items = items.filter(
+        ({ item, display }) =>
+          display.title.toLowerCase().includes(q) || item.message.toLowerCase().includes(q),
+      );
+    }
     return items;
-  }, [displayItems, tab]);
+  }, [displayItems, tab, search]);
 
   const toggleRead = (id: string, unread: boolean) => {
     if (unread) markAsRead(id);
@@ -85,6 +94,14 @@ export default function NotificationsScreen() {
         </AppText>
       </View>
       {unreadCount > 0 ? <StatCard label="Unread" value={unreadCount} icon={Bell} /> : null}
+      <Input
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search notifications..."
+        autoCapitalize="none"
+        autoCorrect={false}
+        clearButtonMode="while-editing"
+      />
       <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
       {unreadCount > 0 ? (
         <Button variant="outline" icon={CheckCheck} onPress={() => markAllRead()}>

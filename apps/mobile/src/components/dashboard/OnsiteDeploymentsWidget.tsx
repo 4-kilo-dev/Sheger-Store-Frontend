@@ -1,7 +1,7 @@
 import { Zap } from "lucide-react-native";
 import { View } from "react-native";
-import { Section } from "@/components/ui";
 import { BookingCard } from "@/components/cards";
+import { Section } from "@/components/ui";
 import { useBookings } from "@/hooks/useOperations";
 
 export function OnsiteDeploymentsWidget() {
@@ -10,10 +10,10 @@ export function OnsiteDeploymentsWidget() {
   if (onsiteBookings.length === 0) return null;
 
   return (
-    <Section title="Screens onsite now" icon={Zap} aside={`${onsiteBookings.length} active`}>
-      <View style={{ gap: 12 }}>
+    <Section title="Onsite now" icon={Zap} aside={`${onsiteBookings.length}`}>
+      <View>
         {onsiteBookings.map((booking) => (
-          <BookingCard key={booking.code} booking={booking} />
+          <BookingCard key={booking.code} booking={booking} plain />
         ))}
       </View>
     </Section>

@@ -292,34 +292,32 @@ export default function BookingsScreen() {
     );
   }
 
-  return (
-    <Screen scroll={false}>
-      <View style={styles.toolbar}>
-        <View style={styles.header}>
-          <Field label={`${BOOKINGS.length} total`}>
-            <Input
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search code, client, venue..."
-              autoCapitalize="none"
-              autoCorrect={false}
-              clearButtonMode="while-editing"
-            />
-          </Field>
-          {canCreateBooking ? (
-            <Button icon={Plus} onPress={() => router.push(to("/bookings/new"))}>
-              New Booking
-            </Button>
-          ) : null}
-        </View>
-
-        <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
-
-        <View style={styles.filterRow}>
-          <Button variant="outline" icon={Filter} onPress={() => setFilterOpen(true)}>
-            {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
+  const BookingsHeader = () => (
+    <View style={styles.toolbar}>
+      <View style={styles.header}>
+        <Field label={`${BOOKINGS.length} total`}>
+          <Input
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search code, client, venue..."
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
+        </Field>
+        {canCreateBooking ? (
+          <Button icon={Plus} onPress={() => router.push(to("/bookings/new"))}>
+            New Booking
           </Button>
-        </View>
+        ) : null}
+      </View>
+
+      <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
+
+      <View style={styles.filterRow}>
+        <Button variant="outline" icon={Filter} onPress={() => setFilterOpen(true)}>
+          {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
+        </Button>
       </View>
 
       {selected.size > 0 ? (
@@ -340,12 +338,17 @@ export default function BookingsScreen() {
           </View>
         </View>
       ) : null}
+    </View>
+  );
 
+  return (
+    <Screen scroll={false}>
       <NativeList
         data={rows}
         extraData={`${query}|${tab}|${statusFilter}|${assigneeFilter}|${paymentFilter}|${selected.size}`}
         keyExtractor={(item) => item.code}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={BookingsHeader}
         ItemSeparatorComponent={ListGap}
         ListEmptyComponent={
           <EmptyState title="No bookings" detail="Adjust search or filters to view bookings." />
