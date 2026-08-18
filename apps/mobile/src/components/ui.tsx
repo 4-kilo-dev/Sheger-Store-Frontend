@@ -1,7 +1,8 @@
 import { FlashList, type FlashListProps } from "@shopify/flash-list";
+import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { router } from "expo-router";
-import { PhoneCall, type LucideIcon } from "lucide-react-native";
-import type { ReactNode } from "react";
+import { Calendar, Clock3, PhoneCall, type LucideIcon } from "lucide-react-native";
+import { useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +22,8 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { formatEthiopianTimeOfDay } from "@vortex/utils";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 import { alpha, colors, radius, typography } from "@/theme/tokens";
 import { to } from "@/utils/routes";
 
@@ -286,6 +289,153 @@ export function Field({
 
 export function Input(props: TextInputProps) {
   return placeholderSafeInput(props);
+}
+
+function formatDateValue(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatDateTimeValue(date: Date): string {
+  const base = formatDateValue(date);
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  return `${base}T${hh}:${mm}`;
+}
+
+function parseDateValue(value?: string, mode: "date" | "datetime" = "date"): Date | null {
+  if (!value) return null;
+  const normalized = mode === "datetime" ? value : `${value}T00:00`;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function parseTimeValue(value?: string): string {
+  if (!value || !value.includes("T")) return "12:00";
+  return value.split("T")[1]?.slice(0, 5) || "12:00";
+}
+
+function mergeDateAndTime(date: Date, timeValue: string): Date {
+  const [hours, minutes] = timeValue.split(":").map((part) => Number(part) || 0);
+  const merged = new Date(date);
+  merged.setHours(hours, minutes, 0, 0);
+  return merged;
+}
+
+export function DatePickerInput({
+  value,
+  onChangeText,
+  mode = "date",
+  placeholder,
+  minimumDate,
+  maximumDate,
+}: {
+  value?: string;
+  onChangeText: (value: string) => void;
+  mode?: "date" | "datetime";
+  placeholder?: string;
+  minimumDate?: Date;
+  maximumDate?: Date;
+}) {
+  const { formatDate, calendarSystem, numeralsSystem } = useDateFormatter();
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const parsed = parseDateValue(value, mode) ?? new Date();
+  const timeValue = parseTimeValue(value);
+
+  const handleDateChange = (event: DateTimePickerEvent, next?: Date) => {
+    if (event.type === "dismissed") {
+      setShowDatePicker(false);
+      return;
+    }
+    if (!next) return;
+    const formatted =
+      mode === "datetime"
+        ? formatDateTimeValue(mergeDateAndTime(next, timeValue))
+        : formatDateValue(next);
+    onChangeText(formatted);
+    setShowDatePicker(false);
+  };
+
+  const handleTimeChange = (event: DateTimePickerEvent, next?: Date) => {
+    if (event.type === "dismissed") {
+      setShowTimePicker(false);
+      return;
+    }
+    if (!next) return;
+    const formatted = formatDateTimeValue(next);
+    onChangeText(formatted);
+    setShowTimePicker(false);
+  };
+
+  const displayText = value
+    ? mode === "datetime"
+      ? `${formatDate(parsed)} · ${
+          calendarSystem === "ethiopic"
+            ? formatEthiopianTimeOfDay(timeValue, numeralsSystem === "geez" ? "geez" : "latn")
+            : timeValue
+        }`
+      : formatDate(parsed)
+    : placeholder || (mode === "datetime" ? "Select date & time" : "Select date");
+
+  return (
+    <View style={{ gap: 8 }}>
+      <View style={styles.dateMainRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={placeholder || "Select date"}
+          onPress={() => setShowDatePicker(true)}
+          style={({ pressed }) => [styles.dateInput, styles.dateInputGrow, pressed ? styles.pressed : null]}
+        >
+          <Calendar size={16} color={value ? colors.accent : colors.text3} />
+          <AppText variant="data" color={value ? colors.foreground : colors.text3} style={{ flex: 1 }}>
+            {displayText}
+          </AppText>
+        </Pressable>
+      </View>
+
+      {mode === "datetime" ? (
+        <View style={styles.dateTimeTools}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Adjust time"
+            onPress={() => setShowTimePicker(true)}
+            style={({ pressed }) => [styles.timeChip, pressed ? styles.pressed : null]}
+          >
+            <Clock3 size={14} color={colors.text2} />
+            <AppText variant="small" color={colors.text2} style={{ fontWeight: "700" }}>
+              {calendarSystem === "ethiopic"
+                ? formatEthiopianTimeOfDay(timeValue, numeralsSystem === "geez" ? "geez" : "latn")
+                : timeValue}
+            </AppText>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {showDatePicker ? (
+        <DateTimePicker
+          value={parsed}
+          mode="date"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          minimumDate={minimumDate}
+          maximumDate={maximumDate}
+          onChange={handleDateChange}
+        />
+      ) : null}
+
+      {showTimePicker && mode === "datetime" ? (
+        <DateTimePicker
+          value={mergeDateAndTime(parsed, timeValue)}
+          mode="time"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={handleTimeChange}
+        />
+      ) : null}
+    </View>
+  );
 }
 
 export function TextArea(props: TextInputProps) {
@@ -695,6 +845,40 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
     color: colors.foreground,
     fontSize: 13,
+  },
+  dateInput: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    justifyContent: "center",
+  },
+  dateInputGrow: {
+    flex: 1,
+  },
+  dateMainRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  dateTimeTools: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  timeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 30,
+    borderRadius: radius.round,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+    paddingHorizontal: 10,
   },
   textarea: {
     minHeight: 104,

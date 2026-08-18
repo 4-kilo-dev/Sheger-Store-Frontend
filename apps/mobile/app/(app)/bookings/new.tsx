@@ -17,6 +17,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import {
   AppText,
   Button,
+  DatePickerInput,
   Field,
   Input,
   Screen,
@@ -69,6 +70,9 @@ export default function NewBookingScreen() {
 
   const setCustom = (key: string, value: unknown) =>
     setCustomValues((prev) => ({ ...prev, [key]: value }));
+
+  const now = new Date();
+  const assemblyDateValue = form.assemblyDate ? new Date(form.assemblyDate) : now;
 
   /** Mirrors web's NewBookingPage getStepErrors — blocks Continue until the step is valid. */
   function getStepErrors(current: (typeof STEPS)[number]): string[] {
@@ -217,24 +221,30 @@ export default function NewBookingScreen() {
             />
           </Field>
           <Field label="Assembly Date" icon={Calendar}>
-            <Input
+            <DatePickerInput
               value={form.assemblyDate}
               onChangeText={(value) => set("assemblyDate", value)}
-              placeholder="YYYY-MM-DD"
+              mode="datetime"
+              placeholder="Select assembly date"
+              minimumDate={now}
             />
           </Field>
           <Field label="Event Date" icon={Calendar}>
-            <Input
+            <DatePickerInput
               value={form.eventDate}
               onChangeText={(value) => set("eventDate", value)}
-              placeholder="YYYY-MM-DD"
+              mode="datetime"
+              placeholder="Select event date"
+              minimumDate={assemblyDateValue}
             />
           </Field>
           <Field label="Dismantle Date" icon={Calendar}>
-            <Input
+            <DatePickerInput
               value={form.dismantleDate}
               onChangeText={(value) => set("dismantleDate", value)}
-              placeholder="YYYY-MM-DD"
+              mode="datetime"
+              placeholder="Select dismantle date"
+              minimumDate={assemblyDateValue}
             />
           </Field>
           <Field label="Number of Days">
@@ -275,32 +285,6 @@ export default function NewBookingScreen() {
               placeholder="e.g. Client wants wide stage setup, curve layout if possible."
             />
           </Field>
-        </Section>
-      ) : null}
-
-      {step === "Review" ? (
-        <Section title="Review & Confirm" icon={CheckCircle2}>
-          {submitError ? (
-            <AppText variant="small" color={colors.destructive}>
-              {submitError}
-            </AppText>
-          ) : null}
-          {[
-            ["Client", form.client || "-"],
-            ["Contact", `${form.contactPerson || "-"} · ${form.contactPhone || "-"}`],
-            ["Venue", form.venue || "-"],
-            ["Assembly Date", form.assemblyDate || "-"],
-            ["Event Date", form.eventDate || "-"],
-            ["Dismantle Date", form.dismantleDate || "-"],
-            ["Number of Days", String(form.rentedDays)],
-            ["Screen Size (sqm)", form.size ? `${form.size} sqm` : "-"],
-            ["Arrangement / Screen Spec", form.arrangement || "-"],
-            ["Intake Notes", form.notes || "-"],
-          ].map(([label, value]) => (
-            <Field key={label} label={label}>
-              <Input editable={false} value={value} />
-            </Field>
-          ))}
           {customFields.length > 0 ? (
             <Section title="Custom Fields" icon={ClipboardCheck}>
               {customFields.map((field) => (
@@ -336,8 +320,8 @@ export default function NewBookingScreen() {
                         const selected = Array.isArray(raw)
                           ? raw.map((v) => String(v))
                           : typeof raw === "string" && raw
-                          ? raw.split(",").map((s) => s.trim()).filter(Boolean)
-                          : [];
+                            ? raw.split(",").map((s) => s.trim()).filter(Boolean)
+                            : [];
                         const active = selected.includes(opt);
                         return (
                           <Choice
@@ -355,10 +339,10 @@ export default function NewBookingScreen() {
                       })}
                     </View>
                   ) : field.type === "date" ? (
-                    <Input
+                    <DatePickerInput
                       value={String(customValues[field.key] ?? "")}
                       onChangeText={(value) => setCustom(field.key, value)}
-                      placeholder="YYYY-MM-DD"
+                      placeholder="Select date"
                     />
                   ) : field.type === "number" ? (
                     <Input
@@ -378,6 +362,32 @@ export default function NewBookingScreen() {
               ))}
             </Section>
           ) : null}
+        </Section>
+      ) : null}
+
+      {step === "Review" ? (
+        <Section title="Review & Confirm" icon={CheckCircle2}>
+          {submitError ? (
+            <AppText variant="small" color={colors.destructive}>
+              {submitError}
+            </AppText>
+          ) : null}
+          {[
+            ["Client", form.client || "-"],
+            ["Contact", `${form.contactPerson || "-"} · ${form.contactPhone || "-"}`],
+            ["Venue", form.venue || "-"],
+            ["Assembly Date", form.assemblyDate || "-"],
+            ["Event Date", form.eventDate || "-"],
+            ["Dismantle Date", form.dismantleDate || "-"],
+            ["Number of Days", String(form.rentedDays)],
+            ["Screen Size (sqm)", form.size ? `${form.size} sqm` : "-"],
+            ["Arrangement / Screen Spec", form.arrangement || "-"],
+            ["Intake Notes", form.notes || "-"],
+          ].map(([label, value]) => (
+            <Field key={label} label={label}>
+              <Input editable={false} value={value} />
+            </Field>
+          ))}
         </Section>
       ) : null}
     </Screen>

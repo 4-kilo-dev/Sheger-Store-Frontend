@@ -9,6 +9,7 @@
     "newArchEnabled": true,
     "plugins": [
       "expo-router",
+      "expo-sharing",
       [
         "expo-image-picker",
         {
@@ -22,6 +23,8 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.nuelsha.vortexvisualoperations",
+      "usesCleartextTraffic": true,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"

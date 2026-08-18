@@ -4,6 +4,7 @@ import {
   AppText,
   Button,
   BottomSheet,
+  DatePickerInput,
   ErrorState,
   Field,
   Input,
@@ -74,6 +75,9 @@ export default function DriverTripsScreen() {
   };
 
   const [tripSearch, setTripSearch] = useState("");
+  const fromDateObject = from ? new Date(from) : undefined;
+  const toDateObject = to ? new Date(to) : undefined;
+  const leftAtDateObject = leftAt ? new Date(leftAt) : undefined;
 
   const filtered = useMemo(() => {
     let result = trips;
@@ -109,7 +113,7 @@ export default function DriverTripsScreen() {
       return;
     }
     if (!leftIso) {
-      setCreateError("Enter a valid leave time (YYYY-MM-DDTHH:mm).");
+      setCreateError("Select a valid leave time.");
       return;
     }
     if (!reason.trim()) {
@@ -152,7 +156,7 @@ export default function DriverTripsScreen() {
     const draft = arriveDrafts[id] || defaultArriveLocal();
     const iso = toIsoFromLocal(draft);
     if (!iso) {
-      Alert.alert("Invalid time", "Enter arrive time as YYYY-MM-DDTHH:mm.");
+      Alert.alert("Invalid time", "Please select a valid arrive time.");
       return;
     }
     try {
@@ -203,11 +207,23 @@ export default function DriverTripsScreen() {
         <AppText variant="subtitle">Track driver departures, arrivals, and approvals.</AppText>
       </View>
       <Section title="Filters">
-        <Field label="From (YYYY-MM-DDTHH:mm)">
-          <Input value={from} onChangeText={setFrom} placeholder="2026-08-01T08:00" />
+        <Field label="From">
+          <DatePickerInput
+            value={from}
+            onChangeText={setFrom}
+            mode="datetime"
+            placeholder="Select from date & time"
+            maximumDate={toDateObject}
+          />
         </Field>
-        <Field label="To (YYYY-MM-DDTHH:mm)">
-          <Input value={to} onChangeText={setTo} placeholder="2026-08-31T23:59" />
+        <Field label="To">
+          <DatePickerInput
+            value={to}
+            onChangeText={setTo}
+            mode="datetime"
+            placeholder="Select to date & time"
+            minimumDate={fromDateObject}
+          />
         </Field>
         <Field label="Driver">
           <View style={styles.chipWrap}>
@@ -316,13 +332,15 @@ export default function DriverTripsScreen() {
               ) : null}
               {!trip.arrivedAt && canEdit ? (
                 <View style={{ gap: 8, marginTop: 8 }}>
-                  <Field label="Arrive time (YYYY-MM-DDTHH:mm)">
-                    <Input
+                  <Field label="Arrive time">
+                    <DatePickerInput
                       value={arriveDrafts[trip.id] ?? defaultArriveLocal()}
                       onChangeText={(value) =>
                         setArriveDrafts((prev) => ({ ...prev, [trip.id]: value }))
                       }
-                      placeholder={defaultArriveLocal()}
+                      mode="datetime"
+                      placeholder="Select arrive date & time"
+                      minimumDate={trip.leftAt ? new Date(trip.leftAt) : undefined}
                     />
                   </Field>
                   <Button
@@ -370,11 +388,22 @@ export default function DriverTripsScreen() {
           <Field label="Plate Number (optional)">
             <Input value={plate} onChangeText={setPlate} placeholder="ABC-1234" />
           </Field>
-          <Field label="Leave time (YYYY-MM-DDTHH:mm)">
-            <Input value={leftAt} onChangeText={setLeftAt} placeholder="2026-08-03T08:00" />
+          <Field label="Leave time">
+            <DatePickerInput
+              value={leftAt}
+              onChangeText={setLeftAt}
+              mode="datetime"
+              placeholder="Select leave date & time"
+            />
           </Field>
           <Field label="Arrive time (optional)">
-            <Input value={arrivedAt} onChangeText={setArrivedAt} placeholder="2026-08-03T18:00" />
+            <DatePickerInput
+              value={arrivedAt}
+              onChangeText={setArrivedAt}
+              mode="datetime"
+              placeholder="Select arrive date & time"
+              minimumDate={leftAtDateObject}
+            />
           </Field>
           {createError ? (
             <AppText variant="small" color={colors.destructive}>

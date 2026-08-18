@@ -10,11 +10,12 @@ import {
   Users,
 } from "lucide-react-native";
 import { useState } from "react";
-import { Share, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import {
   AppText,
   Button,
+  DatePickerInput,
   ErrorState,
   Input,
   LoadingState,
@@ -39,6 +40,7 @@ import {
   getRevenueReportApi,
   getUpcomingBookingsReportApi,
 } from "@/services/reports.api";
+import { shareCsv, toCsv } from "@/utils/share-csv";
 
 const BASE_TABS = [
   "Revenue & Bookings",
@@ -49,16 +51,6 @@ const BASE_TABS = [
 ] as const;
 const STAFF_WORK_SHEETS_TAB = "Staff Work Sheets" as const;
 const TABS = [...BASE_TABS, STAFF_WORK_SHEETS_TAB] as const;
-
-function toCsv(rows: Array<Record<string, string | number>>): string {
-  if (rows.length === 0) return "";
-  const headers = Object.keys(rows[0]);
-  const lines = [headers.join(",")];
-  for (const row of rows) {
-    lines.push(headers.map((h) => JSON.stringify(row[h] ?? "")).join(","));
-  }
-  return lines.join("\n");
-}
 
 export default function ReportsScreen() {
   const { authUser } = useAppContext();
@@ -73,6 +65,10 @@ export default function ReportsScreen() {
   const [location, setLocation] = useState("");
   const [sheetStartDate, setSheetStartDate] = useState("");
   const [sheetEndDate, setSheetEndDate] = useState("");
+  const startDateObject = startDate ? new Date(startDate) : undefined;
+  const endDateObject = endDate ? new Date(endDate) : undefined;
+  const sheetStartDateObject = sheetStartDate ? new Date(sheetStartDate) : undefined;
+  const sheetEndDateObject = sheetEndDate ? new Date(sheetEndDate) : undefined;
 
   const bookingsQuery = useQuery({
     queryKey: ["reports-bookings", { status, startDate, endDate, location }],
@@ -141,13 +137,23 @@ export default function ReportsScreen() {
             <AppText variant="small" color={colors.text2}>
               Start date
             </AppText>
-            <Input value={startDate} onChangeText={setStartDate} placeholder="YYYY-MM-DD" />
+            <DatePickerInput
+              value={startDate}
+              onChangeText={setStartDate}
+              placeholder="Select start date"
+              maximumDate={endDateObject}
+            />
           </View>
           <View style={{ flex: 1 }}>
             <AppText variant="small" color={colors.text2}>
               End date
             </AppText>
-            <Input value={endDate} onChangeText={setEndDate} placeholder="YYYY-MM-DD" />
+            <DatePickerInput
+              value={endDate}
+              onChangeText={setEndDate}
+              placeholder="Select end date"
+              minimumDate={startDateObject}
+            />
           </View>
         </View>
         <View style={styles.filterRow}>
@@ -316,17 +322,30 @@ function RevenueBookingsTab({
           variant="outline"
           icon={Download}
           onPress={() => {
-            const csv = toCsv(
-              (bookingsReport.bookings || []).map((b) => ({
-                code: b.bookingCode,
-                client: b.customerName,
-                status: b.status,
-                payment: b.paymentStatus,
-                amount: b.paymentAmount,
-                eventDate: b.eventDate,
+            const rows = [
+              ...(revenueReport.payments || []).map((payment) => ({
+                type: "PAYMENT",
+                code: payment.bookingCode || payment.bookingId,
+                client: payment.customerName,
+                status: payment.toStatus,
+                amount: payment.amount,
+                date: payment.createdAt,
+                extra: payment.recordedByName,
               })),
+              ...(bookingsReport.bookings || []).map((booking) => ({
+                type: "BOOKING",
+                code: booking.bookingCode,
+                client: booking.customerName,
+                status: booking.paymentStatus || booking.status,
+                amount: booking.paymentAmount,
+                date: booking.eventDate,
+                extra: booking.eventLocation,
+              })),
+            ];
+            void shareCsv(
+              `vortex-revenue-bookings-${new Date().toISOString().slice(0, 10)}.csv`,
+              toCsv(rows),
             );
-            Share.share({ message: csv, title: "Revenue & Bookings Report" });
           }}
         >
           Export Revenue & Bookings CSV
@@ -414,7 +433,10 @@ function InventoryHealthTab({
                 })),
               ),
             );
-            Share.share({ message: csv, title: "Inventory Health Report" });
+            void shareCsv(
+              `vortex-inventory-${new Date().toISOString().slice(0, 10)}.csv`,
+              csv,
+            );
           }}
         >
           Export Inventory CSV
@@ -486,7 +508,7 @@ function ClientDirectoryTab({
               revenue: c.totalRevenueContributed,
             })),
           );
-          Share.share({ message: csv, title: "Client Directory Report" });
+          void shareCsv(`vortex-clients-${new Date().toISOString().slice(0, 10)}.csv`, csv);
         }}
       >
         Export Clients CSV
@@ -552,7 +574,10 @@ function QualityCrewTab({
                 crew: e.teamSize,
               })),
             );
-            Share.share({ message: csv, title: "Quality & Crew Report" });
+            void shareCsv(
+              `vortex-evaluations-${new Date().toISOString().slice(0, 10)}.csv`,
+              csv,
+            );
           }}
         >
           Export Evaluations CSV
@@ -658,10 +683,10 @@ function AuditLogsTab({
               location: b.eventLocation,
               date: b.eventDate || "",
             }));
-            Share.share({
-              message: toCsv([...canceledRows, ...upcomingRows]),
-              title: "Audit Logs Report",
-            });
+            void shareCsv(
+              `vortex-audit-${new Date().toISOString().slice(0, 10)}.csv`,
+              toCsv([...canceledRows, ...upcomingRows]),
+            );
           }}
         >
           Export Audit CSV
@@ -691,6 +716,8 @@ function StaffWorkSheetsTab({
   >;
 }) {
   const { formatDate } = useDateFormatter();
+  const sheetStartDateObject = sheetStartDate ? new Date(sheetStartDate) : undefined;
+  const sheetEndDateObject = sheetEndDate ? new Date(sheetEndDate) : undefined;
   const freelancers = freelancerQuery.data || [];
   const trips = driverTripsReportQuery.data || [];
   const rangeLabel =
@@ -707,17 +734,19 @@ function StaffWorkSheetsTab({
         </AppText>
         <View style={styles.filterRow}>
           <View style={{ flex: 1 }}>
-            <Input
+            <DatePickerInput
               value={sheetStartDate}
               onChangeText={setSheetStartDate}
-              placeholder="Start YYYY-MM-DD"
+              placeholder="Start date"
+              maximumDate={sheetEndDateObject}
             />
           </View>
           <View style={{ flex: 1 }}>
-            <Input
+            <DatePickerInput
               value={sheetEndDate}
               onChangeText={setSheetEndDate}
-              placeholder="End YYYY-MM-DD"
+              placeholder="End date"
+              minimumDate={sheetStartDateObject}
             />
           </View>
         </View>
@@ -805,10 +834,10 @@ function StaffWorkSheetsTab({
               pending: row.pendingCount,
               rejected: row.rejectedCount,
             }));
-            Share.share({
-              message: toCsv([...freelanceRows, ...tripRows]),
-              title: "Staff Work Sheets Report",
-            });
+            void shareCsv(
+              `vortex-staff-work-sheets-${new Date().toISOString().slice(0, 10)}.csv`,
+              toCsv([...freelanceRows, ...tripRows]),
+            );
           }}
         >
           Export Staff Work Sheets CSV
