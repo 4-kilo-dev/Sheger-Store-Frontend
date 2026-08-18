@@ -508,13 +508,13 @@ function mapBackendBookingToFrontend(b: any): Booking {
   };
 }
 
-export async function getBookingsApi(): Promise<Booking[]> {
-  const data = await client.get<any[]>("/api/bookings");
+export async function getBookingsApi(init?: RequestInit): Promise<Booking[]> {
+  const data = await client.get<any[]>("/api/bookings", init);
   return (data || []).map((b) => mapBackendBookingToFrontend(b));
 }
 
-export async function getBookingDetailApi(id: string): Promise<Booking> {
-  const b = await client.get<any>(`/api/bookings/${id}`);
+export async function getBookingDetailApi(id: string, init?: RequestInit): Promise<Booking> {
+  const b = await client.get<any>(`/api/bookings/${id}`, init);
   return mapBackendBookingToFrontend(b);
 }
 
@@ -606,10 +606,12 @@ export interface AllowedTransitionsResponse {
 }
 
 export async function getBookingAllowedTransitionsApi(
-  bookingId: string
+  bookingId: string,
+  init?: RequestInit,
 ): Promise<AllowedTransitionsResponse> {
   return client.get<AllowedTransitionsResponse>(
-    `/api/bookings/${bookingId}/allowed-transitions`
+    `/api/bookings/${bookingId}/allowed-transitions`,
+    init,
   );
 }
 

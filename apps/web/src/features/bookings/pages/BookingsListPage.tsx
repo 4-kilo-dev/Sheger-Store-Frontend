@@ -15,7 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  getBookingsApi,
   transitionBookingStatusApi,
   STATUS_ORDER,
   STATUS_LABELS,
@@ -29,6 +28,7 @@ import { useAuthUser } from "@/hooks/use-auth-user";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { useBookingsList } from "@/features/bookings/hooks/useBookingsList";
 
 const BULK_STATUS_TARGETS: BookingStatus[] = [
   ...STATUS_ORDER,
@@ -143,11 +143,7 @@ export function BookingsIndex() {
   const [bulkReason, setBulkReason] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
 
-  // Query bookings from backend
-  const { data: bookingsList = [] } = useQuery({
-    queryKey: ["bookings"],
-    queryFn: getBookingsApi,
-  });
+  const { data: bookingsList = [] } = useBookingsList();
 
   const selectedBookings = useMemo(
     () => bookingsList.filter((b) => selected.has(b.code)),

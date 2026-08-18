@@ -59,7 +59,7 @@ async function runBulkTransitions(
 }
 
 export default function BookingsScreen() {
-  const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings();
+  const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings({ poll: true });
   const { data: staff = [] } = useStaff();
   const { canAny, can } = usePermissions();
   const { activeProfile } = useAppContext();

@@ -11,6 +11,7 @@ import { useBookingCapabilities } from "../hooks/useBookingCapabilities";
 import { BookingHeader } from "../components/BookingHeader";
 import { BookingActionBar } from "../components/BookingActionBar";
 import { BookingActionModal } from "../components/BookingActionModal";
+import { BookingSyncStatus } from "../components/BookingSyncStatus";
 import { DeclinedAssignmentBanner } from "../components/DeclinedAssignmentBanner";
 import { TechnicianBanner } from "../components/TechnicianBanner";
 import { BookingTabBar } from "../components/BookingTabBar";
@@ -29,6 +30,7 @@ import { ActivityTab } from "../components/tabs/ActivityTab";
 import { EvaluationsTab } from "../components/tabs/EvaluationsTab";
 
 import type { TabName } from "../constants";
+import { getBookingPollCopy } from "@vortex/utils";
 
 const _Route = createFileRoute("/bookings/$code")({
   head: ({ params }) => ({
@@ -59,7 +61,7 @@ export function BookingDetail() {
   const [tab, setTab] = useState<TabName>("Overview");
 
   const detail = useBookingDetail(code);
-  const { booking, isLoading, error, checkoutSnapshot } = detail;
+  const { booking, isLoading, error, checkoutSnapshot, pollPhase, refetch } = detail;
 
   const caps = useBookingCapabilities(booking);
   const actions = useBookingActions(code, booking, {
@@ -83,18 +85,38 @@ export function BookingDetail() {
     return (
       <AppShell>
         <div className="flex h-[60vh] flex-col items-center justify-center gap-3">
-          <div className="text-[14px] font-semibold">Loading booking details...</div>
+          <div className="text-[14px] font-semibold">{getBookingPollCopy("loading").title}...</div>
+          <div className="text-[12px]" style={{ color: "var(--text-3)" }}>
+            {getBookingPollCopy("loading").detail}
+          </div>
         </div>
       </AppShell>
     );
   }
 
-  if (error || !booking) {
+  if (!booking) {
+    const failedPhase = pollPhase === "timeout" || pollPhase === "failure" ? pollPhase : "failure";
+    const copy = error
+      ? getBookingPollCopy(failedPhase)
+      : { title: "Booking not found", detail: "Return to bookings and choose another booking." };
     return (
       <AppShell>
         <div className="flex h-[60vh] flex-col items-center justify-center gap-3 text-center">
           <AlertTriangle className="h-8 w-8" style={{ color: "var(--accent)" }} />
-          <div className="text-[15px] font-semibold">Booking not found or failed to load</div>
+          <div className="text-[15px] font-semibold">{copy.title}</div>
+          <div className="max-w-md text-[12px]" style={{ color: "var(--text-3)" }}>
+            {copy.detail}
+          </div>
+          {error ? (
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="text-[12px] font-semibold"
+              style={{ color: "var(--accent)" }}
+            >
+              Retry
+            </button>
+          ) : null}
           <Link to="/bookings" className="text-[12px]" style={{ color: "var(--accent)" }}>
             ← Back to Bookings
           </Link>
@@ -115,6 +137,8 @@ export function BookingDetail() {
       <BookingActionModal booking={booking} actions={actions} />
 
       <BookingHeader booking={booking} />
+
+      <BookingSyncStatus phase={pollPhase} onRetry={() => void refetch()} />
 
       <DeclinedAssignmentBanner booking={booking} caps={caps} actions={actions} />
 

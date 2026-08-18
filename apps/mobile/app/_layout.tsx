@@ -1,7 +1,7 @@
 import "react-native-gesture-handler";
 import "../global.css";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
@@ -12,9 +12,10 @@ import { NotificationsProvider } from "@/context/NotificationsContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { colors } from "@/theme/tokens";
 import { useAppFonts } from "@/theme/fonts";
+import { createMobileQueryClient } from "@/lib/query-client";
 
 export default function RootLayout() {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(() => createMobileQueryClient());
   const [fontsLoaded] = useAppFonts();
 
   if (!fontsLoaded) {

@@ -55,7 +55,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     data: transitionsResponse,
     isLoading: transitionsLoading,
     error: transitionsError,
-  } = useAllowedTransitions(bookingId);
+  } = useAllowedTransitions(bookingId, booking?.status);
 
   const myAssignments = useMemo(() => {
     if (!booking?.assignments || !authUser?.id) return [];

@@ -100,6 +100,10 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
           setLiveNotifications((prev) => mergeNotification(prev, notification));
           setIsLive(true);
           queryClient.invalidateQueries({ queryKey: ["notifications"] });
+          const hint = `${notification.relatedEntity ?? ""} ${notification.eventType ?? ""} ${notification.type ?? ""}`.toLowerCase();
+          if (hint.includes("booking") || hint.includes("assignment")) {
+            queryClient.invalidateQueries({ queryKey: ["bookings"] });
+          }
         },
         onError: () => {
           setIsLive(false);

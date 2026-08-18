@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { runWithPollTimeout } from "@vortex/utils";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
@@ -7,6 +8,7 @@ import {
   getBookingAllowedTransitionsApi,
   type Booking,
 } from "@/features/bookings/services/bookings.api";
+import { useBookingPollQueryOptions } from "@/features/bookings/hooks/useBookingPoll";
 import {
   ASSIGNMENT_ACTION_IDS,
   TABS,
@@ -35,14 +37,20 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const { can, canAny, permissions } = usePermissions();
 
   const bookingId = booking?.id;
+  const pollOptions = useBookingPollQueryOptions("transitions", booking?.status);
   const {
     data: transitionsResponse,
     isLoading: transitionsLoading,
     error: transitionsError,
   } = useQuery({
     queryKey: ["booking-allowed-transitions", bookingId],
-    queryFn: () => getBookingAllowedTransitionsApi(bookingId!),
+    queryFn: ({ signal }) =>
+      runWithPollTimeout(
+        (pollSignal) => getBookingAllowedTransitionsApi(bookingId!, { signal: pollSignal }),
+        signal,
+      ),
     enabled: !!bookingId,
+    ...pollOptions,
     retry: false,
   });
 

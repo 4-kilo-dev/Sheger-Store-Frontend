@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { getBookingsApi, type Booking, type BookingStatus } from "@/features/bookings/services/bookings.api";
+import { type Booking, type BookingStatus } from "@/features/bookings/services/bookings.api";
+import { useBookingsList } from "@/features/bookings/hooks/useBookingsList";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 import {
   Search, Truck, Loader2, MapPin, Calendar, Users, User,
@@ -230,10 +230,7 @@ function KanbanColumn({
 // ─── Operations Page ──────────────────────────────────────────────────────────
 export function OperationsPage() {
   const [search, setSearch] = useState("");
-  const { data: allBookings = [], isLoading } = useQuery({
-    queryKey: ["bookings"],
-    queryFn: getBookingsApi,
-  });
+  const { data: allBookings = [], isLoading } = useBookingsList();
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

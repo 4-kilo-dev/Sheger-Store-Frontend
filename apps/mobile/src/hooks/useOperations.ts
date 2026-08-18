@@ -1,4 +1,6 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { runWithPollTimeout } from "@vortex/utils";
 import {
   acceptAssignmentApi,
   checkoutReverseApi,
@@ -102,17 +104,54 @@ import {
   updatePerformanceMetricApi,
 } from "@/services/evaluations.api";
 import type { Booking, BookingStatus } from "@/types/domain";
+import { useBookingPollQueryOptions } from "@/hooks/useBookingPoll";
 
-export function useBookings() {
-  return useQuery({ queryKey: ["bookings"], queryFn: getBookingsApi });
+export function useBookings(options?: { poll?: boolean }) {
+  const pollOptions = useBookingPollQueryOptions("list", undefined, options?.poll === true);
+  return useQuery({
+    queryKey: ["bookings"],
+    queryFn: ({ signal }) =>
+      runWithPollTimeout((pollSignal) => getBookingsApi({ signal: pollSignal }), signal),
+    ...(options?.poll === true ? pollOptions : {}),
+  });
 }
 
 export function useBooking(code: string) {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const pollOptions = useBookingPollQueryOptions("detail");
+  const query = useQuery({
     queryKey: ["bookings", code],
-    queryFn: () => getBookingDetailApi(code),
+    queryFn: ({ signal }) =>
+      runWithPollTimeout(
+        (pollSignal) => getBookingDetailApi(code, { signal: pollSignal }),
+        signal,
+      ),
     enabled: !!code,
+    ...pollOptions,
   });
+
+  const booking = query.data;
+  const relatedStamp = `${booking?.id ?? ""}:${booking?.status ?? ""}:${(booking?.assignments ?? [])
+    .map((a) => `${a.id ?? ""}:${a.respondedAt ?? ""}:${a.declineReason ?? ""}`)
+    .join("|")}`;
+  const prevRelatedStamp = useRef(relatedStamp);
+
+  useEffect(() => {
+    if (!booking?.id) return;
+    if (prevRelatedStamp.current === relatedStamp) return;
+    const hadBooking = prevRelatedStamp.current.split(":")[0] !== "";
+    prevRelatedStamp.current = relatedStamp;
+    if (!hadBooking) return;
+    void queryClient.invalidateQueries({
+      queryKey: ["booking-allowed-transitions", booking.id],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["booking-assignments", booking.id],
+    });
+    void queryClient.invalidateQueries({ queryKey: ["bookings"] });
+  }, [booking?.id, queryClient, relatedStamp]);
+
+  return query;
 }
 
 export function useCreateBooking() {
@@ -713,11 +752,17 @@ export function useBookingAssignments(bookingId: string) {
   });
 }
 
-export function useAllowedTransitions(bookingId: string) {
+export function useAllowedTransitions(bookingId: string, status?: string) {
+  const pollOptions = useBookingPollQueryOptions("transitions", status, !!bookingId);
   return useQuery({
     queryKey: ["booking-allowed-transitions", bookingId],
-    queryFn: () => getBookingAllowedTransitionsApi(bookingId),
+    queryFn: ({ signal }) =>
+      runWithPollTimeout(
+        (pollSignal) => getBookingAllowedTransitionsApi(bookingId, { signal: pollSignal }),
+        signal,
+      ),
     enabled: !!bookingId,
+    ...pollOptions,
   });
 }
 

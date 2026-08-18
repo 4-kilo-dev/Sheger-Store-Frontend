@@ -63,7 +63,7 @@ const COLUMNS: {
 ];
 
 export default function OperationsScreen() {
-  const { data: bookings = [], isLoading, isError, refetch } = useBookings();
+  const { data: bookings = [], isLoading, isError, refetch } = useBookings({ poll: true });
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 

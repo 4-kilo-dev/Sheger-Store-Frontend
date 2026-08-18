@@ -45,10 +45,12 @@ import {
   SegmentedTabs,
   TextArea,
 } from "@/components/ui";
+import { getBookingPollCopy } from "@vortex/utils";
 import { BookingActionSheet } from "@/components/booking/BookingActionSheet";
 import { BomFulfillmentConflictSheet } from "@/components/booking/BomFulfillmentConflictSheet";
 import { DamageReportSheet } from "@/components/booking/DamageReportSheet";
 import { AccessLockOverlay } from "@/components/booking/AccessLockOverlay";
+import { BookingSyncStatus } from "@/components/booking/BookingSyncStatus";
 import { alpha, colors, radius } from "@/theme/tokens";
 import type { Booking, BookingStatus } from "@/types/domain";
 import { STATUS_LABELS } from "@/types/domain";
@@ -90,12 +92,28 @@ import {
   useBookingCapabilities,
   type BookingTabName,
 } from "@/hooks/useBookingCapabilities";
+import { getBookingPollPhaseFromQuery } from "@/hooks/useBookingPoll";
 import { createAssignTechnicianAction } from "@/utils/bookingActions";
 import * as Linking from "expo-linking";
 
 export default function BookingDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
-  const { data: booking, isLoading, isError, refetch } = useBooking(params.id);
+  const {
+    data: booking,
+    isLoading,
+    isPending,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useBooking(params.id);
+  const pollPhase = getBookingPollPhaseFromQuery({
+    data: booking,
+    isPending,
+    isFetching,
+    isError,
+    error,
+  });
   const bookingId = booking?.id ?? "";
   const { data: bomLines = [] } = useBomLines(bookingId);
   const safeBomLines = Array.isArray(bomLines) ? bomLines : [];
@@ -151,21 +169,24 @@ export default function BookingDetailScreen() {
   if (isLoading) {
     return (
       <Screen>
-        <LoadingState label="Loading booking..." />
+        <LoadingState label={getBookingPollCopy("loading").title} />
       </Screen>
     );
   }
 
-  if (isError || !booking) {
+  if (!booking) {
+    const failedPhase = pollPhase === "timeout" || pollPhase === "failure" ? pollPhase : "failure";
+    const copy = isError
+      ? getBookingPollCopy(failedPhase)
+      : {
+          title: "Booking not found",
+          detail: "Return to bookings and choose another booking.",
+        };
     return (
       <Screen>
         <ErrorState
-          title={isError ? "Could not load booking" : "Booking not found"}
-          detail={
-            isError
-              ? "Check your connection and try again."
-              : "Return to bookings and choose another booking."
-          }
+          title={copy.title}
+          detail={copy.detail}
           onRetry={isError ? () => refetch() : undefined}
         />
       </Screen>
@@ -249,6 +270,8 @@ export default function BookingDetailScreen() {
         ) : null}
         <StatusStepper current={booking.status} />
       </Card>
+
+      <BookingSyncStatus phase={pollPhase} onRetry={() => refetch()} />
 
       {caps.showFieldOpsBanner ? (
         <Card style={styles.techBanner}>
