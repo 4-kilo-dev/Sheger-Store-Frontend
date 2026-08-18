@@ -12,6 +12,7 @@ import {
   MapPin,
   MessageSquare,
   Package,
+  PhoneCall,
   Paperclip,
   ShieldAlert,
   Star,
@@ -854,6 +855,22 @@ function OverviewTab({
                 keyboardType="phone-pad"
               />
             </Field>
+            {contactPhone.trim() ? (
+              <Button
+                icon={PhoneCall}
+                onPress={async () => {
+                  const phone = contactPhone.trim().replace(/\s+/g, "");
+                  const url = `tel:${phone}`;
+                  try {
+                    await Linking.openURL(url);
+                  } catch {
+                    Alert.alert("Call failed", "Could not open your phone dialer.");
+                  }
+                }}
+              >
+                Call Client Now
+              </Button>
+            ) : null}
             <KV label="Booking Code" value={booking.code} mono />
             <Button
               onPress={async () => {
@@ -889,7 +906,7 @@ function OverviewTab({
           <>
             <KV label="Client" value={booking.client} />
             <KV label="Contact Person" value={booking.contactPerson} />
-            <KV label="Phone" value={booking.contactPhone} mono />
+            <KV label="Phone" value={booking.contactPhone} phone />
             <KV label="Booking Code" value={booking.code} mono />
           </>
         )}

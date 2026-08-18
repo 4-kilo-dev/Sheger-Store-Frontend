@@ -23,10 +23,10 @@ export const ROLE_LAYOUTS: Record<UserRole, RoleLayoutConfig> = {
     widgets: [
       "stats-overview",
       "quick-actions",
-      "pending-tasks",
       "featured-booking",
       "equipment-pool",
       "recent-bookings",
+      "pending-tasks",
       "onsite-deployments",
     ],
     eyebrow: "Today's operations",

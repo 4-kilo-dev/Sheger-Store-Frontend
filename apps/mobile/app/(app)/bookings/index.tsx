@@ -169,6 +169,7 @@ export default function BookingsScreen() {
   );
 
   const activeFilterCount = [statusFilter, assigneeFilter, paymentFilter].filter(Boolean).length;
+  const listStateKey = `${tab}|${statusFilter ?? ""}|${assigneeFilter ?? ""}|${paymentFilter ?? ""}|${query.trim()}`;
 
   const toggle = (code: string) => {
     setSelected((current) => {
@@ -344,6 +345,7 @@ export default function BookingsScreen() {
   return (
     <Screen scroll={false}>
       <NativeList
+        key={listStateKey}
         data={rows}
         extraData={`${query}|${tab}|${statusFilter}|${assigneeFilter}|${paymentFilter}|${selected.size}`}
         keyExtractor={(item) => item.code}

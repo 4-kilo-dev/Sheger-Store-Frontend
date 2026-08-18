@@ -1,10 +1,12 @@
 import { FlashList, type FlashListProps } from "@shopify/flash-list";
 import { router } from "expo-router";
-import type { LucideIcon } from "lucide-react-native";
+import { PhoneCall, type LucideIcon } from "lucide-react-native";
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -308,16 +310,64 @@ function placeholderSafeInput(
   );
 }
 
-export function KV({ label, value, mono }: { label: string; value: ReactNode; mono?: boolean }) {
+export function KV({
+  label,
+  value,
+  mono,
+  phone,
+}: {
+  label: string;
+  value: ReactNode;
+  mono?: boolean;
+  phone?: boolean;
+}) {
   return (
     <View style={styles.kv}>
       <AppText variant="eyebrow" style={styles.kvLabel}>
         {label}
       </AppText>
-      <AppText variant={mono ? "data" : "body"} style={styles.kvValue}>
-        {value}
-      </AppText>
+      {phone && typeof value === "string" && value ? (
+        <PhoneLink number={value} />
+      ) : (
+        <AppText variant={mono ? "data" : "body"} style={styles.kvValue}>
+          {value}
+        </AppText>
+      )}
     </View>
+  );
+}
+
+/**
+ * Tappable phone number that opens the native dialler.
+ */
+export function PhoneLink({ number, label }: { number: string; label?: string }) {
+  const dial = () => {
+    const url = `tel:${number.replace(/\s+/g, "")}`;
+    Linking.canOpenURL(url)
+      .then((supported) => {
+        if (!supported) {
+          Alert.alert("Not supported", "Your device cannot make phone calls.");
+          return;
+        }
+        return Linking.openURL(url);
+      })
+      .catch(() => Alert.alert("Error", "Could not open the dialler."));
+  };
+
+  return (
+    <Pressable
+      onPress={dial}
+      accessibilityRole="button"
+      accessibilityLabel={`Call ${number}`}
+      style={({ pressed }) => [styles.phoneLink, pressed && styles.phoneLinkPressed]}
+    >
+      <View style={styles.phoneIconWrap}>
+        <PhoneCall size={12} color={colors.accentForeground} />
+      </View>
+      <AppText variant="data" style={styles.phoneLinkText}>
+        {label || number}
+      </AppText>
+    </Pressable>
   );
 }
 
@@ -664,6 +714,34 @@ export const styles = StyleSheet.create({
     flex: 1.3,
     textAlign: "right",
     fontWeight: "700",
+  },
+  phoneLink: {
+    flex: 1.3,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+    minHeight: 36,
+    borderWidth: 1,
+    borderColor: alpha(colors.accent, 0.5),
+    backgroundColor: alpha(colors.accent, 0.14),
+    borderRadius: radius.md,
+    paddingHorizontal: 10,
+  },
+  phoneLinkPressed: {
+    opacity: 0.6,
+  },
+  phoneIconWrap: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accent,
+  },
+  phoneLinkText: {
+    fontWeight: "900",
+    color: colors.accent,
   },
   progressTrack: {
     height: 6,
