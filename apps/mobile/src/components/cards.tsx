@@ -1,11 +1,11 @@
-import { router } from "expo-router";
-import { Calendar, MapPin, Package, Users } from "lucide-react-native";
+import { Calendar, Users } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
 import { alpha, colors, radius } from "@/theme/tokens";
 import type { Booking, InventoryItem, StaffMember } from "@/types/domain";
-import { formatCurrency, pct } from "@/utils/format";
+import { STATUS_LABELS } from "@/types/domain";
+import { pct } from "@/utils/format";
 import { AppText, Card, KV, ProgressBar } from "@/components/ui";
-import { PaymentBadge, StatusBadge, ToneBadge } from "@/components/status";
+import { StatusBadge, ToneBadge } from "@/components/status";
 import { push } from "@/utils/routes";
 import type { LucideIcon } from "lucide-react-native";
 
@@ -23,49 +23,22 @@ export function BookingCard({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${booking.code}, ${booking.client}, status ${booking.status}`}
+      accessibilityLabel={`${booking.code}, ${booking.client}, ${STATUS_LABELS[booking.status]}`}
+      accessibilityState={{ selected: Boolean(selected) }}
       onPress={() => push(`/bookings/${booking.code}`)}
-      style={[styles.cardPress, selected ? styles.selectedCard : null]}
+      onLongPress={selectable ? onToggle : undefined}
+      delayLongPress={350}
+      style={[styles.bookingCard, selected ? styles.selectedCard : null]}
     >
-      <View style={styles.cardHeader}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <AppText variant="data" color={colors.accent} style={styles.code}>
-            {booking.code}
-          </AppText>
-          <AppText style={styles.cardTitle} numberOfLines={1}>
-            {booking.client}
-          </AppText>
-        </View>
-        <StatusBadge status={booking.status} />
-      </View>
-      <View style={styles.metaGrid}>
-        <InfoLine icon={MapPin} text={booking.venue} />
-        <InfoLine icon={Calendar} text={booking.eventDate} mono />
-        <InfoLine icon={Package} text={`${booking.screenType} · ${booking.size} sqm`} mono />
-        <InfoLine icon={Users} text={booking.assignees.join(" · ")} />
-      </View>
-      <View style={styles.cardFooter}>
-        <PaymentBadge status={booking.payment} />
-        <AppText variant="data" style={{ fontWeight: "800" }}>
-          {formatCurrency(booking.amount)}
+      <View style={styles.bookingBody}>
+        <AppText variant="data" color={colors.accent} style={styles.code}>
+          {booking.code}
+        </AppText>
+        <AppText style={styles.cardTitle} numberOfLines={1}>
+          {booking.client}
         </AppText>
       </View>
-      {selectable ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={selected ? `Deselect ${booking.code}` : `Select ${booking.code}`}
-          onPress={onToggle}
-          style={[styles.selectButton, selected ? styles.selectButtonActive : null]}
-        >
-          <AppText
-            variant="small"
-            color={selected ? colors.accentForeground : colors.text2}
-            style={{ fontWeight: "800" }}
-          >
-            {selected ? "Selected" : "Select"}
-          </AppText>
-        </Pressable>
-      ) : null}
+      <StatusBadge status={booking.status} />
     </Pressable>
   );
 }
@@ -191,6 +164,23 @@ function MiniStat({ label, value, tone }: { label: string; value: number; tone: 
 }
 
 const styles = StyleSheet.create({
+  bookingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    minHeight: 56,
+  },
+  bookingBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
   cardPress: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -210,12 +200,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   code: {
-    fontSize: 13,
-    fontWeight: "900",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.4,
   },
   cardTitle: {
     fontSize: 14,
-    fontWeight: "900",
+    fontWeight: "800",
   },
   metaGrid: {
     gap: 7,
@@ -231,18 +222,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-  },
-  selectButton: {
-    minHeight: 44,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  selectButtonActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accent,
   },
   inventoryStats: {
     flexDirection: "row",

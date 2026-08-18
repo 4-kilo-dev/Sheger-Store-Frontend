@@ -665,6 +665,10 @@ function CustomFieldSheet({
     const trimmedKey = key.trim() || autoKey;
     if (!trimmedName) { setError("Field name is required."); return; }
     if (!trimmedKey) { setError("Field key is required."); return; }
+    if (!/^[a-z][a-z0-9_]*$/.test(trimmedKey)) {
+      setError("Field key must be snake_case (e.g. hanging_or_sitting).");
+      return;
+    }
     if ((type === "enum" || type === "multi_select") && !optionsText.trim()) {
       setError("Options are required for enum / multi_select fields.");
       return;

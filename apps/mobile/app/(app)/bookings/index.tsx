@@ -30,6 +30,12 @@ import { transitionBookingStatusApi } from "@/services/bookings-api";
 const TABS = ["All", "This Week", "Upcoming", "Onsite", "Last Week", "Assigned to Me"] as const;
 const PAYMENT_STATUSES: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
 
+function matchesQuery(haystack: Array<string | number | null | undefined>, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return haystack.some((part) => String(part ?? "").toLowerCase().includes(needle));
+}
+
 async function runBulkTransitions(
   bookings: Booking[],
   toStatus: BookingStatus,
@@ -120,13 +126,29 @@ export default function BookingsScreen() {
     if (assigneeFilter)
       result = result.filter((booking) => booking.assignees.includes(assigneeFilter));
     if (paymentFilter) result = result.filter((booking) => booking.payment === paymentFilter);
-    if (query) {
-      const lower = query.toLowerCase();
-      result = result.filter(
-        (booking) =>
-          booking.code.toLowerCase().includes(lower) ||
-          booking.client.toLowerCase().includes(lower) ||
-          booking.venue.toLowerCase().includes(lower),
+    if (query.trim()) {
+      result = result.filter((booking) =>
+        matchesQuery(
+          [
+            booking.code,
+            booking.id,
+            booking.client,
+            booking.contactPerson,
+            booking.contactPhone,
+            booking.venue,
+            booking.screenType,
+            booking.arrangement,
+            booking.status,
+            STATUS_LABELS[booking.status],
+            booking.payment,
+            booking.teamLeader,
+            booking.driver,
+            booking.stageHand,
+            booking.size,
+            ...(booking.assignees || []),
+          ],
+          query,
+        ),
       );
     }
     return result;
@@ -272,29 +294,32 @@ export default function BookingsScreen() {
 
   return (
     <Screen scroll={false}>
-      <View style={styles.header}>
-        <View>
+      <View style={styles.toolbar}>
+        <View style={styles.header}>
           <Field label={`${BOOKINGS.length} total`}>
             <Input
               value={query}
               onChangeText={setQuery}
               placeholder="Search code, client, venue..."
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
             />
           </Field>
+          {canCreateBooking ? (
+            <Button icon={Plus} onPress={() => router.push(to("/bookings/new"))}>
+              New Booking
+            </Button>
+          ) : null}
         </View>
-        {canCreateBooking ? (
-          <Button icon={Plus} onPress={() => router.push(to("/bookings/new"))}>
-            New Booking
+
+        <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
+
+        <View style={styles.filterRow}>
+          <Button variant="outline" icon={Filter} onPress={() => setFilterOpen(true)}>
+            {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
           </Button>
-        ) : null}
-      </View>
-
-      <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} />
-
-      <View style={styles.filterRow}>
-        <Button variant="outline" icon={Filter} onPress={() => setFilterOpen(true)}>
-          {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
-        </Button>
+        </View>
       </View>
 
       {selected.size > 0 ? (
@@ -318,8 +343,10 @@ export default function BookingsScreen() {
 
       <NativeList
         data={rows}
+        extraData={`${query}|${tab}|${statusFilter}|${assigneeFilter}|${paymentFilter}|${selected.size}`}
         keyExtractor={(item) => item.code}
         contentContainerStyle={styles.listContent}
+        ItemSeparatorComponent={ListGap}
         ListEmptyComponent={
           <EmptyState title="No bookings" detail="Adjust search or filters to view bookings." />
         }
@@ -438,6 +465,10 @@ export default function BookingsScreen() {
   );
 }
 
+function ListGap() {
+  return <View style={styles.listGap} />;
+}
+
 function FilterChip({
   label,
   active,
@@ -467,6 +498,10 @@ function FilterChip({
 }
 
 const styles = StyleSheet.create({
+  toolbar: {
+    gap: 14,
+    paddingBottom: 4,
+  },
   header: {
     gap: 12,
   },
@@ -489,8 +524,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   listContent: {
-    gap: 12,
+    paddingTop: 12,
     paddingBottom: 112,
+  },
+  listGap: {
+    height: 10,
   },
   choiceWrap: {
     flexDirection: "row",

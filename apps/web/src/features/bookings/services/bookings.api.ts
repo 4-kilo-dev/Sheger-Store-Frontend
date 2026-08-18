@@ -391,7 +391,7 @@ function normalizeBookingDateTime(value?: string | null): string {
 }
 
 function mapBackendBookingToFrontend(b: any): Booking {
-  const customerName = b.customer?.name || "Client";
+  const customerName = b.customer?.name || b.customerName || b.client || "Client";
   const customerPhone = b.customer?.phone || "";
   const contactPerson =
     (typeof b.customer?.notes === "string" && b.customer.notes.trim()
@@ -469,7 +469,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
 
   return {
     id: b.id,
-    code: b.bookingCode || b.id, // Use human-readable bookingCode if available, fallback to id
+    code: b.bookingCode || b.code || b.id, // Use human-readable bookingCode if available, fallback to id
     customerId: b.customerId || b.customer?.id || undefined,
     client: customerName,
     contactPerson,
@@ -479,7 +479,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
     dismantleDate: normalizeBookingDateTime(b.disassemblyEnd || b.rentalEnd),
     rentalStart: b.rentalStart || b.deliveryDate || b.assemblyStart || b.eventDate || "",
     rentalEnd: b.rentalEnd || b.disassemblyEnd || b.eventDate || "",
-    venue: b.eventLocation || "",
+    venue: b.eventLocation || b.venue || b.location || "",
     screenType,
     size,
     arrangement,

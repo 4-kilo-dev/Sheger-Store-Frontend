@@ -54,7 +54,7 @@ function buildEquipmentOptions(
     });
   }
 
-  return booking.bomItems
+  return (booking.bomItems ?? [])
     .filter((item) => item.poolId || item.itemId)
     .map((item) => ({
       key: item.poolId ? `pool:${item.poolId}` : `item:${item.itemId}`,

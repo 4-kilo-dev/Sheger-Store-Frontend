@@ -3,9 +3,10 @@ import { to } from "@/utils/routes";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ArrowRight, ShieldCheck } from "lucide-react-native";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { StyleSheet, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { z } from "zod";
 import { AppText, Button, Card, Field, Input } from "@/components/ui";
 import { useAppContext } from "@/context/AppContext";
@@ -25,6 +26,8 @@ type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
 
 export default function ChangePasswordScreen() {
   const { changePassword } = useAppContext();
+  const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const { control, handleSubmit } = useForm<ChangePasswordForm>({
@@ -47,10 +50,28 @@ export default function ChangePasswordScreen() {
     }
   };
 
+  const revealFields = () => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+  };
+
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       <StatusBar style="light" />
-      <Card style={styles.card}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: Math.max(insets.top, 16), paddingBottom: Math.max(insets.bottom, 16) + 12 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
+        showsVerticalScrollIndicator={false}
+      >
+        <Card style={styles.card}>
         <ShieldCheck size={28} color={colors.accent} />
         <AppText variant="eyebrow" color={colors.accent}>
           Secure your account
@@ -70,6 +91,7 @@ export default function ChangePasswordScreen() {
               <Input
                 value={field.value}
                 onChangeText={field.onChange}
+                onFocus={revealFields}
                 secureTextEntry
                 autoComplete="new-password"
                 textContentType="newPassword"
@@ -90,9 +112,12 @@ export default function ChangePasswordScreen() {
               <Input
                 value={field.value}
                 onChangeText={field.onChange}
+                onFocus={revealFields}
                 secureTextEntry
                 autoComplete="new-password"
                 textContentType="newPassword"
+                returnKeyType="done"
+                onSubmitEditing={handleSubmit(onSubmit)}
               />
               {fieldState.error ? (
                 <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
@@ -111,7 +136,8 @@ export default function ChangePasswordScreen() {
           {submitting ? "Saving..." : "Save & Continue"}
         </Button>
       </Card>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -119,8 +145,11 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
-    padding: 16,
+    paddingHorizontal: 16,
   },
   card: {
     padding: 20,

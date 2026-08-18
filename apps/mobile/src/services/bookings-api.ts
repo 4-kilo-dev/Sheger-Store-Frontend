@@ -41,10 +41,15 @@ interface RawAssignment {
 interface RawBooking {
   id: string;
   bookingCode?: string;
+  code?: string;
   customerId?: string;
+  customerName?: string;
+  client?: string;
   status?: string;
   eventDate?: string;
   eventLocation?: string;
+  venue?: string;
+  location?: string;
   assemblyStart?: string;
   disassemblyEnd?: string;
   itemServiceSpec?: string;
@@ -99,13 +104,66 @@ function parseSqm(value: string): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
+const MOUNT_STYLE_RE = /^(hanging|sitting)$/i;
+
+function isMountStyle(value?: string | null): boolean {
+  return MOUNT_STYLE_RE.test(String(value ?? "").trim());
+}
+
+/** multi_select: ["hanging", "sitting"] → "Hanging & Sitting" */
+function formatMountStyleLabel(value?: string | string[] | null): string {
+  if (Array.isArray(value)) {
+    const labels = value
+      .map((v) => String(v).trim())
+      .filter((v) => isMountStyle(v))
+      .map((v) => v.charAt(0).toUpperCase() + v.slice(1).toLowerCase());
+    return labels.length > 0 ? labels.join(" & ") : "";
+  }
+  const raw = String(value ?? "").trim();
+  if (!isMountStyle(raw)) return "";
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
+function normalizeCustomFieldPayload(
+  raw: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (value === "true") {
+      out[key] = true;
+      continue;
+    }
+    if (value === "false") {
+      out[key] = false;
+      continue;
+    }
+    if (Array.isArray(value)) {
+      out[key] = value.map((v) => String(v).trim()).filter(Boolean);
+      continue;
+    }
+    if (typeof value === "string") {
+      const parts = value
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const allMount = parts.length > 1 && parts.every((p) => isMountStyle(p));
+      out[key] = allMount ? parts : value;
+      continue;
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
 /** Derive display fields from backend spec without inventing defaults for new (spec-less) bookings. */
 function parseBookingScreenFields(b: {
   itemServiceSpec?: string | null;
   screenAreaSqm?: number | string | null;
+  customFields?: Record<string, unknown>;
 }): { screenType: ScreenType | ""; size: number; arrangement: string } {
   const spec = (b.itemServiceSpec || "").trim();
   const specParts = spec ? spec.split(" - ").map((part) => part.trim()) : [];
+  const custom = b.customFields || {};
 
   let screenType: ScreenType | "" = "";
   let size = 0;
@@ -122,11 +180,28 @@ function parseBookingScreenFields(b: {
   const backendSize = Number(b.screenAreaSqm);
   if (Number.isFinite(backendSize) && backendSize > 0) size = backendSize;
 
-  return { screenType, size, arrangement: spec };
+  const hangingOrSitting = custom.hanging_or_sitting;
+  const arrangementFromMount =
+    formatMountStyleLabel(
+      Array.isArray(hangingOrSitting)
+        ? hangingOrSitting.map((v) => String(v))
+        : typeof hangingOrSitting === "string"
+          ? hangingOrSitting
+          : null,
+    ) ||
+    formatMountStyleLabel(
+      typeof custom.arrangement === "string" ? custom.arrangement : null,
+    ) ||
+    formatMountStyleLabel(specParts[specParts.length - 1]);
+
+  const specLooksLikeLayout = /\d/.test(spec) && !isMountStyle(spec);
+  const arrangement = specLooksLikeLayout ? spec : arrangementFromMount || spec;
+
+  return { screenType, size, arrangement };
 }
 
 function mapBackendBookingToFrontend(b: RawBooking): Booking {
-  const customerName = b.customer?.name || "Client";
+  const customerName = b.customer?.name || b.customerName || b.client || "Client";
   const customerPhone = b.customer?.phone || "";
   const contactPerson =
     typeof b.customer?.notes === "string" && b.customer.notes.trim()
@@ -197,7 +272,7 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
 
   return {
     id: b.id,
-    code: b.bookingCode || b.id,
+    code: b.bookingCode || b.code || b.id,
     customerId: b.customerId || b.customer?.id || undefined,
     client: customerName,
     contactPerson,
@@ -207,7 +282,7 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
     dismantleDate: b.disassemblyEnd ? b.disassemblyEnd.slice(0, 10) : "",
     rentalStart: b.rentalStart || b.assemblyStart || b.eventDate || "",
     rentalEnd: b.rentalEnd || b.disassemblyEnd || b.eventDate || "",
-    venue: b.eventLocation || "",
+    venue: b.eventLocation || b.venue || b.location || "",
     screenType,
     size,
     arrangement,
@@ -237,8 +312,17 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
 }
 
 export async function getBookingsApi(): Promise<Booking[]> {
-  const data = await client.get<RawBooking[]>("/api/bookings");
-  return (data || []).map(mapBackendBookingToFrontend);
+  const data = await client.get<RawBooking[] | { data?: RawBooking[]; items?: RawBooking[] }>(
+    "/api/bookings",
+  );
+  const list = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.data)
+      ? data.data
+      : Array.isArray(data?.items)
+        ? data.items
+        : [];
+  return list.map(mapBackendBookingToFrontend);
 }
 
 export async function getBookingDetailApi(id: string): Promise<Booking> {
@@ -315,7 +399,7 @@ export async function createBookingApi(form: {
     disassemblyEnd: dismantleDateStr,
     itemServiceType: "Rental",
     notes: form.notes || "",
-    customFields: form.customValues || form.customFields || {},
+    customFields: normalizeCustomFieldPayload(form.customValues || form.customFields || {}),
   };
 
   if (arrangementText) {
@@ -484,8 +568,12 @@ export async function declineAssignmentApi(assignmentId: string, reason: string)
 }
 
 export async function getBookingBomLinesApi(bookingId: string): Promise<RawBomLine[]> {
-  const data = await client.get<RawBomLine[]>(`/api/bookings/${bookingId}/bom/lines`);
-  return data || [];
+  const data = await client.get<RawBomLine[] | { lines?: RawBomLine[] }>(
+    `/api/bookings/${bookingId}/bom/lines`,
+  );
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.lines)) return data.lines;
+  return [];
 }
 
 export async function createBomLineApi(
@@ -551,7 +639,7 @@ export async function getBookingReservationsApi(
   bookingId: string,
 ): Promise<{ reservations: BookingReservation[] }> {
   const res = await client.get<BookingReservation[] | { reservations?: BookingReservation[] }>(
-    `/api/bookings/${bookingId}/reservations`,
+    `/api/bookings/${bookingId}/reservations?active=true`,
   );
   if (Array.isArray(res)) return { reservations: res };
   return { reservations: res?.reservations ?? [] };

@@ -135,13 +135,7 @@ export function BookingsIndex() {
     can(PERMISSION.BOOKING_EDIT) ||
     canCancel;
   const searchParams = useRouterState({ select: (s) => s.location.search }) as any;
-  const query = searchParams.q || "";
-  const setQuery = (val: string) => {
-    navigate({
-      search: ((prev: any) => ({ ...prev, q: val || undefined })) as any,
-      replace: true,
-    });
-  };
+  const [query, setQuery] = useState(typeof searchParams.q === "string" ? searchParams.q : "");
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkModal, setBulkModal] = useState<"status" | "cancel" | null>(null);
@@ -291,9 +285,28 @@ export function BookingsIndex() {
     if (tab === "Assigned to Me") r = r.filter((b) => b.assignees.includes(authUser?.name || ""));
 
     // Search
-    if (query) {
-      const q = query.toLowerCase();
-      r = r.filter((b) => b.code.toLowerCase().includes(q) || b.client.toLowerCase().includes(q) || b.venue.toLowerCase().includes(q));
+    if (query.trim()) {
+      const q = query.trim().toLowerCase();
+      r = r.filter((b) =>
+        [
+          b.code,
+          b.id,
+          b.client,
+          b.contactPerson,
+          b.contactPhone,
+          b.venue,
+          b.screenType,
+          b.arrangement,
+          b.status,
+          STATUS_LABELS[b.status],
+          b.payment,
+          b.teamLeader,
+          b.driver,
+          b.stageHand,
+          b.size,
+          ...(b.assignees || []),
+        ].some((part) => String(part ?? "").toLowerCase().includes(q)),
+      );
     }
 
     // Status filter

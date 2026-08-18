@@ -24,8 +24,10 @@ export class ErrorBoundary extends Component<Props, State> {
     return { error };
   }
 
-  componentDidCatch(error: Error) {
+  componentDidCatch(error: Error, info: { componentStack?: string | null }) {
     console.error("Unhandled error caught by ErrorBoundary:", error);
+    if (error.stack) console.error(error.stack);
+    if (info.componentStack) console.error(info.componentStack);
   }
 
   reset = () => {

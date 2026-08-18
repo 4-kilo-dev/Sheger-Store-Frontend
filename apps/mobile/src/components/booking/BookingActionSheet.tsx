@@ -69,8 +69,14 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
     isConfirmingWithPayment,
   } = actions;
 
-  const isCheckinAction = isInventoryCheckinAction(selectedAction);
-  const isReverseAction = isCheckoutReverseAction(selectedAction);
+  const isCheckinAction =
+    typeof isInventoryCheckinAction === "function"
+      ? isInventoryCheckinAction(selectedAction)
+      : false;
+  const isReverseAction =
+    typeof isCheckoutReverseAction === "function"
+      ? isCheckoutReverseAction(selectedAction)
+      : false;
 
   const [checkedCheckinItems, setCheckedCheckinItems] = useState<Set<string>>(new Set());
   const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});

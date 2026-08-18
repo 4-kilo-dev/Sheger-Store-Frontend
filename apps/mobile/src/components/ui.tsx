@@ -400,10 +400,20 @@ export function NativeList<T>({
   renderItem,
   keyExtractor,
   ListEmptyComponent,
+  ListHeaderComponent,
+  ItemSeparatorComponent,
+  extraData,
   contentContainerStyle,
 }: Pick<
   FlashListProps<T>,
-  "data" | "renderItem" | "keyExtractor" | "ListEmptyComponent" | "contentContainerStyle"
+  | "data"
+  | "renderItem"
+  | "keyExtractor"
+  | "ListEmptyComponent"
+  | "ListHeaderComponent"
+  | "ItemSeparatorComponent"
+  | "extraData"
+  | "contentContainerStyle"
 >) {
   return (
     <FlashList
@@ -411,8 +421,14 @@ export function NativeList<T>({
       data={data}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
+      extraData={extraData}
       ListEmptyComponent={ListEmptyComponent}
+      ListHeaderComponent={ListHeaderComponent}
+      ItemSeparatorComponent={ItemSeparatorComponent}
       contentContainerStyle={contentContainerStyle}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      showsVerticalScrollIndicator={false}
     />
   );
 }

@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { FilterDropdown, SortButton } from "@/components/filter-dropdown";
 import { useQuery } from "@tanstack/react-query";
 import {
-  INVENTORY_CATEGORIES,
   type InventoryCondition,
   type InventoryItem,
   getCombinedInventoryApi,
@@ -61,18 +60,35 @@ export function InventoryPage() {
   );
 
   const categoryTabs = useMemo(() => {
-    const live = [...new Set(inventoryList.map((i) => i.category).filter(Boolean))].sort();
-    const staticWithoutAll = INVENTORY_CATEGORIES.filter((c) => c !== "All") as string[];
-    const merged = ["All", ...new Set([...staticWithoutAll, ...live])];
-    return merged;
+    const names = new Set<string>();
+    for (const item of inventoryList) {
+      const name = item.category?.trim();
+      if (name) names.add(name);
+    }
+    return ["All", ...[...names].sort((a, b) => a.localeCompare(b))];
   }, [inventoryList]);
 
   const rows = useMemo(() => {
-    let items = inventoryList.filter(
-      (item) =>
-        (category === "All" || item.category === category) &&
-        `${item.id} ${item.name} ${item.model}`.toLowerCase().includes(query.toLowerCase())
-    );
+    const needle = query.trim().toLowerCase();
+    let items = inventoryList.filter((item) => {
+      const categoryOk =
+        category === "All" ||
+        (item.category || "").trim().toLowerCase() === category.trim().toLowerCase();
+      if (!categoryOk) return false;
+      if (!needle) return true;
+      return [
+        item.id,
+        item.entityId,
+        item.name,
+        item.model,
+        item.category,
+        item.sku,
+        item.assetTag,
+        item.serialNumber,
+        item.location,
+        item.notes,
+      ].some((part) => String(part ?? "").toLowerCase().includes(needle));
+    });
 
     if (conditionFilter.size > 0) items = items.filter((item) => conditionFilter.has(item.condition));
     if (locationFilter.size > 0) items = items.filter((item) => locationFilter.has(item.location));

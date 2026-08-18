@@ -4,10 +4,18 @@ import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { ArrowRight, Eye, EyeOff, LockKeyhole } from "lucide-react-native";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { z } from "zod";
 import { AppText, BrandMark, Button, Field, Input } from "@/components/ui";
 import { useAppContext } from "@/context/AppContext";
@@ -22,6 +30,8 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginScreen() {
   const { login } = useAppContext();
+  const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -29,6 +39,10 @@ export default function LoginScreen() {
     defaultValues: { email: "", password: "" },
     resolver: zodResolver(loginSchema),
   });
+
+  const revealFields = () => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+  };
 
   const onSubmit = async (values: LoginForm) => {
     setFormError(null);
@@ -45,43 +59,56 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.screen}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={0}
     >
       <StatusBar style="light" />
-      <View style={styles.hero}>
-        <LinearGradient
-          colors={[colors.accentDim + "3d", "transparent"]}
-          start={{ x: 0.1, y: 0 }}
-          end={{ x: 0.9, y: 0.85 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <Animated.View entering={FadeIn.duration(500)}>
-          <BrandMark />
-        </Animated.View>
-        <Animated.View entering={FadeInDown.duration(600).delay(120)}>
-          <AppText variant="eyebrow" color={colors.accent}>
-            Operations platform
-          </AppText>
-          <AppText variant="title" style={styles.heroTitle}>
-            Every screen. Every crew.{"\n"}
-            <AppText variant="title" style={[styles.heroTitle, styles.heroTitleItalic]}>
-              One clear operation.
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 16) + 12 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.hero, { paddingTop: Math.max(insets.top, 24) + 16 }]}>
+          <LinearGradient
+            colors={[colors.accentDim + "3d", "transparent"]}
+            start={{ x: 0.1, y: 0 }}
+            end={{ x: 0.9, y: 0.85 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <Animated.View entering={FadeIn.duration(500)}>
+            <BrandMark />
+          </Animated.View>
+          <Animated.View entering={FadeInDown.duration(600).delay(120)}>
+            <AppText variant="eyebrow" color={colors.accent}>
+              Operations platform
             </AppText>
-          </AppText>
-          <AppText variant="subtitle" style={{ marginTop: 14 }}>
-            Coordinate bookings, warehouse movement, installations, and client delivery from a
-            single control room.
-          </AppText>
-        </Animated.View>
-        <Animated.View entering={FadeIn.duration(500).delay(300)}>
-          <AppText variant="small" color={colors.text3}>
-            Internal access · Addis Ababa, Ethiopia
-          </AppText>
-        </Animated.View>
-      </View>
+            <AppText variant="title" style={styles.heroTitle}>
+              Every screen. Every crew.{"\n"}
+              <AppText variant="title" style={[styles.heroTitle, styles.heroTitleItalic]}>
+                One clear operation.
+              </AppText>
+            </AppText>
+            <AppText variant="subtitle" style={{ marginTop: 14 }}>
+              Coordinate bookings, warehouse movement, installations, and client delivery from a
+              single control room.
+            </AppText>
+          </Animated.View>
+          <Animated.View entering={FadeIn.duration(500).delay(300)}>
+            <AppText variant="small" color={colors.text3}>
+              Internal access · Addis Ababa, Ethiopia
+            </AppText>
+          </Animated.View>
+        </View>
 
-      <Animated.View entering={FadeInDown.duration(500).delay(180)} style={styles.formPanel}>
+        <Animated.View entering={FadeInDown.duration(500).delay(180)} style={styles.formPanel}>
         <LockKeyhole size={26} color={colors.accent} strokeWidth={1.75} />
         <AppText variant="title" style={{ fontSize: 22 }}>
           Sign in to operations
@@ -95,11 +122,13 @@ export default function LoginScreen() {
               <Input
                 value={field.value}
                 onChangeText={field.onChange}
+                onFocus={revealFields}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
                 textContentType="emailAddress"
                 placeholder="your-email@example.com"
+                returnKeyType="next"
               />
               {fieldState.error ? (
                 <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
@@ -118,11 +147,14 @@ export default function LoginScreen() {
                 <Input
                   value={field.value}
                   onChangeText={field.onChange}
+                  onFocus={revealFields}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoComplete="password"
                   textContentType="password"
                   style={styles.passwordInput}
+                  returnKeyType="done"
+                  onSubmitEditing={handleSubmit(onSubmit)}
                 />
                 <Pressable
                   accessibilityRole="button"
@@ -157,7 +189,8 @@ export default function LoginScreen() {
         <AppText variant="small" color={colors.text3} style={{ textAlign: "center" }}>
           Access is restricted to authorized Vortex Visual staff.
         </AppText>
-      </Animated.View>
+        </Animated.View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -167,15 +200,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  hero: {
+  scroll: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  hero: {
+    flexGrow: 1,
     justifyContent: "space-between",
+    gap: 24,
     padding: 24,
-    paddingTop: 64,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     overflow: "hidden",
+    minHeight: 280,
   },
   heroTitle: {
     marginTop: 16,

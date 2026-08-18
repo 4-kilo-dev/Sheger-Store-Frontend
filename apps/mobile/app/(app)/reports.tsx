@@ -27,6 +27,7 @@ import {
 import { useAppContext } from "@/context/AppContext";
 import { colors } from "@/theme/tokens";
 import { formatCompactCurrency, formatCurrency, pct } from "@/utils/format";
+import { useDateFormatter } from "@/context/CalendarSystemContext";
 import {
   getBookingsReportApi,
   getCanceledBookingsReportApi,
@@ -689,12 +690,21 @@ function StaffWorkSheetsTab({
     typeof useQuery<Awaited<ReturnType<typeof getDriverTripsReportApi>>>
   >;
 }) {
+  const { formatDate } = useDateFormatter();
   const freelancers = freelancerQuery.data || [];
   const trips = driverTripsReportQuery.data || [];
+  const rangeLabel =
+    sheetStartDate || sheetEndDate
+      ? `${sheetStartDate ? formatDate(sheetStartDate) : "…"} → ${sheetEndDate ? formatDate(sheetEndDate) : "…"}`
+      : "all time";
 
   return (
     <View style={{ gap: 12 }}>
-      <Section title="Work Sheet Filters" icon={Users}>
+      <Section title="Staff & Freelancer Workload Period" icon={Users}>
+        <AppText variant="small" color={colors.text2}>
+          DONE bookings only. Each assigned staff or freelancer receives the full booking square
+          meters. Changing dates reloads automatically.
+        </AppText>
         <View style={styles.filterRow}>
           <View style={{ flex: 1 }}>
             <Input
@@ -713,23 +723,31 @@ function StaffWorkSheetsTab({
         </View>
       </Section>
 
-      <Section title="Freelancer Workload" icon={Users} aside={`${freelancers.length}`}>
+      <Section
+        title="Staff & Freelancer Workload"
+        icon={Users}
+        aside={`${freelancers.length}`}
+      >
+        <AppText variant="small" color={colors.text2}>
+          Bookings worked and total screen square meters per crew member · {rangeLabel}
+        </AppText>
         {freelancerQuery.isLoading ? (
-          <LoadingState label="Loading freelancer workload..." />
+          <LoadingState label="Loading crew workload..." />
         ) : freelancerQuery.isError ? (
           <ErrorState
-            detail="Could not load freelancer workload."
+            detail="Could not load crew workload."
             onRetry={() => freelancerQuery.refetch()}
           />
         ) : freelancers.length === 0 ? (
-          <AppText variant="subtitle">No freelancer workload in this range.</AppText>
+          <AppText variant="subtitle">No crew DONE assignments found for this period.</AppText>
         ) : (
           freelancers.map((row) => (
             <View key={row.userId} style={styles.lineTop}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <AppText style={{ fontWeight: "800" }}>{row.name}</AppText>
                 <AppText variant="small" color={colors.text2}>
-                  {row.email || "—"}
+                  {row.isFreelancer ? "Freelancer" : "Staff"}
+                  {row.email ? ` · ${row.email}` : ""}
                 </AppText>
               </View>
               <AppText variant="data">
@@ -772,8 +790,9 @@ function StaffWorkSheetsTab({
           icon={Download}
           onPress={() => {
             const freelanceRows = freelancers.map((row) => ({
-              sheet: "freelancer",
+              sheet: "crew",
               name: row.name,
+              classification: row.isFreelancer ? "Freelancer" : "Staff",
               email: row.email || "",
               bookings: row.bookingsCount,
               sqm: row.sqmCovered,

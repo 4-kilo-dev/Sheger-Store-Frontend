@@ -97,6 +97,7 @@ export default function BookingDetailScreen() {
   const { data: booking, isLoading, isError, refetch } = useBooking(params.id);
   const bookingId = booking?.id ?? "";
   const { data: bomLines = [] } = useBomLines(bookingId);
+  const safeBomLines = Array.isArray(bomLines) ? bomLines : [];
   const { data: assignments = [] } = useBookingAssignments(bookingId);
   const { data: internalEval } = useInternalEvaluation(bookingId);
   const { data: clientEval } = useClientEvaluation(bookingId);
@@ -384,7 +385,7 @@ export default function BookingDetailScreen() {
         />
       ) : null}
       {safeTab === "Equipment" ? (
-        <EquipmentTab booking={booking} bomLines={bomLines} canEditBom={caps.canEditBom} />
+        <EquipmentTab booking={booking} bomLines={safeBomLines} canEditBom={caps.canEditBom} />
       ) : null}
       {safeTab === "Payments" ? <PaymentsTab booking={booking} /> : null}
       {safeTab === "Files" ? <FilesTab booking={booking} attachments={attachments} /> : null}
@@ -1294,7 +1295,8 @@ function EquipmentTab({
 }) {
   const { can } = usePermissions();
   const canEditBom = canEditBomProp ?? can(PERMISSION.BOM_CREATE);
-  const { data: pools = [] } = useInventory();
+  const { data: inventoryRows } = useInventory();
+  const pools = Array.isArray(inventoryRows) ? inventoryRows : [];
   const createBomLine = useCreateBomLine();
   const deleteBomLine = useDeleteBomLine();
   const [addOpen, setAddOpen] = useState(false);
@@ -1303,18 +1305,35 @@ function EquipmentTab({
   const [bomError, setBomError] = useState<string | null>(null);
   const [poolQuery, setPoolQuery] = useState("");
 
-  const items = bomLines.map((line) => ({
+  const lines = Array.isArray(bomLines) ? bomLines : [];
+
+  const items = lines.map((line) => ({
     id: line.id,
     name: line.item?.name || line.pool?.name || "Equipment Line",
-    qty: parseFloat(line.quantity),
+    qty: parseFloat(String(line.quantity ?? "0")),
     status: line.acceptedShortfall ? "Checked Out" : "Reserved",
   }));
 
   const filteredPools = useMemo(() => {
+    const stagedPoolIds = new Set(
+      lines.map((line) => line.poolId).filter((id): id is string => Boolean(id)),
+    );
+    const selectable = pools.filter((pool) => {
+      if (pool.entityKind === "item") return false;
+      const poolId = pool.poolId || pool.entityId || pool.id;
+      if (!poolId || stagedPoolIds.has(poolId)) return false;
+      return true;
+    });
     const q = poolQuery.trim().toLowerCase();
-    if (!q) return pools;
-    return pools.filter((pool) => (pool.name || "").toLowerCase().includes(q));
-  }, [pools, poolQuery]);
+    if (!q) return selectable;
+    return selectable.filter((pool) => {
+      const haystack = [pool.name, pool.category, pool.sku, String(pool.total ?? "")]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [pools, poolQuery, lines]);
 
   const handleAddLine = async () => {
     if (!selectedPoolId) return;
@@ -1395,8 +1414,10 @@ function EquipmentTab({
                     {
                       text: "Remove",
                       style: "destructive",
-                      onPress: () =>
-                        deleteBomLine.mutate({ bookingId: booking.id, lineId: item.id }),
+                      onPress: () => {
+                        if (typeof deleteBomLine.mutate !== "function") return;
+                        deleteBomLine.mutate({ bookingId: booking.id, lineId: item.id });
+                      },
                     },
                   ],
                 )
@@ -1417,41 +1438,50 @@ function EquipmentTab({
           setPoolQuery("");
         }}
       >
-        <Field label="Search equipment">
-          <Input
-            value={poolQuery}
-            onChangeText={setPoolQuery}
-            placeholder="Type to filter pools…"
-          />
-        </Field>
-        <Field label="Equipment Pool">
-          <View style={styles.choiceWrap}>
-            {filteredPools.map((pool) => (
-              <Choice
-                key={pool.id}
-                label={pool.name}
-                active={selectedPoolId === (pool.poolId || pool.id)}
-                onPress={() => setSelectedPoolId(pool.poolId || pool.id)}
+        {addOpen ? (
+          <>
+            <Field label="Search equipment">
+              <Input
+                value={poolQuery}
+                onChangeText={setPoolQuery}
+                placeholder="Search equipment, category, stock…"
               />
-            ))}
-            {filteredPools.length === 0 ? (
-              <AppText variant="small" color={colors.text3}>
-                No equipment matches.
+            </Field>
+            <Field label="Equipment Pool">
+              <View style={styles.choiceWrap}>
+                {filteredPools.map((pool) => {
+                  const poolId = pool.poolId || pool.entityId || pool.id;
+                  return (
+                    <Choice
+                      key={poolId || pool.id}
+                      label={`${pool.name} (${pool.category || "General"})${
+                        pool.total != null ? ` — stock ${pool.total}` : ""
+                      }`}
+                      active={selectedPoolId === poolId}
+                      onPress={() => setSelectedPoolId(poolId)}
+                    />
+                  );
+                })}
+                {filteredPools.length === 0 ? (
+                  <AppText variant="small" color={colors.text3}>
+                    No equipment matches.
+                  </AppText>
+                ) : null}
+              </View>
+            </Field>
+            <Field label="Quantity">
+              <Input value={quantity} onChangeText={setQuantity} keyboardType="numeric" />
+            </Field>
+            {bomError ? (
+              <AppText variant="small" color={colors.destructive}>
+                {bomError}
               </AppText>
             ) : null}
-          </View>
-        </Field>
-        <Field label="Quantity">
-          <Input value={quantity} onChangeText={setQuantity} keyboardType="numeric" />
-        </Field>
-        {bomError ? (
-          <AppText variant="small" color={colors.destructive}>
-            {bomError}
-          </AppText>
+            <Button disabled={createBomLine.isPending} onPress={handleAddLine}>
+              {createBomLine.isPending ? "Adding..." : "Add Line"}
+            </Button>
+          </>
         ) : null}
-        <Button disabled={createBomLine.isPending} onPress={handleAddLine}>
-          {createBomLine.isPending ? "Adding..." : "Add Line"}
-        </Button>
       </BottomSheet>
     </Section>
   );

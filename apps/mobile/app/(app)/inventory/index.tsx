@@ -11,12 +11,10 @@ import {
   Field,
   Input,
   LoadingState,
-  NativeList,
   Screen,
   SegmentedTabs,
   StatCard,
 } from "@/components/ui";
-import { INVENTORY_CATEGORIES } from "@/data/mock";
 import {
   useCreateInventoryCategory,
   useCreateInventoryItem,
@@ -27,10 +25,21 @@ import {
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { alpha, colors } from "@/theme/tokens";
-import type { InventoryCondition, InventoryAvailability } from "@/types/domain";
+import type { InventoryCondition, InventoryAvailability, InventoryItem } from "@/types/domain";
 
 const CONDITIONS: InventoryCondition[] = ["GOOD", "SERVICE DUE", "DAMAGED"];
 const AVAILABILITIES: InventoryAvailability[] = ["AVAILABLE", "RESERVED", "ONSITE"];
+
+function matchesQuery(haystack: Array<string | number | null | undefined>, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return haystack.some((part) => String(part ?? "").toLowerCase().includes(needle));
+}
+
+function matchesCategory(item: InventoryItem, category: string): boolean {
+  if (category === "All") return true;
+  return (item.category || "").trim().toLowerCase() === category.trim().toLowerCase();
+}
 
 function toCategoryKey(name: string): string {
   return name
@@ -43,9 +52,10 @@ function toCategoryKey(name: string): string {
 
 export default function InventoryScreen() {
   const { data: INVENTORY = [], isLoading, isError, refetch } = useInventory();
+  const { data: categoryRecords = [] } = useInventoryCategories();
   const { can } = usePermissions();
   const canManageInventory = can(PERMISSION.INVENTORY_MANAGE);
-  const [category, setCategory] = useState<(typeof INVENTORY_CATEGORIES)[number]>("All");
+  const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [conditionFilter, setConditionFilter] = useState<InventoryCondition | null>(null);
@@ -68,19 +78,53 @@ export default function InventoryScreen() {
   );
 
   const locations = useMemo(
-    () => Array.from(new Set(INVENTORY.map((item) => item.location))).filter(Boolean),
+    () => Array.from(new Set(INVENTORY.map((item) => item.location).filter(Boolean))).sort(),
     [INVENTORY],
   );
+
+  const categoryTabs = useMemo(() => {
+    const names = new Set<string>();
+    for (const item of INVENTORY) {
+      const name = item.category?.trim();
+      if (name) names.add(name);
+    }
+    for (const record of categoryRecords) {
+      if (record.isActive === false) continue;
+      const name = record.name?.trim();
+      if (name) names.add(name);
+    }
+    return ["All", ...[...names].sort((a, b) => a.localeCompare(b))];
+  }, [INVENTORY, categoryRecords]);
+
+  useEffect(() => {
+    if (category !== "All" && !categoryTabs.includes(category)) {
+      setCategory("All");
+    }
+  }, [category, categoryTabs]);
 
   const rows = useMemo(
     () =>
       INVENTORY.filter(
         (item) =>
-          (category === "All" || item.category === category) &&
+          matchesCategory(item, category) &&
           (!conditionFilter || item.condition === conditionFilter) &&
           (!availabilityFilter || item.availability === availabilityFilter) &&
           (!locationFilter || item.location === locationFilter) &&
-          `${item.id} ${item.name} ${item.model}`.toLowerCase().includes(query.toLowerCase()),
+          matchesQuery(
+            [
+              item.id,
+              item.entityId,
+              item.name,
+              item.model,
+              item.category,
+              item.sku,
+              item.assetTag,
+              item.serialNumber,
+              item.location,
+              item.notes,
+            ],
+            query,
+          ),
       ),
     [INVENTORY, category, query, conditionFilter, availabilityFilter, locationFilter],
   );
@@ -106,73 +150,78 @@ export default function InventoryScreen() {
   }
 
   return (
-    <Screen scroll={false}>
-      <View style={styles.header}>
-        <View>
+    <Screen>
+      <View style={styles.listHeader}>
+        <View style={styles.header}>
           <Field label="Warehouse Control">
             <Input
               value={query}
               onChangeText={setQuery}
               placeholder="Search item, asset code, model..."
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
             />
           </Field>
+          {canManageInventory ? (
+            <Button icon={Boxes} onPress={() => setAddOpen(true)}>
+              Add Inventory Item
+            </Button>
+          ) : null}
         </View>
-        {canManageInventory ? (
-          <Button icon={Boxes} onPress={() => setAddOpen(true)}>
-            Add Inventory Item
+
+        <View style={styles.stats}>
+          <View style={styles.statTile}>
+            <StatCard
+              label="Total Units"
+              value={totals.units}
+              icon={Boxes}
+              tone={colors.foreground}
+            />
+          </View>
+          <View style={styles.statTile}>
+            <StatCard
+              label="Available Now"
+              value={totals.available}
+              icon={PackageCheck}
+              tone={colors.success}
+            />
+          </View>
+          <View style={styles.statTile}>
+            <StatCard
+              label="Currently Onsite"
+              value={totals.onsite}
+              icon={Wrench}
+              tone={colors.status.ACCEPTED}
+            />
+          </View>
+          <View style={styles.statTile}>
+            <StatCard
+              label="Damaged / Hold"
+              value={totals.attention}
+              icon={ShieldAlert}
+              tone={colors.destructive}
+            />
+          </View>
+        </View>
+
+        <SegmentedTabs tabs={categoryTabs} value={category} onChange={setCategory} />
+        <View style={styles.filterRow}>
+          <Button variant="outline" icon={Filter} onPress={() => setFiltersOpen(true)}>
+            {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
           </Button>
-        ) : null}
-      </View>
-
-      <View style={styles.stats}>
-        <View style={styles.statTile}>
-          <StatCard
-            label="Total Units"
-            value={totals.units}
-            icon={Boxes}
-            tone={colors.foreground}
-          />
-        </View>
-        <View style={styles.statTile}>
-          <StatCard
-            label="Available Now"
-            value={totals.available}
-            icon={PackageCheck}
-            tone={colors.success}
-          />
-        </View>
-        <View style={styles.statTile}>
-          <StatCard
-            label="Currently Onsite"
-            value={totals.onsite}
-            icon={Wrench}
-            tone={colors.status.ACCEPTED}
-          />
-        </View>
-        <View style={styles.statTile}>
-          <StatCard
-            label="Damaged / Hold"
-            value={totals.attention}
-            icon={ShieldAlert}
-            tone={colors.destructive}
-          />
         </View>
       </View>
 
-      <SegmentedTabs tabs={INVENTORY_CATEGORIES} value={category} onChange={setCategory} />
-      <View style={styles.filterRow}>
-        <Button variant="outline" icon={Filter} onPress={() => setFiltersOpen(true)}>
-          {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
-        </Button>
-      </View>
-
-      <NativeList
-        data={rows}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={<EmptyState title="No inventory items" />}
-        renderItem={({ item }) => <InventoryCard item={item} />}
-      />
+      {rows.length === 0 ? (
+        <EmptyState title="No inventory items" />
+      ) : (
+        <View style={styles.listContent}>
+          {rows.map((item) => (
+            <InventoryCard key={item.entityId || item.id} item={item} />
+          ))}
+        </View>
+      )}
 
       <BottomSheet
         visible={filtersOpen}
@@ -426,6 +475,10 @@ function AddInventorySheet({ visible, onClose }: { visible: boolean; onClose: ()
 }
 
 const styles = StyleSheet.create({
+  listHeader: {
+    gap: 16,
+    marginBottom: 12,
+  },
   header: {
     gap: 12,
   },
@@ -445,7 +498,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     gap: 12,
-    paddingBottom: 112,
   },
   chipWrap: {
     flexDirection: "row",

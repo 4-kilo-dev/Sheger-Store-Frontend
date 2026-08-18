@@ -49,7 +49,7 @@ export default function NewBookingScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const createBooking = useCreateBooking();
   const { data: customFields = [] } = useCustomFieldDefinitions();
-  const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
   const [form, setForm] = useState<BookingDraft>({
     client: "",
     contactPerson: "",
@@ -67,7 +67,7 @@ export default function NewBookingScreen() {
   const set = <K extends keyof BookingDraft>(key: K, value: BookingDraft[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
 
-  const setCustom = (key: string, value: string) =>
+  const setCustom = (key: string, value: unknown) =>
     setCustomValues((prev) => ({ ...prev, [key]: value }));
 
   /** Mirrors web's NewBookingPage getStepErrors — blocks Continue until the step is valid. */
@@ -334,7 +334,7 @@ export default function NewBookingScreen() {
                       {field.options.map((opt) => {
                         const raw = customValues[field.key];
                         const selected = Array.isArray(raw)
-                          ? raw
+                          ? raw.map((v) => String(v))
                           : typeof raw === "string" && raw
                           ? raw.split(",").map((s) => s.trim()).filter(Boolean)
                           : [];
@@ -348,7 +348,7 @@ export default function NewBookingScreen() {
                               const next = active
                                 ? selected.filter((v) => v !== opt)
                                 : [...selected, opt];
-                              setCustom(field.key, next.join(","));
+                              setCustom(field.key, next);
                             }}
                           />
                         );
@@ -356,20 +356,20 @@ export default function NewBookingScreen() {
                     </View>
                   ) : field.type === "date" ? (
                     <Input
-                      value={customValues[field.key] || ""}
+                      value={String(customValues[field.key] ?? "")}
                       onChangeText={(value) => setCustom(field.key, value)}
                       placeholder="YYYY-MM-DD"
                     />
                   ) : field.type === "number" ? (
                     <Input
-                      value={customValues[field.key] || ""}
+                      value={String(customValues[field.key] ?? "")}
                       onChangeText={(value) => setCustom(field.key, value)}
                       placeholder={field.name}
                       keyboardType="numeric"
                     />
                   ) : (
                     <Input
-                      value={customValues[field.key] || ""}
+                      value={String(customValues[field.key] ?? "")}
                       onChangeText={(value) => setCustom(field.key, value)}
                       placeholder={field.name}
                     />

@@ -139,8 +139,8 @@ export default function StaffScreen() {
     );
   }
 
-  return (
-    <Screen scroll={false}>
+  const ListHeader = () => (
+    <>
       <View style={styles.header}>
         <View>
           <Field label="People Operations">
@@ -148,11 +148,15 @@ export default function StaffScreen() {
               value={query}
               onChangeText={setQuery}
               placeholder="Search staff, role or team..."
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
             />
           </Field>
         </View>
         {canManageStaff ? <Button onPress={() => setAddOpen(true)}>Add Staff Member</Button> : null}
       </View>
+
       <View style={styles.stats}>
         <StatCard
           label="Total Staff"
@@ -167,14 +171,22 @@ export default function StaffScreen() {
           icon={UserCheck}
         />
       </View>
+
       <SegmentedTabs tabs={roleTabs} value={role} onChange={setRole} />
+
       <AppText variant="small" color={colors.text3}>
         {rows.length} staff visible
       </AppText>
+    </>
+  );
+
+  return (
+    <Screen scroll={false}>
       <NativeList
         data={rows}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={ListHeader}
         renderItem={({ item }) => (
           <View style={{ gap: 8 }}>
             <StaffCard staff={item} />
