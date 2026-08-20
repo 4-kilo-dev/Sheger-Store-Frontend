@@ -131,6 +131,14 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     (can(PERMISSION.BOM_CREATE) ||
       (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned) ||
       can(PERMISSION.BOOKING_EDIT));
+  const canAddBomMaterials =
+    canEditBom ||
+    (booking?.status === "ONSITE" &&
+      myAssignments.some(
+        (assignment: any) =>
+          assignment.roleContext === "TECHNICIAN" || assignment.roleContext === "OO",
+      ) &&
+      !can(PERMISSION.BOM_CREATE));
   /** Soft-hold create/release — inventory.reserve (not warehouse checkout). */
   const canWriteTechnicalHolds = can(PERMISSION.INVENTORY_RESERVE);
   const showOpsSidebar = canAny([
@@ -229,7 +237,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     );
     if (fromTransitions) return fromTransitions;
 
-    if (booking.status === "CONFIRMED" || booking.status === "ASSIGNED") {
+    if (["CONFIRMED", "ASSIGNED", "ACCEPTED", "PREPARATION", "ONSITE"].includes(booking.status)) {
       return createAssignTechnicianAction();
     }
 
@@ -272,6 +280,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     canAssignCrew,
     canReverseCheckout,
     canEditBom,
+    canAddBomMaterials,
     canWriteTechnicalHolds,
     showOpsSidebar,
     showTechAcceptedWorkspace,

@@ -64,6 +64,7 @@ export function EquipmentTab({
 }) {
   const { formatDateTime } = useDateFormatter();
   const isEditable = caps.canEditBom;
+  const canAddMaterials = caps.canAddBomMaterials;
   const bom = useBookingBom(b, true);
 
   const selectablePools = useMemo(
@@ -92,7 +93,7 @@ export function EquipmentTab({
 
   return (
     <div className="space-y-4">
-      {!isEditable && (
+      {!canAddMaterials && (
         <div
           className="rounded-lg border px-4 py-3 text-[12px] font-semibold leading-relaxed"
           style={{
@@ -102,12 +103,13 @@ export function EquipmentTab({
           }}
         >
           BOM editing is available when this booking is <strong>ACCEPTED</strong> or{" "}
-          <strong>PREPARATION</strong>
+          <strong>PREPARATION</strong>. Assigned technicians and OOs can add material during{" "}
+          <strong>ONSITE</strong> with a reason.
           {b.status ? ` (current: ${b.status})` : ""}. Advance the booking status first, then add
           equipment lines.
         </div>
       )}
-      {isEditable && (
+      {canAddMaterials && (
         <Section title="BOM Creator - Add Items" icon={Package}>
           <form onSubmit={bom.handleAddItem} className="flex flex-col md:flex-row items-end gap-3">
             <div className="flex-1 w-full">
@@ -186,6 +188,23 @@ export function EquipmentTab({
                 can adjust before checkout.
               </span>
             </div>
+          )}
+
+          {b.status === "ONSITE" && (
+            <label
+              className="mt-3 block text-[11px] font-semibold"
+              style={{ color: "var(--text-2)" }}
+            >
+              Reason for Onsite Addition
+              <textarea
+                value={bom.onsiteReason}
+                onChange={(event) => bom.setOnsiteReason(event.target.value)}
+                rows={2}
+                placeholder="Why is this material being added onsite?"
+                className="mt-1 w-full rounded border bg-[var(--surface-2)] px-2.5 py-2 text-[12px] font-normal"
+                style={{ borderColor: "var(--border)" }}
+              />
+            </label>
           )}
 
           {bom.staged.length > 0 && (
@@ -279,7 +298,7 @@ export function EquipmentTab({
                   style={{ color: "var(--text-3)" }}
                 >
                   No items in Bill of Materials.
-                  {isEditable
+                  {canAddMaterials
                     ? " Add items using the BOM Creator above."
                     : " Advance to ACCEPTED or PREPARATION to edit the BOM."}
                 </td>

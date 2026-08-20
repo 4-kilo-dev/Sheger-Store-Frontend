@@ -41,6 +41,7 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
   const [selectedPoolId, setSelectedPoolId] = useState("");
   const [addQty, setAddQty] = useState(1);
   const [staged, setStaged] = useState<StagedBomItem[]>([]);
+  const [onsiteReason, setOnsiteReason] = useState("");
 
   const { data: pools = [], isLoading: poolsLoading } = useQuery({
     queryKey: ["inventory-pools"],
@@ -100,7 +101,11 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
     mutationFn: async (items: { poolId: string; quantity: number }[]) => {
       const results = await Promise.allSettled(
         items.map((it) =>
-          createBomLineApi(booking.id, { poolId: it.poolId, quantity: String(it.quantity) })
+          createBomLineApi(booking.id, {
+            poolId: it.poolId,
+            quantity: String(it.quantity),
+            onsiteReason: booking.status === "ONSITE" ? onsiteReason.trim() : undefined,
+          })
         )
       );
       const failed = results
@@ -123,6 +128,7 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
       if (failed.length === 0) {
         toast.success(`Added ${items.length} item${items.length === 1 ? "" : "s"} to BOM`);
         setStaged([]);
+        setOnsiteReason("");
       } else {
         const failedPoolIds = new Set(failed.map((f) => items[f.index].poolId));
         const detail = failed[0]?.message;
@@ -191,6 +197,10 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
       toast.error("Stage at least one item first");
       return;
     }
+    if (booking.status === "ONSITE" && !onsiteReason.trim()) {
+      toast.error("Provide a reason for the onsite material addition");
+      return;
+    }
     warnIfOverAllocated(staged, availabilityByPoolId);
     addBomLinesAsync(staged.map((s) => ({ poolId: s.poolId, quantity: s.quantity }))).catch(
       () => {
@@ -215,6 +225,8 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
     setSelectedPoolId,
     addQty,
     setAddQty,
+    onsiteReason,
+    setOnsiteReason,
     selectedAvailability,
     selectedOverAllocated,
     getPoolAvailabilityLabel,

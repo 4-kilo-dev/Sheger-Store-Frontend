@@ -45,7 +45,7 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
     id: "oo-crew-assignment",
     Component: OoCrewAssignmentSection,
-    when: (caps, b) => b.status === "PREPARATION" && caps.canAssignCrew,
+    when: (caps, b) => ["PREPARATION", "ONSITE"].includes(b.status) && caps.canAssignCrew,
   },
   {
     id: "oo-vehicle-driver",

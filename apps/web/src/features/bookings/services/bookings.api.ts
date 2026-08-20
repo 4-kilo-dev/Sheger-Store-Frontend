@@ -777,7 +777,7 @@ export async function declineAssignmentApi(assignmentId: string, reason: string)
 
 export async function createBomLineApi(
   bookingId: string,
-  payload: { poolId: string; quantity: string },
+  payload: { poolId: string; quantity: string; onsiteReason?: string },
 ): Promise<any> {
   return client.post(`/api/bookings/${bookingId}/bom/lines`, payload);
 }
