@@ -56,6 +56,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   "role.view": "View roles & permission catalog",
   "role.manage": "Manage roles & permissions",
   "booking.delete": "Hard-delete booking & associated data",
+  "payment.manage": "Manage payments, rates & financial details",
   "driver_trip.create": "Create driver trips",
   "driver_trip.edit": "Edit driver trips",
   "driver_trip.view": "View driver trips",

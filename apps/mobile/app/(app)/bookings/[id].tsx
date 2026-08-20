@@ -1547,8 +1547,13 @@ function PaymentsTab({ booking }: { booking: Booking }) {
   const [toStatus, setToStatus] = useState<"advance" | "fully_paid">("advance");
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
+  const screenSize = booking.size > 0 ? booking.size : 0;
   const computedTotal =
-    Number(dailyRate) > 0 && Number(rentedDays) > 0 ? Number(dailyRate) * Number(rentedDays) : null;
+    Number(dailyRate) > 0 && Number(rentedDays) > 0
+      ? screenSize > 0
+        ? screenSize * Number(dailyRate) * Number(rentedDays)
+        : Number(dailyRate) * Number(rentedDays)
+      : null;
 
   const tx =
     booking.payment === "PAID"
@@ -1556,6 +1561,23 @@ function PaymentsTab({ booking }: { booking: Booking }) {
       : booking.payment === "ADVANCE" && (booking.advanceAmount ?? 0) > 0
         ? [{ n: "Advance payment", a: booking.advanceAmount ?? 0 }]
         : [];
+
+  const alreadyPaid = summary.paid;
+  const activeTotal = computedTotal ?? summary.total ?? 0;
+  const remainingAmount =
+    summary.remaining != null
+      ? summary.remaining
+      : activeTotal > 0
+        ? Math.max(0, activeTotal - alreadyPaid)
+        : null;
+
+  const parsedAmount = Number(amount);
+  const isExceedingRemaining =
+    remainingAmount != null && remainingAmount > 0 && parsedAmount > remainingAmount;
+  const isSettlingFully =
+    remainingAmount != null && remainingAmount > 0 ? parsedAmount >= remainingAmount : toStatus === "fully_paid";
+
+  const targetToStatus: "advance" | "fully_paid" = isSettlingFully ? "fully_paid" : "advance";
 
   const handleRecordPayment = async () => {
     const parsed = Number(amount);
@@ -1567,10 +1589,16 @@ function PaymentsTab({ booking }: { booking: Booking }) {
       setPaymentError("Minimum payment amount is ETB 1,000.");
       return;
     }
+    if (remainingAmount != null && remainingAmount > 0 && parsed > remainingAmount) {
+      setPaymentError(`Payment amount cannot exceed remaining balance of ${formatCurrency(remainingAmount)}.`);
+      return;
+    }
     setPaymentError(null);
     try {
-      await paymentMutation.mutateAsync({ bookingId: booking.id, toStatus, amount: parsed });
+      const apiAmount = targetToStatus === "advance" ? alreadyPaid + parsed : parsed;
+      await paymentMutation.mutateAsync({ bookingId: booking.id, toStatus: targetToStatus, amount: apiAmount });
       setRecordOpen(false);
+      setAmount("");
     } catch (e) {
       setPaymentError(e instanceof Error ? e.message : "Failed to record payment.");
     }
@@ -1611,6 +1639,9 @@ function PaymentsTab({ booking }: { booking: Booking }) {
             </Button>
           }
         >
+          {screenSize > 0 ? (
+            <KV label="Screen Size" value={`${screenSize} sqm`} mono />
+          ) : null}
           {booking.dailyRate != null && booking.dailyRate > 0 ? (
             <KV label="Daily Rate" value={formatCurrency(booking.dailyRate)} mono />
           ) : null}
@@ -1619,7 +1650,7 @@ function PaymentsTab({ booking }: { booking: Booking }) {
           ) : null}
           <KV
             label="Computed Total"
-            value={summary.total != null ? formatCurrency(summary.total) : "Not set"}
+            value={computedTotal != null ? formatCurrency(computedTotal) : (summary.total != null ? formatCurrency(summary.total) : "Not set")}
             mono
           />
         </Section>
@@ -1629,8 +1660,20 @@ function PaymentsTab({ booking }: { booking: Booking }) {
         title="Transactions"
         icon={DollarSign}
         action={
-          canManagePayments ? (
-            <Button variant="ghost" onPress={() => setRecordOpen(true)}>
+          canManagePayments && booking.payment !== "PAID" ? (
+            <Button
+              variant="ghost"
+              onPress={() => {
+                const nextStatus = booking.payment === "ADVANCE" ? "fully_paid" : "advance";
+                setToStatus(nextStatus);
+                setAmount(
+                  booking.payment === "ADVANCE" && summary.remaining != null
+                    ? String(summary.remaining)
+                    : ""
+                );
+                setRecordOpen(true);
+              }}
+            >
               + Record Payment
             </Button>
           ) : undefined

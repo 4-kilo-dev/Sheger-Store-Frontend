@@ -42,6 +42,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
     b.payment === "ADVANCE" ? "fully_paid" : "advance"
   );
   const [amount, setAmount] = useState<number>(0);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("Bank Transfer");
 
   const [dailyRate, setDailyRate] = useState(b.dailyRate ?? 0);
   const [rentedDays, setRentedDays] = useState(b.rentedDays ?? 0);
@@ -51,13 +52,35 @@ export function PaymentsTab({ b }: { b: Booking }) {
     setRentedDays(b.rentedDays ?? 0);
   }, [b.dailyRate, b.rentedDays]);
 
+  const screenSize = b.size > 0 ? b.size : 0;
   const computedTotal =
-    dailyRate > 0 && rentedDays > 0 ? dailyRate * rentedDays : null;
+    dailyRate > 0 && rentedDays > 0
+      ? screenSize > 0
+        ? screenSize * dailyRate * rentedDays
+        : dailyRate * rentedDays
+      : null;
+
+  const alreadyPaid = summary.paid;
+  const activeTotal = computedTotal ?? summary.total ?? 0;
+  const remainingAmount =
+    summary.remaining != null
+      ? summary.remaining
+      : activeTotal > 0
+        ? Math.max(0, activeTotal - alreadyPaid)
+        : null;
+
+  const isExceedingRemaining =
+    remainingAmount != null && remainingAmount > 0 && amount > remainingAmount;
+  const isSettlingFully =
+    remainingAmount != null && remainingAmount > 0 ? amount >= remainingAmount : type === "fully_paid";
+
+  const targetToStatus: "advance" | "fully_paid" = isSettlingFully ? "fully_paid" : "advance";
+  const apiAmount = targetToStatus === "advance" ? alreadyPaid + amount : amount;
 
   const { mutate: recordPayment, isPending } = useMutation({
-    mutationFn: () => recordBookingPaymentApi(b.id, type, amount),
+    mutationFn: () => recordBookingPaymentApi(b.id, targetToStatus, apiAmount),
     onSuccess: () => {
-      toast.success("Payment recorded.");
+      toast.success(targetToStatus === "fully_paid" ? "Booking marked as Fully Paid." : "Advance payment updated.");
       queryClient.invalidateQueries({ queryKey: ["booking", b.code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       setShowModal(false);
@@ -92,7 +115,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
     setShowModal(true);
   };
 
-  const amountValid = amount >= 1000;
+  const amountValid = amount >= 1000 && !isExceedingRemaining;
   const pricingValid = dailyRate > 0 && rentedDays > 0;
 
   return (
@@ -100,16 +123,16 @@ export function PaymentsTab({ b }: { b: Booking }) {
       {canManagePayment && (
         <div className="col-span-12">
           <Section title="Pricing" icon={DollarSign}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                Daily Rate ({currency})
+                Screen Size (sqm)
                 <input
-                  type="number"
-                  min={0}
-                  value={dailyRate || ""}
-                  onChange={(e) => setDailyRate(parseFloat(e.target.value) || 0)}
-                  className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 font-mono text-[12px]"
+                  type="text"
+                  readOnly
+                  value={screenSize > 0 ? `${screenSize} sqm` : "—"}
+                  className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 font-mono text-[12px] opacity-80"
                   style={{ borderColor: "var(--border)" }}
+                  title="Set at booking intake / technical holds"
                 />
               </label>
               <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
@@ -125,6 +148,17 @@ export function PaymentsTab({ b }: { b: Booking }) {
                 />
               </label>
               <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                Daily Rate ({currency})
+                <input
+                  type="number"
+                  min={0}
+                  value={dailyRate || ""}
+                  onChange={(e) => setDailyRate(parseFloat(e.target.value) || 0)}
+                  className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 font-mono text-[12px]"
+                  style={{ borderColor: "var(--border)" }}
+                />
+              </label>
+              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
                 Computed Total ({currency})
                 <input
                   type="text"
@@ -132,6 +166,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
                   value={computedTotal != null ? computedTotal.toLocaleString() : "—"}
                   className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 font-mono text-[12px] opacity-80"
                   style={{ borderColor: "var(--border)" }}
+                  title="Screen size × days × daily rate"
                 />
               </label>
             </div>
@@ -253,38 +288,69 @@ export function PaymentsTab({ b }: { b: Booking }) {
             </div>
 
             <div className="space-y-4">
-              <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                Payment Type
-                <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value as PaymentType)}
-                  disabled={b.payment === "ADVANCE"}
-                  className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] disabled:opacity-60"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  {b.payment !== "ADVANCE" && <option value="advance">Advance Deposit</option>}
-                  <option value="fully_paid">Fully Paid</option>
-                </select>
-                {b.payment === "ADVANCE" && (
-                  <span className="mt-1 block text-[10px]" style={{ color: "var(--text-3)" }}>
-                    An advance is already recorded; the remaining balance settles the booking in full.
-                  </span>
-                )}
-              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                  Payment Mode
+                  <input
+                    type="text"
+                    readOnly
+                    value={targetToStatus === "fully_paid" ? "Fully Paid (Final Settlement)" : "Advance Payment (Partial)"}
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 font-mono text-[11px] opacity-80"
+                    style={{ borderColor: "var(--border)" }}
+                  />
+                </label>
+
+                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                  Payment Method
+                  <select
+                    value={selectedPaymentMethod}
+                    onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <option>Bank Transfer</option>
+                    <option>Cash</option>
+                    <option>Mobile Money</option>
+                  </select>
+                </label>
+              </div>
 
               <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                Amount ({currency})
+                Payment Amount ({currency})
                 <input
                   type="number"
                   value={amount || ""}
                   onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                  placeholder="e.g. 50000"
+                  placeholder={remainingAmount != null ? `e.g. ${remainingAmount}` : "e.g. 50000"}
                   className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 font-mono text-[12px]"
                   style={{ borderColor: "var(--border)" }}
                 />
               </label>
 
-              {!amountValid && amount > 0 && (
+              <div className="text-[10px]" style={{ color: "var(--text-3)" }}>
+                {amount > 0 ? (
+                  targetToStatus === "fully_paid" ? (
+                    <span>
+                      Payment of <strong>{formatMoney(amount)}</strong> satisfies the remaining balance and will mark the booking as <strong>Fully Paid</strong>.
+                    </span>
+                  ) : (
+                    <span>
+                      Partial payment of <strong>{formatMoney(amount)}</strong> will be added to previous deposit ({formatMoney(alreadyPaid)}), updating total advance to <strong>{formatMoney(alreadyPaid + amount)}</strong>. Remaining balance: <strong>{formatMoney(Math.max(0, (remainingAmount ?? activeTotal) - amount))}</strong>.
+                    </span>
+                  )
+                ) : (
+                  <span>Enter the payment amount. Partial payments will keep the booking in Advance status.</span>
+                )}
+              </div>
+
+              {isExceedingRemaining && (
+                <div className="text-[11px] font-semibold text-destructive flex items-center gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>Payment amount ({formatMoney(amount)}) cannot exceed remaining balance due ({formatMoney(remainingAmount ?? 0)}).</span>
+                </div>
+              )}
+
+              {!amountValid && amount > 0 && !isExceedingRemaining && (
                 <div className="text-[11px] font-semibold text-destructive flex items-center gap-1.5">
                   <AlertCircle className="h-3.5 w-3.5" />
                   <span>Minimum payment amount is {currency} 1,000.</span>
@@ -295,6 +361,10 @@ export function PaymentsTab({ b }: { b: Booking }) {
             <div className="mt-5 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
               <button
                 onClick={() => {
+                  if (isExceedingRemaining) {
+                    toast.error(`Amount cannot exceed remaining balance of ${formatMoney(remainingAmount ?? 0)}`);
+                    return;
+                  }
                   if (!amountValid) {
                     toast.error(`Minimum payment amount is ${currency} 1,000`);
                     return;
@@ -305,7 +375,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
                 className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
               >
-                {isPending ? "Recording..." : "Record Payment"}
+                {isPending ? "Recording..." : targetToStatus === "fully_paid" ? "Record Final Payment" : "Record Partial Payment"}
               </button>
               <button
                 onClick={() => setShowModal(false)}
