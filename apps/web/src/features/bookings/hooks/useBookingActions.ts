@@ -36,7 +36,11 @@ import type { UnfulfilledBomLine } from "@/features/bookings/components/BomFulfi
 export function useBookingActions(
   code: string,
   booking: Booking | undefined,
-  options?: { canFetchStaff?: boolean; onGoToEquipmentTab?: () => void; canOverrideAvailability?: boolean }
+  options?: {
+    canFetchStaff?: boolean;
+    onGoToEquipmentTab?: () => void;
+    canOverrideAvailability?: boolean;
+  },
 ) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -70,7 +74,10 @@ export function useBookingActions(
   const [damageAttachments, setDamageAttachments] = useState<File[]>([]);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [targetBookingToDelete, setTargetBookingToDelete] = useState<{ id: string; code: string } | null>(null);
+  const [targetBookingToDelete, setTargetBookingToDelete] = useState<{
+    id: string;
+    code: string;
+  } | null>(null);
 
   const [staff, setStaff] = useState<any[]>([]);
   const [selectedTechnicianIds, setSelectedTechnicianIds] = useState<string[]>([]);
@@ -119,9 +126,7 @@ export function useBookingActions(
     if (!isAssign || !booking) return;
 
     const currentTechIds = (booking.assignments || [])
-      .filter(
-        (a: any) => a.roleContext === "TECHNICIAN" && !isDeclinedAssignment(a),
-      )
+      .filter((a: any) => a.roleContext === "TECHNICIAN" && !isDeclinedAssignment(a))
       .map((a: any) => a.userId as string)
       .filter(Boolean);
     setSelectedTechnicianIds(currentTechIds);
@@ -133,7 +138,7 @@ export function useBookingActions(
       booking.assignments.find(
         (a: any) =>
           a.userId === authUser.id &&
-          (a.roleContext === "TECHNICIAN" || a.roleContext === "technician")
+          (a.roleContext === "TECHNICIAN" || a.roleContext === "technician"),
       ) || null
     );
   }, [booking, authUser]);
@@ -194,8 +199,8 @@ export function useBookingActions(
             uploadBookingAttachmentApi(booking.id, file, {
               relatedEntity: "damage_missing_report",
               relatedId: report.id,
-            })
-          )
+            }),
+          ),
         );
       }
 
@@ -206,7 +211,7 @@ export function useBookingActions(
       toast.success(
         attachmentCount > 0
           ? `Damage report submitted with ${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"}.`
-          : "Damage report submitted successfully!"
+          : "Damage report submitted successfully!",
       );
       setShowDamageModal(false);
       setDamageDescription("");
@@ -224,7 +229,7 @@ export function useBookingActions(
   const { mutate: performCheckout, isPending: isCheckingOut } = useMutation({
     mutationFn: async () => {
       if (!booking) throw new Error("Booking is undefined");
-      
+
       // 1. Update logistics details
       await updateBookingApi(booking.id, {
         vehiclePlate: checkoutVehiclePlate,
@@ -241,11 +246,7 @@ export function useBookingActions(
         ),
       );
       const payload = { assets };
-      return checkoutBookingApi(
-        booking.id,
-        payload,
-        checkoutAttempt.current.keyFor(payload),
-      );
+      return checkoutBookingApi(booking.id, payload, checkoutAttempt.current.keyFor(payload));
     },
     onSuccess: () => {
       checkoutAttempt.current.complete();
@@ -261,10 +262,9 @@ export function useBookingActions(
         checkoutAttempt.current.failDefinitively();
       }
       const data = err.data;
-      const unfulfilled = (
-        data?.unfulfilledLines ??
-        (typeof data?.message === "object" ? data.message?.unfulfilledLines : undefined)
-      ) as UnfulfilledBomLine[] | undefined;
+      const unfulfilled = (data?.unfulfilledLines ??
+        (typeof data?.message === "object" ? data.message?.unfulfilledLines : undefined)) as
+        UnfulfilledBomLine[] | undefined;
       if (err.status === 409 && Array.isArray(unfulfilled) && unfulfilled.length > 0) {
         setCheckoutConflicts(unfulfilled);
         setShowCheckoutConflictModal(true);
@@ -367,9 +367,7 @@ export function useBookingActions(
       const activeTechAssignments = (booking.assignments || []).filter(
         (a: any) => a.roleContext === "TECHNICIAN" && !isDeclinedAssignment(a),
       );
-      const alreadyAssigned = new Set(
-        activeTechAssignments.map((a: any) => a.userId as string),
-      );
+      const alreadyAssigned = new Set(activeTechAssignments.map((a: any) => a.userId as string));
       const selected = new Set(techIds);
 
       // Remove technicians that were unchecked (allows changing the assigned crew)
@@ -441,7 +439,11 @@ export function useBookingActions(
         );
       }
 
-      await transitionBookingStatusApi(code, "CONFIRMED");
+      // Payment confirmation may be completed after the booking has moved past
+      // RESERVED. Only the initial RESERVED booking status needs this transition.
+      if (booking.status === "RESERVED") {
+        await transitionBookingStatusApi(code, "CONFIRMED");
+      }
     },
     onSuccess: () => {
       toast.success("Booking confirmed and payment recorded successfully!");

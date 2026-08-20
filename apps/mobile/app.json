@@ -3,7 +3,6 @@
     "name": "Vortex Visual Operations",
     "slug": "vortex-visual-operations",
     "scheme": "vortex",
-    "platforms": ["android", "ios", "web"],
     "version": "0.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",

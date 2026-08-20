@@ -5,6 +5,7 @@ import { AlertCircle, Trash2, Wrench } from "lucide-react";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 import {
   getBookingReservationsApi,
+  createAssignmentApi,
   replacePoolReservationsApi,
   updateBookingApi,
 } from "@/features/bookings/services/bookings.api";
@@ -18,18 +19,22 @@ import { getBookingRentalWindow } from "@/features/bookings/utils/bookingAvailab
 import { Section } from "@/features/bookings/components/shared/Section";
 import { AccessLockOverlay } from "@/features/bookings/components/shared/AccessLockOverlay";
 import { PERMISSION } from "@/lib/auth/permission-keys";
+import { useStaffForBooking } from "@/features/bookings/hooks/useStaffForBooking";
 import type { OverviewSectionProps } from "./types";
 
 export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
   const { formatDateTime } = useDateFormatter();
   const queryClient = useQueryClient();
   const canWrite = caps.canWriteTechnicalHolds;
+  const canAllocateTechnicians = caps.canAssignTechnician;
+  const { staffList } = useStaffForBooking(canAllocateTechnicians && caps.canFetchStaff);
 
   const [screenPools, setScreenPools] = useState<any[]>([]);
   const [allocations, setAllocations] = useState<any[]>([{ poolId: "", quantity: 0 }]);
   const [ctoNotes, setCtoNotes] = useState(b.ctoNotes || "");
   const [isSavingTechnical, setIsSavingTechnical] = useState(false);
   const [isPoolsRestricted, setIsPoolsRestricted] = useState(false);
+  const [selectedTechnicianIds, setSelectedTechnicianIds] = useState<string[]>([]);
 
   const holdBooking = {
     ...b,
@@ -58,6 +63,18 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
     if (r.poolId && screenPoolIds.has(r.poolId)) return true;
     if (r.pool && isScreenPool(r.pool)) return true;
     return false;
+  });
+  const unassignedTechnicians = staffList.filter((staff) => {
+    const role = String(staff.role || staff.roleKey || "").toLowerCase();
+    return (
+      (role === "technician" || role === "chief_tech") &&
+      !(b.assignments || []).some(
+        (assignment: any) =>
+          assignment.userId === staff.id &&
+          assignment.roleContext === "TECHNICIAN" &&
+          assignment.status !== "DECLINED",
+      )
+    );
   });
 
   const hasTechnicalHolds = !!b.ctoNotes || screenReservations.length > 0;
@@ -118,15 +135,19 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
     }
     setIsSavingTechnical(true);
     try {
-      if (validAllocations.length > 0) {
-        await replacePoolReservationsApi(
-          b.id,
-          validAllocations.map((a) => ({
-            poolId: a.poolId,
-            quantity: String(a.quantity),
-          })),
-        );
-      }
+      const allocationRequest =
+        validAllocations.length > 0
+          ? replacePoolReservationsApi(
+              b.id,
+              validAllocations.map((a) => ({ poolId: a.poolId, quantity: String(a.quantity) })),
+            )
+          : Promise.resolve();
+      // CTO screen and staff selections are committed from this one allocation action.
+      // The API validates each staff assignment and screen hold before it is accepted.
+      const staffRequests = selectedTechnicianIds.map((userId) =>
+        createAssignmentApi(b.id, { userId, roleContext: "TECHNICIAN" }),
+      );
+      await Promise.all([allocationRequest, ...staffRequests]);
 
       const bookingPayload: Record<string, string | number> = {
         ctoConsultationNotes: ctoNotes,
@@ -146,7 +167,7 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
       }
       await updateBookingApi(b.code, bookingPayload);
 
-      toast.success("Technical allocation holds saved!");
+      toast.success("Technical inventory and staff allocation saved!");
       setIsEditingHolds(false);
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
       queryClient.invalidateQueries({ queryKey: ["booking-reservations", b.id] });
@@ -297,14 +318,17 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
                 className="flex items-end gap-3 rounded border p-3"
                 style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
               >
-                <label className="flex-1 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+                <label
+                  className="flex-1 text-[11px] font-semibold"
+                  style={{ color: "var(--text-2)" }}
+                >
                   Screen Type
                   <select
                     value={alloc.poolId}
                     onChange={(e) => {
                       const val = e.target.value;
                       setAllocations((prev) =>
-                        prev.map((a, i) => (i === idx ? { ...a, poolId: val } : a))
+                        prev.map((a, i) => (i === idx ? { ...a, poolId: val } : a)),
                       );
                     }}
                     className="mt-1 h-9 w-full rounded border bg-[var(--surface)] px-2 text-[12px]"
@@ -333,7 +357,10 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
                   </select>
                 </label>
 
-                <label className="w-28 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+                <label
+                  className="w-28 text-[11px] font-semibold"
+                  style={{ color: "var(--text-2)" }}
+                >
                   Quantity (sqm)
                   <input
                     type="number"
@@ -341,7 +368,7 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
                     onChange={(e) => {
                       const val = parseFloat(e.target.value) || 0;
                       setAllocations((prev) =>
-                        prev.map((a, i) => (i === idx ? { ...a, quantity: val } : a))
+                        prev.map((a, i) => (i === idx ? { ...a, quantity: val } : a)),
                       );
                     }}
                     placeholder="qty"
@@ -382,6 +409,41 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
           })}
         </div>
 
+        {canAllocateTechnicians && b.status !== "RESERVED" && (
+          <div
+            className="rounded border p-3"
+            style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+          >
+            <div className="text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+              Allocate Technicians
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {unassignedTechnicians.length === 0 ? (
+                <span className="text-[11px]" style={{ color: "var(--text-3)" }}>
+                  No unassigned technicians are available.
+                </span>
+              ) : (
+                unassignedTechnicians.map((staff) => (
+                  <label key={staff.id} className="flex items-center gap-2 text-[12px]">
+                    <input
+                      type="checkbox"
+                      checked={selectedTechnicianIds.includes(staff.id)}
+                      onChange={(event) =>
+                        setSelectedTechnicianIds((current) =>
+                          event.target.checked
+                            ? [...current, staff.id]
+                            : current.filter((id) => id !== staff.id),
+                        )
+                      }
+                    />
+                    <span>{staff.name}</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
         <button
           onClick={() => setAllocations((prev) => [...prev, { poolId: "", quantity: 0 }])}
           className="text-[12px] font-semibold hover:underline"
@@ -408,7 +470,7 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
           className="rounded px-4 py-2 text-[12px] font-bold text-white transition hover:brightness-110"
           style={{ background: "var(--accent)" }}
         >
-          {isSavingTechnical ? "Saving..." : "Save Screens & Holds"}
+          {isSavingTechnical ? "Saving..." : "Save Inventory & Staff Allocation"}
         </button>
       </div>
     </Section>

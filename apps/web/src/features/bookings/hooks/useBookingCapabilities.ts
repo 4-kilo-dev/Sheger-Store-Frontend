@@ -57,7 +57,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const myAssignments = useMemo(() => {
     if (!booking?.assignments || !authUser?.id) return [];
     return booking.assignments.filter(
-      (a: any) => a.userId === authUser.id && isNonDeclinedAssignment(a)
+      (a: any) => a.userId === authUser.id && isNonDeclinedAssignment(a),
     );
   }, [booking?.assignments, authUser?.id]);
 
@@ -69,7 +69,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
       booking.assignments.find(
         (a: any) =>
           a.userId === authUser.id &&
-          (a.roleContext === "TECHNICIAN" || a.roleContext === "technician")
+          (a.roleContext === "TECHNICIAN" || a.roleContext === "technician"),
       ) || null
     );
   }, [booking?.assignments, authUser?.id]);
@@ -80,14 +80,11 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     !myTechAssignment.declineReason
   );
 
-  const canAcceptAssignment =
-    pendingTechAssignment && can(PERMISSION.ASSIGNMENT_ACCEPT);
-  const canDeclineAssignment =
-    pendingTechAssignment && can(PERMISSION.ASSIGNMENT_DECLINE);
+  const canAcceptAssignment = pendingTechAssignment && can(PERMISSION.ASSIGNMENT_ACCEPT);
+  const canDeclineAssignment = pendingTechAssignment && can(PERMISSION.ASSIGNMENT_DECLINE);
 
   const canEditBooking =
-    can(PERMISSION.BOOKING_EDIT) ||
-    (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned);
+    can(PERMISSION.BOOKING_EDIT) || (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned);
 
   const canDeleteBooking = can(PERMISSION.BOOKING_DELETE);
 
@@ -108,6 +105,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
       PERMISSION.PAYMENT_MANAGE,
     ]);
   const canManageCustomer = can(PERMISSION.CUSTOMER_MANAGE);
+  const canEditDriverLogistics = can(PERMISSION.DRIVER_TRIP_EDIT);
 
   const canReportDamage = can(PERMISSION.DAMAGE_REPORT);
   const canSubmitEval =
@@ -127,8 +125,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canAssignTechnician = can(PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN);
   const canAssignCrew = can(PERMISSION.ASSIGNMENT_ASSIGN_CREW);
   const canReverseCheckout = can(PERMISSION.INVENTORY_CHECKOUT_REVERSE);
-  const bomEditableStatus =
-    booking?.status === "ACCEPTED" || booking?.status === "PREPARATION";
+  const bomEditableStatus = booking?.status === "ACCEPTED" || booking?.status === "PREPARATION";
   const canEditBom =
     bomEditableStatus &&
     (can(PERMISSION.BOM_CREATE) ||
@@ -191,9 +188,9 @@ export function useBookingCapabilities(booking: Booking | undefined) {
         (a) =>
           a.targetStatus === "PREPARATION" ||
           a.permissionKey === PERMISSION.BOM_CREATE ||
-          a.id === "bom.create"
+          a.id === "bom.create",
       ) || null,
-    [statusActions]
+    [statusActions],
   );
 
   const visibleTabs: TabName[] = useMemo(() => {
@@ -216,19 +213,19 @@ export function useBookingCapabilities(booking: Booking | undefined) {
 
   const declinedTechnicianAssignments = useMemo(
     () => getDeclinedTechnicianAssignments(booking?.assignments),
-    [booking?.assignments]
+    [booking?.assignments],
   );
 
   const activeTechnicianAssignments = useMemo(
     () => getActiveTechnicianAssignments(booking?.assignments),
-    [booking?.assignments]
+    [booking?.assignments],
   );
 
   const assignTechnicianAction = useMemo((): BookingAction | null => {
     if (!canAssignTechnician || !booking) return null;
 
     const fromTransitions = statusActions.find(
-      (a) => a.id === "assignment.assign_technician" || a.requiresForm === "assign"
+      (a) => a.id === "assignment.assign_technician" || a.requiresForm === "assign",
     );
     if (fromTransitions) return fromTransitions;
 
@@ -248,8 +245,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     canAcceptAssignment ||
     canDeclineAssignment ||
     !!advancePreparationAction ||
-    (canReportDamage &&
-      (booking?.status === "ONSITE" || booking?.status === "COMPLETED")) ||
+    (canReportDamage && (booking?.status === "ONSITE" || booking?.status === "COMPLETED")) ||
     (canSubmitEval && booking?.status === "ONSITE");
 
   return {
@@ -266,6 +262,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     canDeleteBooking,
     canEditLogistics,
     canManageCustomer,
+    canEditDriverLogistics,
     canReportDamage,
     canSubmitEval,
     canViewEval,

@@ -10,7 +10,7 @@ import type { OverviewSectionProps } from "./types";
 
 export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) {
   const queryClient = useQueryClient();
-  const canEdit = caps.canEditLogistics;
+  const canEdit = caps.canEditDriverLogistics;
   const { staffList } = useStaffForBooking(canEdit && caps.canFetchStaff);
 
   const [vehicleText, setVehicleText] = useState(b.vehicleText || "");
@@ -42,9 +42,7 @@ export function OoVehicleDriverSection({ b, code, caps }: OverviewSectionProps) 
   };
 
   const selectedDriver =
-    staffList.find((s) => s.id === (b.driverUserId || driverUserId))?.name ||
-    b.driver ||
-    "—";
+    staffList.find((s) => s.id === (b.driverUserId || driverUserId))?.name || b.driver || "—";
 
   if (!canEdit) {
     return (
