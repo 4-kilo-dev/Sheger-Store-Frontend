@@ -19,6 +19,7 @@ import { DeclineAssignmentModal } from "../components/DeclineAssignmentModal";
 import { DamageReportModal } from "../components/DamageReportModal";
 import { InternalEvalModal } from "../components/InternalEvalModal";
 import { BomFulfillmentConflictModal } from "../components/BomFulfillmentConflictModal";
+import { DeleteConfirmModal } from "../components/shared/DeleteConfirmModal";
 
 import { OverviewTab } from "../components/tabs/OverviewTab";
 import { ScheduleTab } from "../components/tabs/ScheduleTab";
@@ -132,6 +133,8 @@ export function BookingDetail() {
         setSelectedAction={actions.setSelectedAction}
         setShowActionModal={actions.setShowActionModal}
         setCancellationReason={actions.setCancellationReason}
+        canDeleteBooking={caps.canDeleteBooking}
+        onDeleteBooking={() => actions.triggerDeleteBooking({ id: booking.id, code: booking.code })}
       />
 
       <BookingActionModal booking={booking} actions={actions} />
@@ -176,6 +179,20 @@ export function BookingDetail() {
         onGoToEquipment={() => actions.onGoToEquipmentTab?.()}
         canOverride={actions.canOverrideAvailability}
       />
+      {actions.showDeleteModal && (
+        <DeleteConfirmModal
+          title={`Permanently Delete Booking #${actions.targetBookingToDelete?.code || booking.code}`}
+          description={`Are you sure you want to permanently delete booking #${actions.targetBookingToDelete?.code || booking.code}? This action cannot be undone.`}
+          isDeleting={actions.isDeletingBooking}
+          onConfirm={() => {
+            const idToDelete = actions.targetBookingToDelete?.id || booking.id;
+            actions.deleteBooking(idToDelete);
+          }}
+          onCancel={() => {
+            actions.setShowDeleteModal(false);
+          }}
+        />
+      )}
     </AppShell>
   );
 }

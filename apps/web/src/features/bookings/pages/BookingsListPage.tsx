@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Plus, Filter, ArrowUpDown, MoreVertical } from "lucide-react";
+import { Plus, Filter, ArrowUpDown, MoreVertical, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { FilterDropdown, SortButton } from "@/components/filter-dropdown";
 import { StatusBadge, PaymentBadge } from "@/components/status-badge";
@@ -14,8 +14,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DeleteConfirmModal } from "@/features/bookings/components/shared/DeleteConfirmModal";
 import {
   transitionBookingStatusApi,
+  deleteBookingApi,
   STATUS_ORDER,
   STATUS_LABELS,
   type Booking,
@@ -128,6 +130,7 @@ export function BookingsIndex() {
   const isAssignedScopeOnly =
     !can(PERMISSION.BOOKING_VIEW_ALL) && can(PERMISSION.BOOKING_VIEW_ASSIGNED);
   const canCreateBooking = can(PERMISSION.BOOKING_CREATE);
+  const canDeleteBooking = can(PERMISSION.BOOKING_DELETE);
   const canCancel =
     can(PERMISSION.BOOKING_CANCEL) || can(PERMISSION.BOOKING_CANCEL_OVERRIDE);
   const canChangeStatus =
@@ -142,6 +145,22 @@ export function BookingsIndex() {
   const [bulkStatus, setBulkStatus] = useState<BookingStatus>("CONFIRMED");
   const [bulkReason, setBulkReason] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bookingToDelete, setBookingToDelete] = useState<Booking | null>(null);
+
+  const { mutate: deleteBooking, isPending: isDeletingBooking } = useMutation({
+    mutationFn: (id: string) => deleteBookingApi(id),
+    onSuccess: (data, id) => {
+      const codeLabel = bookingToDelete?.code || id;
+      const rawMessage = data?.message || `Booking ${codeLabel} deleted successfully`;
+      const cleanMessage = rawMessage.replace(/\s*\([a-f0-9-]{36}\)/gi, "");
+      toast.success(cleanMessage);
+      setBookingToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to delete booking");
+    },
+  });
 
   const { data: bookingsList = [] } = useBookingsList();
 
@@ -776,10 +795,25 @@ export function BookingsIndex() {
                     <td className="border-b px-3 py-3 text-[11px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.stageHand}</td>
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}><PaymentBadge status={b.payment} /></td>
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}><StatusBadge status={b.status} /></td>
-                    <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}>
-                      <Link to="/bookings/$code" params={{ code: b.code }} className="flex h-6 w-6 items-center justify-center rounded transition hover:bg-[var(--surface)]" style={{ color: "var(--text-2)" }}>
-                        <MoreVertical className="h-3.5 w-3.5" />
-                      </Link>
+                    <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }} onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1">
+                        {canDeleteBooking && (
+                          <button
+                            type="button"
+                            title="Delete Booking"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setBookingToDelete(b);
+                            }}
+                            className="flex h-6 w-6 items-center justify-center rounded transition text-[var(--destructive)] hover:bg-[var(--surface-2)]"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <Link to="/bookings/$code" params={{ code: b.code }} className="flex h-6 w-6 items-center justify-center rounded transition hover:bg-[var(--surface-2)]" style={{ color: "var(--text-2)" }}>
+                          <MoreVertical className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -838,6 +872,15 @@ export function BookingsIndex() {
           </div>
         </div>
       </div>
+      {bookingToDelete && (
+        <DeleteConfirmModal
+          title={`Permanently Delete Booking #${bookingToDelete.code}`}
+          description={`Are you sure you want to permanently delete booking #${bookingToDelete.code}? This action cannot be undone.`}
+          isDeleting={isDeletingBooking}
+          onConfirm={() => deleteBooking(bookingToDelete.id)}
+          onCancel={() => setBookingToDelete(null)}
+        />
+      )}
     </AppShell>
   );
 }

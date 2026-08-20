@@ -668,3 +668,8 @@ export async function replacePoolReservationsApi(
 export async function deleteReservationApi(bookingId: string, id: string): Promise<void> {
   return client.delete(`/api/bookings/${bookingId}/reservations/${id}`);
 }
+
+export async function deleteBookingApi(id: string): Promise<{ message: string; id: string }> {
+  return client.delete<{ message: string; id: string }>(`/api/bookings/${id}`);
+}
+

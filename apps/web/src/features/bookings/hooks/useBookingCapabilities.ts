@@ -89,6 +89,8 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     can(PERMISSION.BOOKING_EDIT) ||
     (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned);
 
+  const canDeleteBooking = can(PERMISSION.BOOKING_DELETE);
+
   /**
    * Core booking / vehicle / logistics field edits.
    * Requires booking.edit plus an ops-facing grant so field technicians
@@ -261,6 +263,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     canAcceptAssignment,
     canDeclineAssignment,
     canEditBooking,
+    canDeleteBooking,
     canEditLogistics,
     canManageCustomer,
     canReportDamage,

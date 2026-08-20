@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import type { BookingAction } from "@/features/bookings/constants";
 
 interface BookingActionBarProps {
@@ -7,6 +7,8 @@ interface BookingActionBarProps {
   setSelectedAction: (act: BookingAction | null) => void;
   setShowActionModal: (show: boolean) => void;
   setCancellationReason: (reason: string) => void;
+  canDeleteBooking?: boolean;
+  onDeleteBooking?: () => void;
 }
 
 export function BookingActionBar({
@@ -14,6 +16,8 @@ export function BookingActionBar({
   setSelectedAction,
   setShowActionModal,
   setCancellationReason,
+  canDeleteBooking,
+  onDeleteBooking,
 }: BookingActionBarProps) {
   return (
     <div className="mb-4 flex items-center justify-between">
@@ -26,6 +30,19 @@ export function BookingActionBar({
         Back to Bookings
       </Link>
       <div className="flex items-center gap-2">
+        {canDeleteBooking && onDeleteBooking && (
+          <button
+            type="button"
+            onClick={onDeleteBooking}
+            className="flex h-8 items-center gap-1.5 rounded-md px-3 text-[12px] font-semibold text-white transition hover:opacity-90"
+            style={{
+              background: "var(--destructive)",
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete Booking
+          </button>
+        )}
         {statusActions.map((act) => (
           <button
             key={`${act.id}-${act.targetStatus}`}
@@ -54,3 +71,4 @@ export function BookingActionBar({
     </div>
   );
 }
+

@@ -763,3 +763,8 @@ export async function updateCustomFieldDefinitionApi(
   return client.patch<CustomFieldDefinition>(`/api/custom-field-definitions/${id}`, payload);
 }
 
+export async function deleteBookingApi(id: string): Promise<{ message: string; id: string }> {
+  return client.delete<{ message: string; id: string }>(`/api/bookings/${id}`);
+}
+
+

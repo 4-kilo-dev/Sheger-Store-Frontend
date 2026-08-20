@@ -13,6 +13,7 @@ import {
   createAssignmentApi,
   deleteAssignmentApi,
   checkoutReverseApi,
+  deleteBookingApi,
   type Booking,
   type BookingStatus,
 } from "@/features/bookings/services/bookings.api";
@@ -67,6 +68,9 @@ export function useBookingActions(
   const [damageSelectedAssetId, setDamageSelectedAssetId] = useState("");
   const [damageQty, setDamageQty] = useState("1");
   const [damageAttachments, setDamageAttachments] = useState<File[]>([]);
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [targetBookingToDelete, setTargetBookingToDelete] = useState<{ id: string; code: string } | null>(null);
 
   const [staff, setStaff] = useState<any[]>([]);
   const [selectedTechnicianIds, setSelectedTechnicianIds] = useState<string[]>([]);
@@ -452,6 +456,35 @@ export function useBookingActions(
     },
   });
 
+  const { mutate: deleteBooking, isPending: isDeletingBooking } = useMutation({
+    mutationFn: async (bookingId: string) => {
+      return deleteBookingApi(bookingId);
+    },
+    onSuccess: (data, bookingId) => {
+      const codeLabel = targetBookingToDelete?.code || code || bookingId;
+      const rawMessage = data?.message || `Booking ${codeLabel} deleted successfully`;
+      const cleanMessage = rawMessage.replace(/\s*\([a-f0-9-]{36}\)/gi, "");
+      toast.success(cleanMessage);
+      setShowDeleteModal(false);
+      setTargetBookingToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.removeQueries({ queryKey: ["booking", code] });
+      queryClient.removeQueries({ queryKey: ["booking", bookingId] });
+      navigate({ to: "/bookings" });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to delete booking");
+    },
+  });
+
+  const triggerDeleteBooking = (target?: { id: string; code: string }) => {
+    const item = target || (booking ? { id: booking.id, code: booking.code } : null);
+    if (item) {
+      setTargetBookingToDelete(item);
+      setShowDeleteModal(true);
+    }
+  };
+
   return {
     showActionModal,
     setShowActionModal,
@@ -519,6 +552,12 @@ export function useBookingActions(
     checkoutConflicts,
     showCheckoutConflictModal,
     setShowCheckoutConflictModal,
+    showDeleteModal,
+    setShowDeleteModal,
+    targetBookingToDelete,
+    triggerDeleteBooking,
+    deleteBooking,
+    isDeletingBooking,
     onGoToEquipmentTab,
     canOverrideAvailability,
   };

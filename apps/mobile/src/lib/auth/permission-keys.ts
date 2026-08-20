@@ -10,6 +10,7 @@ export const PERMISSION = {
   BOOKING_CONFIRM: "booking.confirm",
   BOOKING_CANCEL: "booking.cancel",
   BOOKING_CANCEL_OVERRIDE: "booking.cancel_override",
+  BOOKING_DELETE: "booking.delete",
   BOOKING_VIEW_ALL: "booking.view_all",
   BOOKING_VIEW_ASSIGNED: "booking.view_assigned",
   ASSIGNMENT_ASSIGN_TECHNICIAN: "assignment.assign_technician",
