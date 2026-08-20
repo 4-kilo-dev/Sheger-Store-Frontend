@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Phone, User } from "lucide-react";
-import { updateCustomerApi } from "@/features/bookings/services/bookings.api";
+import { updateBookingCustomerApi } from "@/features/bookings/services/bookings.api";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { Section } from "@/features/bookings/components/shared/Section";
 import { KV } from "@/features/bookings/components/shared/KV";
 import type { OverviewSectionProps } from "./types";
@@ -12,7 +13,8 @@ const fieldClass =
 
 export function ClientContactSection({ b, code, caps }: OverviewSectionProps) {
   const queryClient = useQueryClient();
-  const canEdit = caps.canManageCustomer && !!b.customerId;
+  const authUser = useAuthUser();
+  const canEdit = !!b.customerId && (caps.canManageCustomer || b.createdBy === authUser?.id);
 
   const [client, setClient] = useState(b.client || "");
   const [contactPerson, setContactPerson] = useState(b.contactPerson || "");
@@ -46,7 +48,7 @@ export function ClientContactSection({ b, code, caps }: OverviewSectionProps) {
 
     setIsSaving(true);
     try {
-      await updateCustomerApi(b.customerId, {
+      await updateBookingCustomerApi(b.id, {
         name: client.trim(),
         phone: phone.trim(),
         notes: contactPerson.trim() || client.trim(),

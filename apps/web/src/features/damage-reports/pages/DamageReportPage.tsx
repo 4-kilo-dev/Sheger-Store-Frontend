@@ -1,8 +1,8 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, CheckCircle2, ShieldAlert } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Paperclip, ShieldAlert, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,10 @@ import {
   getInventoryPoolsApi,
 } from "@/features/inventory/services/inventory.api";
 import { getBookingsApi, createDamageReportApi } from "@/features/bookings/services/bookings.api";
+import { uploadBookingAttachmentApi } from "@/features/bookings/services/attachments.api";
+
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+const MAX_ATTACHMENTS = 10;
 
 type AssetOption = {
   key: string;
@@ -34,6 +38,8 @@ export function DamageReportPage() {
   const [severity, setSeverity] = useState("Minor · usable with caution");
   const [discovered, setDiscovered] = useState("Warehouse inspection");
   const [assetPrefillApplied, setAssetPrefillApplied] = useState(false);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   const fieldClass =
     "mt-1.5 h-10 w-full rounded-md border border-border bg-surface-2 px-3 text-[12px] outline-none focus:border-accent";
@@ -110,31 +116,66 @@ export function DamageReportPage() {
   }, [search.booking]);
 
   const selected = assetOptions.find((o) => o.key === assetKey);
+  const selectedBooking = bookings.find((booking) => booking.code === bookingCode);
+
+  const addAttachments = (files: FileList | null) => {
+    if (!files) return;
+    setAttachments((current) => {
+      const next = [...current];
+      for (const file of Array.from(files)) {
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+          toast.error(`${file.name} exceeds the 20MB limit.`);
+          continue;
+        }
+        if (next.length >= MAX_ATTACHMENTS) {
+          toast.error(`Maximum ${MAX_ATTACHMENTS} attachments per damage report.`);
+          break;
+        }
+        if (!next.some((entry) => entry.name === file.name && entry.size === file.size))
+          next.push(file);
+      }
+      return next;
+    });
+    if (attachmentInputRef.current) attachmentInputRef.current.value = "";
+  };
 
   const { mutate: submitReport, isPending } = useMutation({
     mutationFn: async () => {
       if (!selected) throw new Error("Select an inventory item");
       if (!description.trim()) throw new Error("Description is required");
+      if (attachments.length > 0 && !selectedBooking) {
+        throw new Error("Select the related booking before attaching evidence.");
+      }
 
       const qty = selected.isSerialized ? undefined : quantity;
       if (!selected.isSerialized) {
         const n = parseFloat(quantity);
-        if (!Number.isFinite(n) || n <= 0) throw new Error("Affected quantity must be greater than 0");
+        if (!Number.isFinite(n) || n <= 0)
+          throw new Error("Affected quantity must be greater than 0");
       }
 
-      const notes = [
-        description.trim(),
-        `Severity: ${severity}`,
-        `Discovered: ${discovered}`,
-      ].join("\n");
+      const notes = [description.trim(), `Severity: ${severity}`, `Discovered: ${discovered}`].join(
+        "\n",
+      );
 
-      return createDamageReportApi(bookingCode || null, {
+      const report = await createDamageReportApi(selectedBooking?.id || null, {
         reportType,
         poolId: selected.poolId,
         itemId: selected.itemId,
         quantity: qty,
         description: notes,
       });
+      if (selectedBooking) {
+        await Promise.all(
+          attachments.map((file) =>
+            uploadBookingAttachmentApi(selectedBooking.id, file, {
+              relatedEntity: "damage_missing_report",
+              relatedId: report.id,
+            }),
+          ),
+        );
+      }
+      return report;
     },
     onSuccess: () => {
       toast.success("Damage report submitted");
@@ -211,9 +252,7 @@ export function DamageReportPage() {
                     disabled={bookingsLoading}
                   >
                     <option value="">
-                      {bookingsLoading
-                        ? "Loading bookings…"
-                        : "-- None (warehouse inspection) --"}
+                      {bookingsLoading ? "Loading bookings…" : "-- None (warehouse inspection) --"}
                     </option>
                     {bookings.map((b) => (
                       <option key={b.id} value={b.code}>
@@ -275,6 +314,54 @@ export function DamageReportPage() {
                   </select>
                 </label>
               </div>
+            </section>
+
+            <section className="rounded-lg border border-border bg-surface p-5">
+              <div className="mb-1 label-eyebrow">Evidence attachments</div>
+              <p className="mb-3 text-[11px] text-text-2">
+                Attach photos or documents to the related booking. A booking is required for
+                evidence files.
+              </p>
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                multiple
+                accept="image/*,application/pdf,.pdf,.zip"
+                className="hidden"
+                onChange={(event) => addAttachments(event.target.files)}
+              />
+              <button
+                type="button"
+                onClick={() => attachmentInputRef.current?.click()}
+                disabled={attachments.length >= MAX_ATTACHMENTS || isPending}
+                className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border px-3 py-4 text-[12px] font-semibold text-text-2 hover:border-accent disabled:opacity-50"
+              >
+                <Paperclip className="h-4 w-4" /> Add photos or documents
+              </button>
+              {attachments.length > 0 && (
+                <ul className="mt-3 space-y-2">
+                  {attachments.map((file, index) => (
+                    <li
+                      key={`${file.name}-${file.size}-${index}`}
+                      className="flex items-center gap-2 rounded-md border border-border bg-surface-2 px-3 py-2 text-[11px]"
+                    >
+                      <Paperclip className="h-3.5 w-3.5 shrink-0 text-text-3" />
+                      <span className="min-w-0 flex-1 truncate font-medium">{file.name}</span>
+                      <span className="text-text-3">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${file.name}`}
+                        onClick={() =>
+                          setAttachments((current) => current.filter((_, i) => i !== index))
+                        }
+                        className="p-0.5 text-text-3 hover:text-destructive"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
 
             <section className="rounded-lg border border-border bg-surface p-5">

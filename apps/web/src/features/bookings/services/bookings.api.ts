@@ -1,11 +1,19 @@
 export type BookingStatus =
-  | "RESERVED" | "CONFIRMED" | "ASSIGNED" | "ACCEPTED"
-  | "PREPARATION" | "ONSITE" | "COMPLETED" | "DONE"
-  | "CANCELED" | "PARTIALLY_RETURNED";
+  | "RESERVED"
+  | "CONFIRMED"
+  | "ASSIGNED"
+  | "ACCEPTED"
+  | "PREPARATION"
+  | "ONSITE"
+  | "COMPLETED"
+  | "DONE"
+  | "CANCELED"
+  | "PARTIALLY_RETURNED";
 
 export type PaymentStatus = "PAID" | "ADVANCE" | "UNPAID";
 
-export type ScreenType = "P2.97" | "P4" | "P5" | "P2.97-New" | "P3.91 INDOOR" | "P3.91 OUTDOOR" | string;
+export type ScreenType =
+  "P2.97" | "P4" | "P5" | "P2.97-New" | "P3.91 INDOOR" | "P3.91 OUTDOOR" | string;
 
 const KNOWN_SCREEN_TYPES = [
   "P3.91 OUTDOOR",
@@ -22,8 +30,7 @@ function parseSqm(value: string): number {
 }
 
 const MOUNT_STYLE_RE = /^(hanging|sitting)$/i;
-const DIMENSION_RE =
-  /(\d+(?:\.\d+)?)\s*[wW]\s*[x×]\s*(\d+(?:\.\d+)?)\s*[hH]?/i;
+const DIMENSION_RE = /(\d+(?:\.\d+)?)\s*[wW]\s*[x×]\s*(\d+(?:\.\d+)?)\s*[hH]?/i;
 
 function isMountStyle(value?: string | null): boolean {
   return MOUNT_STYLE_RE.test(String(value ?? "").trim());
@@ -34,9 +41,7 @@ function formatArrangementLabel(value?: string | null): string {
   const raw = String(value ?? "").trim();
   if (!raw || isMountStyle(raw)) return "";
 
-  const dim = raw.match(
-    /^\(?\s*(\d+(?:\.\d+)?)\s*[wW]\s*[x×]\s*(\d+(?:\.\d+)?)\s*[hH]?\s*\)?$/,
-  );
+  const dim = raw.match(/^\(?\s*(\d+(?:\.\d+)?)\s*[wW]\s*[x×]\s*(\d+(?:\.\d+)?)\s*[hH]?\s*\)?$/);
   if (dim) return `(${dim[1]}wx${dim[2]}h)`;
 
   const loose = raw.match(DIMENSION_RE);
@@ -100,7 +105,10 @@ function extractScreenType(spec: string): string {
   };
 
   // Multi-allocation specs ("Pool A - 24sqm; Pool B - 10sqm")
-  const segments = text.split(/\s*[;|]\s*/).map((s) => s.trim()).filter(Boolean);
+  const segments = text
+    .split(/\s*[;|]\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (segments.length > 1) {
     const pitches: string[] = [];
     for (const segment of segments) {
@@ -114,16 +122,15 @@ function extractScreenType(spec: string): string {
 }
 
 /** Collect pitch labels from reserved / BOM screen pools. */
-function extractScreenTypesFromEquipment(sources: Array<{ name?: string | null; categoryKey?: string | null }>): string {
+function extractScreenTypesFromEquipment(
+  sources: Array<{ name?: string | null; categoryKey?: string | null }>,
+): string {
   const pitches: string[] = [];
   for (const source of sources) {
     const name = String(source.name || "").trim();
     if (!name) continue;
     const key = String(source.categoryKey || "").toLowerCase();
-    const looksScreen =
-      key === "screen" ||
-      key.includes("screen") ||
-      /led|panel|p\d/i.test(name);
+    const looksScreen = key === "screen" || key.includes("screen") || /led|panel|p\d/i.test(name);
     if (!looksScreen) continue;
     const pitch = extractPitchLabel(name);
     if (pitch && !pitches.includes(pitch)) pitches.push(pitch);
@@ -132,9 +139,7 @@ function extractScreenTypesFromEquipment(sources: Array<{ name?: string | null; 
 }
 
 function extractPitchLabel(text: string): string {
-  const m = text.match(
-    /P\s*(\d+(?:\.\d+)?)\s*(?:-\s*)?(New)?\s*(Indoor|Outdoor)?/i,
-  );
+  const m = text.match(/P\s*(\d+(?:\.\d+)?)\s*(?:-\s*)?(New)?\s*(Indoor|Outdoor)?/i);
   if (!m) return "";
   let pitch = m[1];
   // Common warehouse naming: P3.9 ↔ P3.91
@@ -239,11 +244,7 @@ function parseBookingScreenFields(b: {
     for (const candidate of layoutCandidates) {
       if (candidate == null || candidate === spec) continue; // avoid dumping full CTO hold blurbs
       const formatted = formatArrangementLabel(candidate);
-      if (
-        formatted &&
-        !isScreenTypeToken(formatted) &&
-        !isGenericScreenLabel(formatted)
-      ) {
+      if (formatted && !isScreenTypeToken(formatted) && !isGenericScreenLabel(formatted)) {
         arrangement = formatted;
         break;
       }
@@ -281,6 +282,7 @@ export interface Booking {
   id: string;
   code: string;
   customerId?: string;
+  createdBy?: string;
   client: string;
   contactPerson: string;
   contactPhone: string;
@@ -335,7 +337,6 @@ export interface UpdateCustomFieldDefinitionDto {
   required?: boolean;
 }
 
-
 export interface StatusHistoryItem {
   id: string;
   fromStatus: string | null;
@@ -349,25 +350,74 @@ function makeBom(screenType: ScreenType, size: number, idx: number): BomItem[] {
   const statusPick = (i: number): BomItem["status"] =>
     idx >= 5 ? (i < 2 ? "Checked Out" : "Reserved") : idx >= 7 ? "Returned" : "Reserved";
   const raw = [
-    { id: `PNL-${screenType.replace(/\s/g, "").replace(".", "")}-${String(idx).padStart(2, "0")}`, name: `${screenType} Panel`, qty: size, status: statusPick(0), categoryKey: "screen" },
-    { id: `PSU-${10 + idx}`, name: "Power Supply Unit", qty: Math.ceil(size / 10), status: statusPick(1), categoryKey: "power_box" },
-    { id: `PRC-${idx % 2 === 0 ? "NVX" : "BRM"}-${String(idx).padStart(2, "0")}`, name: idx % 2 === 0 ? "Novastar VX1000" : "Brompton Tessera S8", qty: 1, status: statusPick(2), categoryKey: "controller" },
-    { id: `TRS-2M-${String(idx).padStart(2, "0")}`, name: "Truss Segment 2m", qty: Math.ceil(size / 6), status: statusPick(3), categoryKey: "stage_truss" },
-    { id: `CBL-HDM-${String(idx).padStart(2, "0")}`, name: "HDMI 4K Cable 15m", qty: 2, status: statusPick(4), categoryKey: "cable" },
-    { id: `CBL-PWR-${String(idx).padStart(2, "0")}`, name: "Power Cable 30A", qty: Math.ceil(size / 8), status: statusPick(5), categoryKey: "cable" },
+    {
+      id: `PNL-${screenType.replace(/\s/g, "").replace(".", "")}-${String(idx).padStart(2, "0")}`,
+      name: `${screenType} Panel`,
+      qty: size,
+      status: statusPick(0),
+      categoryKey: "screen",
+    },
+    {
+      id: `PSU-${10 + idx}`,
+      name: "Power Supply Unit",
+      qty: Math.ceil(size / 10),
+      status: statusPick(1),
+      categoryKey: "power_box",
+    },
+    {
+      id: `PRC-${idx % 2 === 0 ? "NVX" : "BRM"}-${String(idx).padStart(2, "0")}`,
+      name: idx % 2 === 0 ? "Novastar VX1000" : "Brompton Tessera S8",
+      qty: 1,
+      status: statusPick(2),
+      categoryKey: "controller",
+    },
+    {
+      id: `TRS-2M-${String(idx).padStart(2, "0")}`,
+      name: "Truss Segment 2m",
+      qty: Math.ceil(size / 6),
+      status: statusPick(3),
+      categoryKey: "stage_truss",
+    },
+    {
+      id: `CBL-HDM-${String(idx).padStart(2, "0")}`,
+      name: "HDMI 4K Cable 15m",
+      qty: 2,
+      status: statusPick(4),
+      categoryKey: "cable",
+    },
+    {
+      id: `CBL-PWR-${String(idx).padStart(2, "0")}`,
+      name: "Power Cable 30A",
+      qty: Math.ceil(size / 8),
+      status: statusPick(5),
+      categoryKey: "cable",
+    },
   ];
   return assignBomLineCodes(raw);
 }
 
 export const STATUS_LABELS: Record<BookingStatus, string> = {
-  RESERVED: "Reserved", CONFIRMED: "Confirmed", ASSIGNED: "Assigned",
-  ACCEPTED: "Accepted", PREPARATION: "Preparation", ONSITE: "Onsite",
-  COMPLETED: "Completed", DONE: "Done", CANCELED: "Canceled",
+  RESERVED: "Reserved",
+  CONFIRMED: "Confirmed",
+  ASSIGNED: "Assigned",
+  ACCEPTED: "Accepted",
+  PREPARATION: "Preparation",
+  ONSITE: "Onsite",
+  COMPLETED: "Completed",
+  DONE: "Done",
+  CANCELED: "Canceled",
   PARTIALLY_RETURNED: "Partially Returned",
 };
 
 export const STATUS_ORDER: BookingStatus[] = [
-  "RESERVED","CONFIRMED","ASSIGNED","ACCEPTED","PREPARATION","ONSITE","COMPLETED","DONE",
+  "RESERVED",
+  "CONFIRMED",
+  "ASSIGNED",
+  "ACCEPTED",
+  "PREPARATION",
+  "ONSITE",
+  "COMPLETED",
+  "DONE",
 ];
 
 import { client } from "@/lib/api/client";
@@ -394,10 +444,10 @@ function mapBackendBookingToFrontend(b: any): Booking {
   const customerName = b.customer?.name || b.customerName || b.client || "Client";
   const customerPhone = b.customer?.phone || "";
   const contactPerson =
-    (typeof b.customer?.notes === "string" && b.customer.notes.trim()
+    typeof b.customer?.notes === "string" && b.customer.notes.trim()
       ? b.customer.notes.trim()
-      : customerName);
-  
+      : customerName;
+
   // Format BOM lines with material-type shorthand codes (SC-001, CB-002, …)
   const sortedBomLines = [...(b.bomLines || [])].sort((a: any, c: any) => {
     const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -415,7 +465,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
       poolId: line.poolId || undefined,
       itemId: line.itemId || undefined,
       categoryKey: line.pool?.category?.key || line.item?.category?.key || undefined,
-    }))
+    })),
   );
 
   // Extract assignees (active assignments only)
@@ -423,20 +473,15 @@ function mapBackendBookingToFrontend(b: any): Booking {
     .filter((a: any) => a.status !== "DECLINED")
     .map((a: any) => a.user?.name)
     .filter(Boolean);
-  
+
   // Stagehand team leader (CREW + isTeamLead) takes precedence for logistics/checkout.
   const stagehandLeaderAssignee = (b.assignments || []).find(
-    (a: any) =>
-      a.roleContext === "CREW" && a.isTeamLead && a.status !== "DECLINED"
+    (a: any) => a.roleContext === "CREW" && a.isTeamLead && a.status !== "DECLINED",
   );
   const otherLeadAssignee = (b.assignments || []).find(
-    (a: any) =>
-      a.isTeamLead &&
-      a.roleContext !== "CREW" &&
-      a.status !== "DECLINED"
+    (a: any) => a.isTeamLead && a.roleContext !== "CREW" && a.status !== "DECLINED",
   );
-  const teamLeader =
-    stagehandLeaderAssignee?.user?.name || otherLeadAssignee?.user?.name || "";
+  const teamLeader = stagehandLeaderAssignee?.user?.name || otherLeadAssignee?.user?.name || "";
 
   const crewNames = (b.assignments || [])
     .filter((a: any) => a.roleContext === "CREW" && a.status !== "DECLINED")
@@ -444,7 +489,10 @@ function mapBackendBookingToFrontend(b: any): Booking {
     .filter(Boolean);
   const stageHand = crewNames.length > 0 ? `TEAM · ${crewNames.join(", ")}` : "None Assigned";
 
-  const driver = b.driver?.name || (b.assignments || []).find((a: any) => a.roleContext === "OO")?.user?.name || "None Assigned";
+  const driver =
+    b.driver?.name ||
+    (b.assignments || []).find((a: any) => a.roleContext === "OO")?.user?.name ||
+    "None Assigned";
   const mealBudget = parseFloat(b.mealProvision) || 0;
 
   let payment: PaymentStatus = "UNPAID";
@@ -471,6 +519,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
     id: b.id,
     code: b.bookingCode || b.code || b.id, // Use human-readable bookingCode if available, fallback to id
     customerId: b.customerId || b.customer?.id || undefined,
+    createdBy: b.createdBy || undefined,
     client: customerName,
     contactPerson,
     contactPhone: customerPhone,
@@ -487,7 +536,8 @@ function mapBackendBookingToFrontend(b: any): Booking {
     stageHand,
     status: (b.status || "RESERVED") as BookingStatus,
     payment,
-    amount: typeof b.paymentAmount === "number" ? b.paymentAmount : parseFloat(b.paymentAmount || "0"),
+    amount:
+      typeof b.paymentAmount === "number" ? b.paymentAmount : parseFloat(b.paymentAmount || "0"),
     paymentAmount: parseNumericField(b.paymentAmount),
     dailyRate: parseNumericField(b.dailyRate),
     rentedDays: b.rentedDays ?? undefined,
@@ -528,22 +578,32 @@ export async function createBookingApi(form: any): Promise<any> {
 
   // 2. Prepare event dates
   const eventDateStr = form.eventDate
-    ? (form.eventDate.includes("T") ? new Date(form.eventDate).toISOString() : `${form.eventDate}T18:00:00.000Z`)
+    ? form.eventDate.includes("T")
+      ? new Date(form.eventDate).toISOString()
+      : `${form.eventDate}T18:00:00.000Z`
     : new Date().toISOString();
 
   const assemblyStartStr = form.assemblyDate
-    ? (form.assemblyDate.includes("T") ? new Date(form.assemblyDate).toISOString() : `${form.assemblyDate}T12:00:00.000Z`)
+    ? form.assemblyDate.includes("T")
+      ? new Date(form.assemblyDate).toISOString()
+      : `${form.assemblyDate}T12:00:00.000Z`
     : new Date().toISOString();
 
   const assemblyEndStr = form.assemblyDate
-    ? (form.assemblyDate.includes("T") ? new Date(new Date(form.assemblyDate).getTime() + 3 * 3600000).toISOString() : `${form.assemblyDate}T15:00:00.000Z`)
+    ? form.assemblyDate.includes("T")
+      ? new Date(new Date(form.assemblyDate).getTime() + 3 * 3600000).toISOString()
+      : `${form.assemblyDate}T15:00:00.000Z`
     : new Date().toISOString();
 
   const dismantleDateStr = form.dismantleDate
-    ? (form.dismantleDate.includes("T") ? new Date(form.dismantleDate).toISOString() : `${form.dismantleDate}T23:59:59.000Z`)
-    : (form.eventDate
-        ? (form.eventDate.includes("T") ? new Date(new Date(form.eventDate).getTime() + 6 * 3600000).toISOString() : `${form.eventDate}T23:59:00.000Z`)
-        : new Date().toISOString());
+    ? form.dismantleDate.includes("T")
+      ? new Date(form.dismantleDate).toISOString()
+      : `${form.dismantleDate}T23:59:59.000Z`
+    : form.eventDate
+      ? form.eventDate.includes("T")
+        ? new Date(new Date(form.eventDate).getTime() + 6 * 3600000).toISOString()
+        : `${form.eventDate}T23:59:00.000Z`
+      : new Date().toISOString();
 
   const screenSize = form.size !== "" && form.size != null ? Number(form.size) : undefined;
   const hasValidSize = screenSize !== undefined && Number.isFinite(screenSize) && screenSize >= 0;
@@ -582,7 +642,12 @@ export async function createBookingApi(form: any): Promise<any> {
   return booking;
 }
 
-export async function transitionBookingStatusApi(bookingId: string, toStatus: BookingStatus, reason?: string, override = false): Promise<any> {
+export async function transitionBookingStatusApi(
+  bookingId: string,
+  toStatus: BookingStatus,
+  reason?: string,
+  override = false,
+): Promise<any> {
   return client.post(`/api/bookings/${bookingId}/transition`, {
     toStatus,
     reason: reason || `Transitioning to ${toStatus}`,
@@ -615,7 +680,11 @@ export async function getBookingAllowedTransitionsApi(
   );
 }
 
-export async function recordBookingPaymentApi(bookingId: string, toStatus: string, amount: number): Promise<any> {
+export async function recordBookingPaymentApi(
+  bookingId: string,
+  toStatus: string,
+  amount: number,
+): Promise<any> {
   return client.post(`/api/bookings/${bookingId}/payment`, {
     toStatus, // 'advance' or 'fully_paid'
     amount: String(amount),
@@ -661,7 +730,17 @@ export async function updateCustomerApi(
   return client.patch(`/api/customers/${customerId}`, payload);
 }
 
-export async function createReservationApi(bookingId: string, payload: { poolId?: string; itemId?: string; quantity?: string }): Promise<any> {
+export async function updateBookingCustomerApi(
+  bookingId: string,
+  payload: { name?: string; phone?: string; notes?: string },
+): Promise<any> {
+  return client.patch(`/api/bookings/${bookingId}/customer`, payload);
+}
+
+export async function createReservationApi(
+  bookingId: string,
+  payload: { poolId?: string; itemId?: string; quantity?: string },
+): Promise<any> {
   return client.post(`/api/bookings/${bookingId}/reservations`, payload);
 }
 
@@ -673,7 +752,10 @@ export async function replacePoolReservationsApi(
   return client.post(`/api/bookings/${bookingId}/reservations/replace`, { lines });
 }
 
-export async function createAssignmentApi(bookingId: string, payload: { userId: string; roleContext: string; isTeamLead?: boolean; phase?: string }): Promise<any> {
+export async function createAssignmentApi(
+  bookingId: string,
+  payload: { userId: string; roleContext: string; isTeamLead?: boolean; phase?: string },
+): Promise<any> {
   return client.post(`/api/bookings/${bookingId}/assignments`, payload);
 }
 
@@ -693,11 +775,18 @@ export async function declineAssignmentApi(assignmentId: string, reason: string)
   return client.patch(`/api/assignments/${assignmentId}/decline`, { declineReason: reason });
 }
 
-export async function createBomLineApi(bookingId: string, payload: { poolId: string; quantity: string }): Promise<any> {
+export async function createBomLineApi(
+  bookingId: string,
+  payload: { poolId: string; quantity: string; onsiteReason?: string },
+): Promise<any> {
   return client.post(`/api/bookings/${bookingId}/bom/lines`, payload);
 }
 
-export async function updateBomLineApi(bookingId: string, lineId: string, payload: { quantity: string }): Promise<any> {
+export async function updateBomLineApi(
+  bookingId: string,
+  lineId: string,
+  payload: { quantity: string },
+): Promise<any> {
   return client.patch(`/api/bookings/${bookingId}/bom/lines/${lineId}`, payload);
 }
 
@@ -729,7 +818,10 @@ export async function submitEvaluationApi(bookingId: string, payload: any): Prom
   return client.post(`/api/bookings/${bookingId}/evaluation`, payload);
 }
 
-export async function getBookingSnapshotsApi(bookingId: string, params?: { kind?: string }): Promise<any[]> {
+export async function getBookingSnapshotsApi(
+  bookingId: string,
+  params?: { kind?: string },
+): Promise<any[]> {
   const query = params?.kind ? `?kind=${encodeURIComponent(params.kind)}` : "";
   return client.get<any[]>(`/api/bookings/${bookingId}/bom/snapshots${query}`);
 }
@@ -747,7 +839,7 @@ export async function getCustomFieldDefinitionsApi(): Promise<CustomFieldDefinit
 }
 
 export async function createCustomFieldDefinitionApi(
-  payload: Omit<CustomFieldDefinition, "id" | "isActive">
+  payload: Omit<CustomFieldDefinition, "id" | "isActive">,
 ): Promise<CustomFieldDefinition> {
   return client.post<CustomFieldDefinition>("/api/custom-field-definitions", payload);
 }
@@ -766,5 +858,3 @@ export async function updateCustomFieldDefinitionApi(
 export async function deleteBookingApi(id: string): Promise<{ message: string; id: string }> {
   return client.delete<{ message: string; id: string }>(`/api/bookings/${id}`);
 }
-
-
