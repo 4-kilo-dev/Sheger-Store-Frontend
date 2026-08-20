@@ -43,6 +43,8 @@ export const PERMISSION = {
   DRIVER_TRIP_APPROVE: "driver_trip.approve",
   CUSTOMER_VIEW: "customer.view",
   CUSTOMER_MANAGE: "customer.manage",
+  /** Configure notification event types and recipient routing. */
+  NOTIFICATION_MANAGE: "notification.manage",
 } as const;
 
 /** Human labels for role-editor / permission catalog UI (explicit DB grants). */
@@ -57,6 +59,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   "role.manage": "Manage roles & permissions",
   "booking.delete": "Hard-delete booking & associated data",
   "payment.manage": "Manage payments, rates & financial details",
+  "notification.manage": "Manage notification events and routing",
   "driver_trip.create": "Create driver trips",
   "driver_trip.edit": "Edit driver trips",
   "driver_trip.view": "View driver trips",

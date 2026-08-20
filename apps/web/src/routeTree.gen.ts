@@ -15,6 +15,7 @@ import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as OtpRouteImport } from './routes/otp'
 import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as NotificationsRouteImport } from './routes/notifications'
+import { Route as NotificationSettingsRouteImport } from './routes/notification-settings'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as DriverTripsRouteImport } from './routes/driver-trips'
@@ -57,6 +58,11 @@ const OperationsRoute = OperationsRouteImport.update({
 const NotificationsRoute = NotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationSettingsRoute = NotificationSettingsRouteImport.update({
+  id: '/notification-settings',
+  path: '/notification-settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/driver-trips': typeof DriverTripsRoute
   '/inventory': typeof InventoryRouteWithChildren
   '/login': typeof LoginRoute
+  '/notification-settings': typeof NotificationSettingsRoute
   '/notifications': typeof NotificationsRoute
   '/operations': typeof OperationsRoute
   '/otp': typeof OtpRoute
@@ -153,6 +160,7 @@ export interface FileRoutesByTo {
   '/damage-report': typeof DamageReportRoute
   '/driver-trips': typeof DriverTripsRoute
   '/login': typeof LoginRoute
+  '/notification-settings': typeof NotificationSettingsRoute
   '/notifications': typeof NotificationsRoute
   '/operations': typeof OperationsRoute
   '/otp': typeof OtpRoute
@@ -175,6 +183,7 @@ export interface FileRoutesById {
   '/driver-trips': typeof DriverTripsRoute
   '/inventory': typeof InventoryRouteWithChildren
   '/login': typeof LoginRoute
+  '/notification-settings': typeof NotificationSettingsRoute
   '/notifications': typeof NotificationsRoute
   '/operations': typeof OperationsRoute
   '/otp': typeof OtpRoute
@@ -198,6 +207,7 @@ export interface FileRouteTypes {
     | '/driver-trips'
     | '/inventory'
     | '/login'
+    | '/notification-settings'
     | '/notifications'
     | '/operations'
     | '/otp'
@@ -217,6 +227,7 @@ export interface FileRouteTypes {
     | '/damage-report'
     | '/driver-trips'
     | '/login'
+    | '/notification-settings'
     | '/notifications'
     | '/operations'
     | '/otp'
@@ -238,6 +249,7 @@ export interface FileRouteTypes {
     | '/driver-trips'
     | '/inventory'
     | '/login'
+    | '/notification-settings'
     | '/notifications'
     | '/operations'
     | '/otp'
@@ -260,6 +272,7 @@ export interface RootRouteChildren {
   DriverTripsRoute: typeof DriverTripsRoute
   InventoryRoute: typeof InventoryRouteWithChildren
   LoginRoute: typeof LoginRoute
+  NotificationSettingsRoute: typeof NotificationSettingsRoute
   NotificationsRoute: typeof NotificationsRoute
   OperationsRoute: typeof OperationsRoute
   OtpRoute: typeof OtpRoute
@@ -310,6 +323,13 @@ declare module '@tanstack/react-router' {
       path: '/notifications'
       fullPath: '/notifications'
       preLoaderRoute: typeof NotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notification-settings': {
+      id: '/notification-settings'
+      path: '/notification-settings'
+      fullPath: '/notification-settings'
+      preLoaderRoute: typeof NotificationSettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -445,6 +465,7 @@ const rootRouteChildren: RootRouteChildren = {
   DriverTripsRoute: DriverTripsRoute,
   InventoryRoute: InventoryRouteWithChildren,
   LoginRoute: LoginRoute,
+  NotificationSettingsRoute: NotificationSettingsRoute,
   NotificationsRoute: NotificationsRoute,
   OperationsRoute: OperationsRoute,
   OtpRoute: OtpRoute,

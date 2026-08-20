@@ -2,7 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, CalendarRange, Package, Users, BarChart3, Settings,
   ChevronsLeft, ChevronsRight, Search, ChevronRight,
-  ClipboardCheck, ShieldAlert, LogOut, Sun, Moon, Menu, X, Trello, Truck,
+  ClipboardCheck, ShieldAlert, LogOut, Sun, Moon, Menu, X, Trello, Truck, Bell,
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import { useMobile } from "@/hooks/use-mobile";
@@ -10,6 +10,7 @@ import { useAuthUser } from "@/hooks/use-auth-user";
 import { usePermissions } from "@/hooks/use-permissions";
 import { logoutApi } from "@/features/auth/services/auth.api";
 import { PERMISSION } from "@/lib/auth/permission-keys";
+import { useNotifications } from "@/features/notifications/context/NotificationsContext";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -109,6 +110,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const authUser = useAuthUser();
   const { canAny } = usePermissions();
+  const { unreadCount } = useNotifications();
   const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   const displayName = authUser?.name ?? "User";
@@ -357,6 +359,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {theme === "dark" ? <Sun className="h-4 w-4" style={{ color: "var(--accent)" }} /> : <Moon className="h-4 w-4" style={{ color: "var(--accent)" }} />}
               </span>
             </button>
+            <Link
+              to="/notifications"
+              aria-label={unreadCount ? `${unreadCount} unread notifications` : "Notifications"}
+              className="relative flex h-8 w-8 items-center justify-center rounded-lg border transition-colors hover:bg-[var(--surface-2)]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <Bell className="h-4 w-4" style={{ color: "var(--text-2)" }} />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 min-w-4 rounded-full px-1 text-center text-[9px] font-bold leading-4" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </Link>
 
           </div>
         </header>

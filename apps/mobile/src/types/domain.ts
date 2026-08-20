@@ -157,13 +157,14 @@ export interface StaffMember {
   isFreelancer: boolean;
 }
 
-export type NotificationPriority = "URGENT" | "NORMAL" | "LOW";
+export type NotificationPriority = "URGENT" | "NORMAL" | "LOW" | "HIGH";
 export type NotificationType =
   "Booking" | "Inventory" | "Payment" | "Damage" | "Schedule" | "System";
 
 export interface Notification {
   id: string;
   eventType: string;
+  title?: string | null;
   message: string;
   isTask: boolean;
   relatedEntity?: string;
@@ -172,6 +173,10 @@ export interface Notification {
   createdAt: string;
   type?: NotificationType;
   priority?: NotificationPriority;
+  payload?: Record<string, unknown>;
+  recipientUserId?: string | null;
+  recipientRoleKey?: string | null;
+  outboxId?: string | null;
 }
 
 export const STATUS_LABELS: Record<BookingStatus, string> = {

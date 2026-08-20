@@ -1,22 +1,16 @@
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AppState, Platform } from "react-native";
+import * as Notifications from "expo-notifications";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "@/context/AppContext";
 import { authStorage } from "@/lib/api/client";
 import {
   connectNotificationsStream,
-  getNotificationsApi,
-  getPendingTasksApi,
+  getNotificationFeedApi,
+  getUnreadNotificationCountsApi,
   markAllNotificationsReadApi,
   markNotificationReadApi,
-  type StreamNotification,
+  registerNotificationDeviceApi,
 } from "@/services/notifications-api";
 import type { Notification } from "@/types/domain";
 
@@ -24,178 +18,168 @@ interface NotificationsContextType {
   notifications: Notification[];
   pendingTasks: Notification[];
   unreadCount: number;
+  unreadTaskCount: number;
   isLoading: boolean;
   isLive: boolean;
-  markAsRead: (id: string) => void;
-  markAllRead: () => void;
+  hasMore: boolean;
+  isLoadingOlder: boolean;
+  markAsRead: (id: string) => Promise<void>;
+  markAllRead: () => Promise<void>;
+  loadOlder: () => Promise<void>;
   refetch: () => void;
 }
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
 
-function mergeNotification(
-  list: Notification[],
-  incoming: StreamNotification | Notification,
-): Notification[] {
-  const next: Notification = {
-    id: incoming.id,
-    eventType: incoming.eventType,
-    message: incoming.message || (incoming as { detail?: string }).detail || "",
-    isTask: incoming.isTask ?? false,
-    relatedEntity: incoming.relatedEntity,
-    relatedId: incoming.relatedId,
-    readAt: incoming.readAt ?? null,
-    createdAt: incoming.createdAt,
-    type: incoming.type,
-    priority: incoming.priority,
-  };
-  const without = list.filter((n) => n.id !== next.id);
-  return [next, ...without];
+function upsert(current: Map<string, Notification>, items: Notification[]) {
+  const next = new Map(current);
+  items.forEach((item) => next.set(item.id, item));
+  return next;
 }
 
-/**
- * Live notifications provider — mirrors web SSE intent with an RN-compatible
- * EventSource polyfill (XHR streaming). Falls back to query polling when the
- * stream is unavailable.
- */
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAppContext();
+  const { isAuthenticated, authUser } = useAppContext();
   const queryClient = useQueryClient();
-  const [liveNotifications, setLiveNotifications] = useState<Notification[]>([]);
+  const [byId, setById] = useState<Map<string, Notification>>(new Map());
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [isLive, setIsLive] = useState(false);
-  const disconnectRef = useRef<(() => void) | null>(null);
+  const cursorRef = useRef<string | null>(null);
+  cursorRef.current = nextCursor;
 
-  const notificationsQuery = useQuery({
-    queryKey: ["notifications"],
-    queryFn: () => getNotificationsApi(),
+  const feedQuery = useQuery({
+    queryKey: ["notifications", "feed", authUser?.id],
+    queryFn: () => getNotificationFeedApi(),
     enabled: isAuthenticated,
-    refetchInterval: isLive ? false : 30_000,
+    refetchOnReconnect: true,
   });
-
-  const pendingQuery = useQuery({
-    queryKey: ["notifications", "tasks"],
-    queryFn: getPendingTasksApi,
+  const countsQuery = useQuery({
+    queryKey: ["notifications", "unread-count", authUser?.id],
+    queryFn: getUnreadNotificationCountsApi,
     enabled: isAuthenticated,
-    refetchInterval: isLive ? false : 30_000,
+    refetchOnReconnect: true,
   });
+  const refreshFeed = feedQuery.refetch;
+  const refreshCounts = countsQuery.refetch;
 
   useEffect(() => {
     if (!isAuthenticated) {
-      disconnectRef.current?.();
-      disconnectRef.current = null;
+      setById(new Map());
+      setNextCursor(null);
       setIsLive(false);
-      setLiveNotifications([]);
       return;
     }
+    setById(new Map());
+    void refreshFeed();
+    void refreshCounts();
+  }, [authUser?.id, isAuthenticated, refreshCounts, refreshFeed]);
 
+  useEffect(() => {
+    if (!feedQuery.data) return;
+    setById((current) => upsert(current, feedQuery.data.items));
+    setNextCursor(feedQuery.data.nextCursor);
+  }, [feedQuery.data]);
+
+  const refetch = useCallback(() => {
+    void refreshFeed();
+    void refreshCounts();
+  }, [refreshCounts, refreshFeed]);
+
+  const loadOlder = useCallback(async () => {
+    const cursor = cursorRef.current;
+    if (!cursor || isLoadingOlder) return;
+    setIsLoadingOlder(true);
+    try {
+      const page = await getNotificationFeedApi(50, cursor);
+      setById((current) => upsert(current, page.items));
+      setNextCursor(page.nextCursor);
+    } catch (error) {
+      if ((error as { status?: number }).status === 400) refetch();
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  }, [isLoadingOlder, refetch]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const subscription = AppState.addEventListener("change", (appState) => {
+      if (appState === "active") refetch();
+    });
+    return () => subscription.remove();
+  }, [isAuthenticated, refetch]);
+
+  useEffect(() => {
+    if (!isAuthenticated || Platform.OS === "web") return;
     let cancelled = false;
+    (async () => {
+      const current = await Notifications.getPermissionsAsync();
+      const permission = current.granted ? current : await Notifications.requestPermissionsAsync();
+      if (!permission.granted || cancelled) return;
+      const token = await Notifications.getDevicePushTokenAsync();
+      if (!cancelled && typeof token.data === "string" && (Platform.OS === "ios" || Platform.OS === "android")) {
+        await registerNotificationDeviceApi(Platform.OS, token.data);
+      }
+    })().catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [authUser?.id, isAuthenticated]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    let disconnect: (() => void) | undefined;
     (async () => {
       const token = await authStorage.getToken();
       if (cancelled || !token) return;
-
-      disconnectRef.current = connectNotificationsStream({
+      disconnect = connectNotificationsStream({
         token,
         onMessage: (notification) => {
-          setLiveNotifications((prev) => mergeNotification(prev, notification));
+          setById((current) => upsert(current, [notification]));
           setIsLive(true);
-          queryClient.invalidateQueries({ queryKey: ["notifications"] });
-          const hint = `${notification.relatedEntity ?? ""} ${notification.eventType ?? ""} ${notification.type ?? ""}`.toLowerCase();
-          if (hint.includes("booking") || hint.includes("assignment")) {
-            queryClient.invalidateQueries({ queryKey: ["bookings"] });
-          }
+          void refreshCounts();
         },
-        onError: () => {
-          setIsLive(false);
-        },
-        onOpen: () => setIsLive(true),
+        onOpen: () => { setIsLive(true); refetch(); },
+        onError: () => setIsLive(false),
       });
     })();
+    return () => { cancelled = true; disconnect?.(); setIsLive(false); };
+  }, [authUser?.id, isAuthenticated, refetch, refreshCounts]);
 
-    return () => {
-      cancelled = true;
-      disconnectRef.current?.();
-      disconnectRef.current = null;
-    };
-  }, [isAuthenticated, queryClient]);
-
-  const notifications = useMemo(() => {
-    const base = notificationsQuery.data ?? [];
-    if (liveNotifications.length === 0) return base;
-    let merged = [...base];
-    for (const live of liveNotifications) {
-      merged = mergeNotification(merged, live);
+  const markAsRead = useCallback(async (id: string) => {
+    const previous = byId.get(id);
+    if (!previous || previous.readAt) return;
+    setById((current) => upsert(current, [{ ...previous, readAt: new Date().toISOString() }]));
+    try {
+      const updated = await markNotificationReadApi(id);
+      setById((current) => upsert(current, [updated]));
+      void refreshCounts();
+    } catch {
+      setById((current) => upsert(current, [previous]));
     }
-    return merged.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
-  }, [notificationsQuery.data, liveNotifications]);
+  }, [byId, refreshCounts]);
 
-  const pendingTasks = pendingQuery.data ?? [];
-  const unreadCount = notifications.filter((n) => !n.readAt).length;
+  const markAllRead = useCallback(async () => {
+    const previous = byId;
+    setById((current) => new Map([...current].map(([id, notification]) => [id, { ...notification, readAt: notification.readAt ?? new Date().toISOString() }])));
+    try {
+      const updated = await markAllNotificationsReadApi();
+      setById((current) => upsert(current, updated));
+      void refreshCounts();
+    } catch { setById(previous); }
+  }, [byId, refreshCounts]);
 
-  const markReadMutation = useMutation({
-    mutationFn: markNotificationReadApi,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
-  });
+  const notifications = useMemo(() => [...byId.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [byId]);
+  const pendingTasks = useMemo(() => notifications.filter((item) => item.isTask && !item.readAt), [notifications]);
+  const value = useMemo(() => ({
+    notifications, pendingTasks, unreadCount: countsQuery.data?.unread ?? notifications.filter((item) => !item.readAt).length,
+    unreadTaskCount: countsQuery.data?.tasks ?? pendingTasks.length, isLoading: feedQuery.isLoading, isLive,
+    hasMore: Boolean(nextCursor), isLoadingOlder, markAsRead, markAllRead, loadOlder, refetch,
+  }), [countsQuery.data, feedQuery.isLoading, isLive, isLoadingOlder, loadOlder, markAllRead, markAsRead, nextCursor, notifications, pendingTasks, refetch]);
 
-  const markAllMutation = useMutation({
-    mutationFn: markAllNotificationsReadApi,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
-  });
-
-  const markAsRead = useCallback(
-    (id: string) => {
-      setLiveNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, readAt: new Date().toISOString() } : n)),
-      );
-      markReadMutation.mutate(id);
-    },
-    [markReadMutation],
-  );
-
-  const markAllRead = useCallback(() => {
-    setLiveNotifications((prev) =>
-      prev.map((n) => ({ ...n, readAt: n.readAt || new Date().toISOString() })),
-    );
-    markAllMutation.mutate();
-  }, [markAllMutation]);
-
-  const value = useMemo(
-    () => ({
-      notifications,
-      pendingTasks,
-      unreadCount,
-      isLoading: notificationsQuery.isLoading,
-      isLive,
-      markAsRead,
-      markAllRead,
-      refetch: () => {
-        notificationsQuery.refetch();
-        pendingQuery.refetch();
-      },
-    }),
-    [
-      notifications,
-      pendingTasks,
-      unreadCount,
-      notificationsQuery,
-      pendingQuery,
-      isLive,
-      markAsRead,
-      markAllRead,
-    ],
-  );
-
-  return (
-    <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>
-  );
+  return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
 }
 
 export function useNotificationsContext() {
   const context = useContext(NotificationsContext);
-  if (!context) {
-    throw new Error("useNotificationsContext must be used within a NotificationsProvider");
-  }
+  if (!context) throw new Error("useNotificationsContext must be used within a NotificationsProvider");
   return context;
 }

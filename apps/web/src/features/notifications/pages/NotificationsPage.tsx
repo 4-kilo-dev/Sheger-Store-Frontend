@@ -5,12 +5,13 @@ import {
   SlidersHorizontal, AlertTriangle, Settings, ArrowRight,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useNotifications } from "@/features/notifications/context/NotificationsContext";
 import {
   resolveNotificationDisplay,
   type Notification,
   type NotificationType,
-  type NotificationPriority,
+  type DisplayPriority,
 } from "@/features/notifications/services/notifications.api";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 
@@ -24,7 +25,7 @@ const _Route = createFileRoute("/notifications")({
   component: NotificationsPage,
 });
 
-const TABS = ["All", "Unread", "Booking", "Inventory", "Payment", "Schedule"] as const;
+const TABS = ["All", "Unread", "Tasks"] as const;
 type TabKey = (typeof TABS)[number];
 
 const TYPE_ICONS: Record<NotificationType, any> = {
@@ -36,21 +37,26 @@ const TYPE_ICONS: Record<NotificationType, any> = {
   System: Settings,
 };
 
-const PRIORITY_STYLES: Record<NotificationPriority, { color: string; bg: string }> = {
+const PRIORITY_STYLES: Record<DisplayPriority, { color: string; bg: string }> = {
   URGENT: { color: "var(--destructive)", bg: "color-mix(in oklab, var(--destructive) 14%, transparent)" },
+  HIGH: { color: "var(--color-status-reserved)", bg: "color-mix(in oklab, var(--color-status-reserved) 14%, transparent)" },
   NORMAL: { color: "var(--accent)", bg: "color-mix(in oklab, var(--accent) 10%, transparent)" },
   LOW: { color: "var(--text-3)", bg: "var(--surface-2)" },
 };
 
 export function NotificationsPage() {
-  const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications();
+  const {
+    notifications, unreadCount, unreadTaskCount, markAsRead, markAllRead,
+    isLoading, isLoadingOlder, hasMore, loadOlder, isReconnecting,
+  } = useNotifications();
   const { formatDateTime } = useDateFormatter();
+  const { can } = usePermissions();
   const [tab, setTab] = useState<TabKey>("All");
 
   const filtered = useMemo(() => {
     let items = [...notifications];
     if (tab === "Unread") items = items.filter((n) => !n.readAt);
-    else if (tab !== "All") items = items.filter((n) => n.type === tab);
+    else if (tab === "Tasks") items = items.filter((n) => n.isTask && !n.readAt);
     return items;
   }, [tab, notifications]);
 
@@ -171,7 +177,7 @@ export function NotificationsPage() {
                             {formatDateTime(n.createdAt)}
                           </time>
                         </div>
-                        <p className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-2)" }}>{n.detail || n.message}</p>
+                        <p className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-2)" }}>{n.message}</p>
                         <div className="mt-2 flex items-center gap-3">
                           <span
                             className="rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider"
@@ -210,11 +216,28 @@ export function NotificationsPage() {
             ) : null,
           )}
 
-          {filtered.length === 0 && (
+          {isLoading && filtered.length === 0 && (
+            <div className="py-12 text-center text-[12px]" style={{ color: "var(--text-3)" }}>Loading notifications…</div>
+          )}
+
+          {!isLoading && filtered.length === 0 && (
             <div className="py-12 text-center">
               <Bell className="mx-auto h-8 w-8 text-zinc-500" />
               <p className="mt-3 text-[13px] font-semibold">No notifications</p>
               <p className="mt-1 text-[11px]" style={{ color: "var(--text-3)" }}>You're all caught up.</p>
+            </div>
+          )}
+
+          {hasMore && (
+            <div className="border-t p-3 text-center" style={{ borderColor: "var(--border)" }}>
+              <button
+                onClick={() => void loadOlder()}
+                disabled={isLoadingOlder}
+                className="rounded-md border px-3 py-1.5 text-[11px] font-semibold transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+              >
+                {isLoadingOlder ? "Loading older alerts…" : "Load older alerts"}
+              </button>
             </div>
           )}
         </section>
@@ -229,14 +252,23 @@ export function NotificationsPage() {
             <p className="mt-2 text-[11px] leading-5" style={{ color: "var(--text-2)" }}>
               Critical stock, damage, and onsite alerts are pinned. Payment and assignment updates follow your selected role.
             </p>
-            <Link
-              to="/settings"
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-md border py-2 text-[11px] font-semibold transition hover:border-[var(--accent)]"
-              style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
-            >
-              Notification Settings
-            </Link>
+            {can("notification.manage") && (
+              <Link
+                to="/notification-settings"
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-md border py-2 text-[11px] font-semibold transition hover:border-[var(--accent)]"
+                style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+              >
+                Notification Settings
+              </Link>
+            )}
           </div>
+
+          {isReconnecting && (
+            <div className="rounded-lg border p-3 text-[11px] leading-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+              <div className="font-semibold" style={{ color: "var(--text-2)" }}>Live updates reconnecting</div>
+              <p className="mt-1" style={{ color: "var(--text-3)" }}>Your inbox continues to refresh from the notification feed.</p>
+            </div>
+          )}
 
           <div className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
             <h2 className="text-[12px] font-bold">Summary</h2>
@@ -244,7 +276,8 @@ export function NotificationsPage() {
               {[
                 { label: "Total", value: notifications.length },
                 { label: "Unread", value: unreadCount, color: "var(--accent)" },
-                { label: "Urgent", value: notifications.filter((n) => n.priority === "URGENT").length, color: "var(--destructive)" },
+                { label: "Tasks", value: unreadTaskCount, color: "var(--color-status-reserved)" },
+                { label: "Urgent", value: notifications.filter((n) => n.priority === "urgent").length, color: "var(--destructive)" },
               ].map(({ label, value, color }) => (
                 <div key={label} className="flex items-center justify-between text-[11px]">
                   <span style={{ color: "var(--text-2)" }}>{label}</span>

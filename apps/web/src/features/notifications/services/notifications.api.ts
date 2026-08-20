@@ -1,72 +1,153 @@
 import { client, authStorage } from "@/lib/api/client";
 
-export type NotificationType = 'Booking' | 'Inventory' | 'Payment' | 'Damage' | 'Schedule' | 'System';
-export type NotificationPriority = 'LOW' | 'NORMAL' | 'URGENT';
+export type NotificationType = "Booking" | "Inventory" | "Payment" | "Damage" | "Schedule" | "System";
+export type NotificationPriority = "low" | "normal" | "high" | "urgent";
+export type DisplayPriority = Uppercase<NotificationPriority>;
 
+/** Durable, per-user notification returned by the notifications service. */
 export interface Notification {
   id: string;
-  title: string;
-  detail: string;
-  message? : string;
-  eventType?: string;
-  type: NotificationType;
+  recipientUserId: string | null;
+  recipientRoleKey: string | null;
+  eventType: string;
+  relatedEntity: string | null;
+  relatedId: string | null;
+  title: string | null;
+  message: string;
+  payload: Record<string, unknown>;
   priority: NotificationPriority;
-  readAt: string | null;
   isTask: boolean;
-  relatedEntity?: 'booking' | 'assignment' | 'damage_missing_report' | 'evaluation';
-  relatedId?: string;
+  readAt: string | null;
+  createdAt: string;
+  outboxId: string | null;
+}
+
+export interface NotificationFeedResponse {
+  items: Notification[];
+  nextCursor: string | null;
+}
+
+export interface UnreadNotificationCounts {
+  unread: number;
+  tasks: number;
+}
+
+export interface NotificationEventType {
+  key: string;
+  name: string;
+  description: string | null;
+  defaultTitle: string | null;
+  defaultPriority: NotificationPriority;
+  defaultIsTask: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateNotificationEventType {
+  key: string;
+  name: string;
+  description?: string;
+  defaultTitle?: string;
+  defaultPriority?: NotificationPriority;
+  defaultIsTask?: boolean;
+}
+
+export interface NotificationRoutingRule {
+  id: string;
+  eventType: string;
+  isActive: boolean;
+  roleId: string | null;
+  roleName: string | null;
+  userId: string | null;
+  userName: string | null;
   createdAt: string;
 }
 
-const isBrowser = typeof window !== "undefined";
+export type CreateNotificationRoutingRule =
+  | { eventType: string; roleId: string; userId?: never }
+  | { eventType: string; userId: string; roleId?: never };
 
-function getLocalNotifications(): Notification[] {
-  if (!isBrowser) return [];
-  
-  const saved = localStorage.getItem("vortex_notifications");
-  if (saved) {
-    try {
-      return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-  }
-  return [];
-}
-
-function saveLocalNotifications(notifs: Notification[]) {
-  if (!isBrowser) return;
-  localStorage.setItem("vortex_notifications", JSON.stringify(notifs));
-}
-
-// ----------------------------------------------------
-// REST APIs
-// ----------------------------------------------------
-
-export async function getNotificationsApi(limit = 50, offset = 0): Promise<Notification[]> {
+// Keep the legacy endpoints exported for old callers while the inbox uses the
+// cursor feed below.
+export function getNotificationsApi(limit = 50, offset = 0): Promise<Notification[]> {
   return client.get<Notification[]>(`/api/notifications?limit=${limit}&offset=${offset}`);
 }
 
-export async function getPendingTasksApi(): Promise<Notification[]> {
-  return client.get<Notification[]>(`/api/notifications/tasks`);
+export function getPendingTasksApi(): Promise<Notification[]> {
+  return client.get<Notification[]>("/api/notifications/tasks");
 }
 
-export async function markNotificationReadApi(id: string): Promise<void> {
-  return client.patch(`/api/notifications/${id}/read`, {});
+export function getNotificationFeedApi(limit = 50, cursor?: string): Promise<NotificationFeedResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  return client.get<NotificationFeedResponse>(`/api/notifications/feed?${params.toString()}`);
 }
 
-export async function markAllNotificationsReadApi(): Promise<void> {
-  return client.post(`/api/notifications/read-all`, {});
+export function getUnreadNotificationCountsApi(): Promise<UnreadNotificationCounts> {
+  return client.get<UnreadNotificationCounts>("/api/notifications/unread-count");
 }
 
-export async function requestPermissionApi(permissionKey: string, reason?: string): Promise<any> {
-  return client.post(`/api/notifications/request-permission`, { permissionKey, reason });
+export function markNotificationReadApi(id: string): Promise<Notification> {
+  return client.patch<Notification>(`/api/notifications/${id}/read`, {});
 }
 
-/** Display defaults keyed by backend event type (do not rely on status_changed for quote-ready). */
+export function markAllNotificationsReadApi(): Promise<Notification[]> {
+  return client.post<Notification[]>("/api/notifications/read-all", {});
+}
+
+export function requestPermissionApi(permissionKey: string, reason?: string): Promise<unknown> {
+  return client.post("/api/notifications/request-permission", { permissionKey, reason });
+}
+
+export function getNotificationEventTypesApi(): Promise<NotificationEventType[]> {
+  return client.get<NotificationEventType[]>("/api/notifications/notification-event-types");
+}
+
+export function createNotificationEventTypeApi(
+  payload: CreateNotificationEventType,
+): Promise<NotificationEventType> {
+  return client.post<NotificationEventType>("/api/notifications/notification-event-types", payload);
+}
+
+export function updateNotificationEventTypeApi(
+  key: string,
+  payload: Partial<Omit<CreateNotificationEventType, "key">> & { isActive?: boolean },
+): Promise<NotificationEventType> {
+  return client.patch<NotificationEventType>(
+    `/api/notifications/notification-event-types/${encodeURIComponent(key)}`,
+    payload,
+  );
+}
+
+export function getNotificationRoutingRulesApi(eventType?: string): Promise<NotificationRoutingRule[]> {
+  const query = eventType ? `?eventType=${encodeURIComponent(eventType)}` : "";
+  return client.get<NotificationRoutingRule[]>(`/api/notifications/notification-routing-rules${query}`);
+}
+
+export function createNotificationRoutingRuleApi(
+  payload: CreateNotificationRoutingRule,
+): Promise<NotificationRoutingRule> {
+  return client.post<NotificationRoutingRule>("/api/notifications/notification-routing-rules", payload);
+}
+
+export function updateNotificationRoutingRuleApi(
+  id: string,
+  isActive: boolean,
+): Promise<NotificationRoutingRule> {
+  return client.patch<NotificationRoutingRule>(`/api/notifications/notification-routing-rules/${id}`, {
+    isActive,
+  });
+}
+
+export function deleteNotificationRoutingRuleApi(id: string): Promise<void> {
+  return client.delete<void>(`/api/notifications/notification-routing-rules/${id}`);
+}
+
+/** Display defaults are intentionally only fallbacks for older/unknown records. */
 export const NOTIFICATION_EVENT_DISPLAY: Record<
   string,
-  { title: string; type: NotificationType; priority: NotificationPriority }
+  { title: string; type: NotificationType; priority: DisplayPriority }
 > = {
   "booking.created": { title: "New booking created", type: "Booking", priority: "NORMAL" },
   "booking.confirmed": { title: "Booking confirmed", type: "Booking", priority: "NORMAL" },
@@ -81,86 +162,69 @@ export const NOTIFICATION_EVENT_DISPLAY: Record<
   "assignment.declined": { title: "Assignment declined", type: "Booking", priority: "URGENT" },
 };
 
-export function resolveNotificationDisplay(n: Notification): {
+function humanizeEventType(eventType: string): string {
+  const words = eventType.replace(/[._-]+/g, " ").trim();
+  return words ? words.replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Notification";
+}
+
+function inferType(notification: Notification): NotificationType {
+  const event = notification.eventType.toLowerCase();
+  const entity = notification.relatedEntity?.toLowerCase() ?? "";
+  if (event.startsWith("booking.") || entity === "booking" || entity === "assignment") return "Booking";
+  if (event.startsWith("inventory.") || entity.includes("damage")) return "Inventory";
+  if (event.startsWith("payment.")) return "Payment";
+  if (event.startsWith("schedule.")) return "Schedule";
+  return "System";
+}
+
+export function resolveNotificationDisplay(notification: Notification): {
   title: string;
   type: NotificationType;
-  priority: NotificationPriority;
+  priority: DisplayPriority;
   linkTo?: string;
 } {
-  const fromEvent = n.eventType ? NOTIFICATION_EVENT_DISPLAY[n.eventType] : undefined;
-  const title = n.title || fromEvent?.title || n.eventType || "Notification";
-  const type = n.type || fromEvent?.type || "System";
-  const priority = n.priority || fromEvent?.priority || "NORMAL";
+  const fromEvent = NOTIFICATION_EVENT_DISPLAY[notification.eventType];
+  const title = notification.title || fromEvent?.title || humanizeEventType(notification.eventType);
+  const type = fromEvent?.type || inferType(notification);
+  const priority = (notification.priority || fromEvent?.priority || "normal").toUpperCase() as DisplayPriority;
   const linkTo =
-    (n.relatedEntity === "booking" || n.eventType === "booking.technical_allocated") && n.relatedId
-      ? `/bookings/${n.relatedId}`
-      : n.relatedEntity === "assignment" && n.relatedId
-        ? `/bookings/${n.relatedId}`
-        : n.relatedEntity === "damage_missing_report"
-          ? "/damage-report"
-          : undefined;
+    (notification.relatedEntity === "booking" || notification.relatedEntity === "assignment") &&
+    notification.relatedId
+      ? `/bookings/${notification.relatedId}`
+      : notification.relatedEntity === "damage_missing_report"
+        ? "/damage-report"
+        : undefined;
   return { title, type, priority, linkTo };
 }
 
-// ----------------------------------------------------
-// Real-Time SSE Stream Handlers
-// ----------------------------------------------------
-
 export interface SseHandlers {
-  onMessage: (notification: Notification) => void;
-  onError?: (error: any) => void;
+  onNotification: (notification: Notification) => void;
+  onOpen?: () => void;
+  onError?: (error: Event) => void;
 }
 
-/**
- * Connects to the Server-Sent Events (SSE) notification stream.
- */
+/** Connect to the authenticated notification stream. EventSource handles replay/reconnect. */
 export function connectNotificationsStream(handlers: SseHandlers): () => void {
   const token = authStorage.getToken();
-  const hasValidToken = token && token !== "undefined" && token !== "null";
-  if (!hasValidToken) {
-    console.warn("No valid authentication token found. Unable to connect to notifications stream.");
+  if (!token || token === "undefined" || token === "null" || typeof EventSource === "undefined") {
     return () => {};
   }
 
-  let eventSource: EventSource | null = null;
-  let isClosed = false;
+  const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  const backendBase = import.meta.env.VITE_API_URL || (isLocal ? "http://localhost:3000" : window.location.origin);
+  const ssePath = import.meta.env.VITE_API_URL || isLocal ? "/notifications/stream" : "/api/notifications/stream";
+  const stream = new EventSource(`${backendBase}${ssePath}?token=${encodeURIComponent(token)}`);
 
-  const connectRealSse = () => {
+  stream.addEventListener("notification", (event) => {
     try {
-      const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-      const backendBase = import.meta.env.VITE_API_URL || (isLocal ? "http://localhost:3000" : window.location.origin);
-      const ssePath = (import.meta.env.VITE_API_URL || isLocal) ? "/notifications/stream" : "/api/notifications/stream";
-      const sseUrl = `${backendBase}${ssePath}?token=${encodeURIComponent(token)}`;
-      eventSource = new EventSource(sseUrl);
-
-      eventSource.onmessage = (event) => {
-        try {
-          const newNotif: Notification = JSON.parse(event.data);
-          const list = getLocalNotifications();
-          saveLocalNotifications([newNotif, ...list]);
-          handlers.onMessage(newNotif);
-        } catch (e) {
-          console.error("Failed to parse incoming SSE message:", e);
-        }
-      };
-
-      eventSource.onerror = (err) => {
-        console.warn("SSE Connection lost. Browser will auto-reconnect...", err);
-        if (handlers.onError) {
-          handlers.onError(err);
-        }
-      };
-    } catch (e) {
-      console.error("Failed to initialize SSE EventSource:", e);
+      handlers.onNotification(JSON.parse((event as MessageEvent<string>).data) as Notification);
+    } catch (error) {
+      console.warn("Unable to parse a notification stream event", error);
     }
-  };
+  });
+  stream.addEventListener("heartbeat", () => undefined);
+  stream.onopen = () => handlers.onOpen?.();
+  stream.onerror = (error) => handlers.onError?.(error);
 
-  connectRealSse();
-
-  return () => {
-    isClosed = true;
-    if (eventSource) {
-      eventSource.close();
-    }
-  };
+  return () => stream.close();
 }

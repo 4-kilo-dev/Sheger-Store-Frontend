@@ -1,6 +1,19 @@
 import { client } from "@/lib/api/client";
 import type { Notification, NotificationPriority, NotificationType } from "@/types/domain";
 
+type ApiNotification = Omit<Notification, "priority"> & { priority?: string };
+export interface NotificationFeedResponse { items: Notification[]; nextCursor: string | null; }
+export interface UnreadNotificationCounts { unread: number; tasks: number; }
+
+function fromApiNotification(notification: ApiNotification): Notification {
+  return {
+    ...notification,
+    message: notification.message || "",
+    isTask: Boolean(notification.isTask),
+    priority: notification.priority?.toUpperCase() as NotificationPriority | undefined,
+  };
+}
+
 const EVENT_DISPLAY: Record<
   string,
   { title: string; type: NotificationType; priority: NotificationPriority }
@@ -45,7 +58,7 @@ const EVENT_DISPLAY: Record<
 
 export function getNotificationDisplay(notification: Notification) {
   const fromEvent = EVENT_DISPLAY[notification.eventType];
-  const title = fromEvent?.title ?? notification.eventType;
+  const title = notification.title || fromEvent?.title || notification.eventType.replace(/[._-]+/g, " ");
   // The backend's own type/priority (when present) are authoritative — the
   // static event map is only a fallback for older events that predate them.
   const type = notification.type || fromEvent?.type || ("System" as NotificationType);
@@ -75,19 +88,36 @@ export function groupByRecency(createdAt: string): "Today" | "Yesterday" | "This
 }
 
 export async function getNotificationsApi(limit = 50, offset = 0): Promise<Notification[]> {
-  return client.get<Notification[]>(`/notifications?limit=${limit}&offset=${offset}`);
+  const notifications = await client.get<ApiNotification[]>(`/notifications?limit=${limit}&offset=${offset}`);
+  return notifications.map(fromApiNotification);
+}
+
+export async function getNotificationFeedApi(limit = 50, cursor?: string): Promise<NotificationFeedResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  const response = await client.get<{ items: ApiNotification[]; nextCursor: string | null }>(`/notifications/feed?${params}`);
+  return { items: response.items.map(fromApiNotification), nextCursor: response.nextCursor };
+}
+
+export function getUnreadNotificationCountsApi(): Promise<UnreadNotificationCounts> {
+  return client.get<UnreadNotificationCounts>("/notifications/unread-count");
 }
 
 export async function getPendingTasksApi(): Promise<Notification[]> {
   return client.get<Notification[]>("/notifications/tasks");
 }
 
-export async function markNotificationReadApi(id: string): Promise<void> {
-  await client.patch(`/notifications/${id}/read`, {});
+export async function markNotificationReadApi(id: string): Promise<Notification> {
+  return fromApiNotification(await client.patch<ApiNotification>(`/notifications/${id}/read`, {}));
 }
 
-export async function markAllNotificationsReadApi(): Promise<void> {
-  await client.post(`/api/notifications/read-all`, {});
+export async function markAllNotificationsReadApi(): Promise<Notification[]> {
+  const notifications = await client.post<ApiNotification[]>(`/api/notifications/read-all`, {});
+  return notifications.map(fromApiNotification);
+}
+
+export function registerNotificationDeviceApi(platform: "ios" | "android", token: string): Promise<unknown> {
+  return client.post("/notifications/devices", { platform, token });
 }
 
 export async function requestPermissionApi(
@@ -118,6 +148,7 @@ export function connectNotificationsStream(handlers: SseHandlers): () => void {
 
   let xhr: XMLHttpRequest | null = null;
   let lastIndex = 0;
+  let lastEventId: string | null = null;
   let buffer = "";
   let closed = false;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -127,8 +158,12 @@ export function connectNotificationsStream(handlers: SseHandlers): () => void {
     const parts = buffer.split("\n\n");
     buffer = parts.pop() || "";
     for (const part of parts) {
-      const dataLines = part
-        .split("\n")
+      const lines = part.split("\n");
+      const eventName = lines.find((line) => line.startsWith("event:"))?.replace(/^event:\s?/, "");
+      if (eventName && eventName !== "notification") continue;
+      const eventId = lines.find((line) => line.startsWith("id:"))?.replace(/^id:\s?/, "");
+      if (eventId) lastEventId = eventId;
+      const dataLines = lines
         .filter((line) => line.startsWith("data:"))
         .map((line) => line.replace(/^data:\s?/, ""));
       if (dataLines.length === 0) continue;
@@ -147,6 +182,7 @@ export function connectNotificationsStream(handlers: SseHandlers): () => void {
     xhr.open("GET", sseUrl, true);
     xhr.setRequestHeader("Accept", "text/event-stream");
     xhr.setRequestHeader("Cache-Control", "no-cache");
+    if (lastEventId) xhr.setRequestHeader("Last-Event-ID", lastEventId);
 
     xhr.onreadystatechange = () => {
       if (!xhr) return;
@@ -208,4 +244,3 @@ export function connectNotificationsStream(handlers: SseHandlers): () => void {
     xhr = null;
   };
 }
-

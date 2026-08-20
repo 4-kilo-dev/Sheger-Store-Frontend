@@ -11,9 +11,9 @@ export function PendingTasksWidget() {
 
   const getPriorityStyle = (priority: string) => {
     switch (priority) {
-      case "URGENT":
+      case "urgent":
         return { color: "var(--destructive)", bg: "rgba(229, 70, 102, 0.15)", border: "1px solid rgba(229, 70, 102, 0.3)" };
-      case "NORMAL":
+      case "high":
         return { color: "var(--color-status-reserved)", bg: "rgba(253, 224, 71, 0.1)", border: "1px solid rgba(253, 224, 71, 0.2)" };
       default:
         return { color: "var(--text-3)", bg: "var(--surface-2)", border: "1px solid var(--border)" };
@@ -72,10 +72,10 @@ export function PendingTasksWidget() {
                       className="rounded text-[8px] font-bold uppercase px-1.5 py-0.5 tracking-wider shrink-0"
                       style={{ color: pStyle.color, background: pStyle.bg, border: pStyle.border }}
                     >
-                      {t.priority}
+                      {t.priority.toUpperCase()}
                     </span>
                   </div>
-                  <p className="leading-relaxed leading-5 text-[11px]" style={{ color: "var(--text-2)" }}>{t.detail}</p>
+                  <p className="leading-relaxed leading-5 text-[11px]" style={{ color: "var(--text-2)" }}>{t.message}</p>
                 </div>
 
                 <div className="flex items-center justify-between border-t pt-2" style={{ borderColor: "var(--border)" }}>
