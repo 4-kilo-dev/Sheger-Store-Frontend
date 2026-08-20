@@ -1,7 +1,15 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AppState, Platform } from "react-native";
 import * as Notifications from "expo-notifications";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useAppContext } from "@/context/AppContext";
 import { authStorage } from "@/lib/api/client";
 import {
@@ -39,7 +47,6 @@ function upsert(current: Map<string, Notification>, items: Notification[]) {
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, authUser } = useAppContext();
-  const queryClient = useQueryClient();
   const [byId, setById] = useState<Map<string, Notification>>(new Map());
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
@@ -111,16 +118,27 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   useEffect(() => {
     if (!isAuthenticated || Platform.OS === "web") return;
     let cancelled = false;
+    const registerDeviceToken = (deviceToken: { data: string }) => {
+      if (
+        cancelled ||
+        typeof deviceToken.data !== "string" ||
+        (Platform.OS !== "ios" && Platform.OS !== "android")
+      )
+        return;
+      void registerNotificationDeviceApi(Platform.OS, deviceToken.data).catch(() => undefined);
+    };
+    const subscription = Notifications.addPushTokenListener(registerDeviceToken);
     (async () => {
       const current = await Notifications.getPermissionsAsync();
       const permission = current.granted ? current : await Notifications.requestPermissionsAsync();
       if (!permission.granted || cancelled) return;
       const token = await Notifications.getDevicePushTokenAsync();
-      if (!cancelled && typeof token.data === "string" && (Platform.OS === "ios" || Platform.OS === "android")) {
-        await registerNotificationDeviceApi(Platform.OS, token.data);
-      }
+      registerDeviceToken(token);
     })().catch(() => undefined);
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      subscription.remove();
+    };
   }, [authUser?.id, isAuthenticated]);
 
   useEffect(() => {
@@ -137,49 +155,118 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
           setIsLive(true);
           void refreshCounts();
         },
-        onOpen: () => { setIsLive(true); refetch(); },
+        onOpen: () => {
+          setIsLive(true);
+          refetch();
+        },
         onError: () => setIsLive(false),
       });
     })();
-    return () => { cancelled = true; disconnect?.(); setIsLive(false); };
+    return () => {
+      cancelled = true;
+      disconnect?.();
+      setIsLive(false);
+    };
   }, [authUser?.id, isAuthenticated, refetch, refreshCounts]);
 
-  const markAsRead = useCallback(async (id: string) => {
-    const previous = byId.get(id);
-    if (!previous || previous.readAt) return;
-    setById((current) => upsert(current, [{ ...previous, readAt: new Date().toISOString() }]));
-    try {
-      const updated = await markNotificationReadApi(id);
-      setById((current) => upsert(current, [updated]));
-      void refreshCounts();
-    } catch {
-      setById((current) => upsert(current, [previous]));
-    }
-  }, [byId, refreshCounts]);
+  const markAsRead = useCallback(
+    async (id: string) => {
+      const previous = byId.get(id);
+      if (!previous || previous.readAt) return;
+      const optimisticReadAt = new Date().toISOString();
+      setById((current) => upsert(current, [{ ...previous, readAt: optimisticReadAt }]));
+      try {
+        const updated = await markNotificationReadApi(id);
+        setById((current) => upsert(current, [updated]));
+        void refreshCounts();
+      } catch {
+        setById((current) => {
+          const currentNotification = current.get(id);
+          return currentNotification?.readAt === optimisticReadAt
+            ? upsert(current, [previous])
+            : current;
+        });
+      }
+    },
+    [byId, refreshCounts],
+  );
 
   const markAllRead = useCallback(async () => {
-    const previous = byId;
-    setById((current) => new Map([...current].map(([id, notification]) => [id, { ...notification, readAt: notification.readAt ?? new Date().toISOString() }])));
+    const changedAt = new Date().toISOString();
+    const originalReadAt = new Map<string, string | null>();
+    setById((current) => {
+      const next = new Map(current);
+      for (const [id, notification] of next) {
+        if (!notification.readAt) {
+          originalReadAt.set(id, notification.readAt);
+          next.set(id, { ...notification, readAt: changedAt });
+        }
+      }
+      return next;
+    });
     try {
       const updated = await markAllNotificationsReadApi();
       setById((current) => upsert(current, updated));
       void refreshCounts();
-    } catch { setById(previous); }
-  }, [byId, refreshCounts]);
+    } catch {
+      setById((current) => {
+        const next = new Map(current);
+        for (const [id, readAt] of originalReadAt) {
+          const notification = next.get(id);
+          if (notification?.readAt === changedAt) next.set(id, { ...notification, readAt });
+        }
+        return next;
+      });
+    }
+  }, [refreshCounts]);
 
-  const notifications = useMemo(() => [...byId.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [byId]);
-  const pendingTasks = useMemo(() => notifications.filter((item) => item.isTask && !item.readAt), [notifications]);
-  const value = useMemo(() => ({
-    notifications, pendingTasks, unreadCount: countsQuery.data?.unread ?? notifications.filter((item) => !item.readAt).length,
-    unreadTaskCount: countsQuery.data?.tasks ?? pendingTasks.length, isLoading: feedQuery.isLoading, isLive,
-    hasMore: Boolean(nextCursor), isLoadingOlder, markAsRead, markAllRead, loadOlder, refetch,
-  }), [countsQuery.data, feedQuery.isLoading, isLive, isLoadingOlder, loadOlder, markAllRead, markAsRead, nextCursor, notifications, pendingTasks, refetch]);
+  const notifications = useMemo(
+    () =>
+      [...byId.values()].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      ),
+    [byId],
+  );
+  const pendingTasks = useMemo(
+    () => notifications.filter((item) => item.isTask && !item.readAt),
+    [notifications],
+  );
+  const value = useMemo(
+    () => ({
+      notifications,
+      pendingTasks,
+      unreadCount: countsQuery.data?.unread ?? notifications.filter((item) => !item.readAt).length,
+      unreadTaskCount: countsQuery.data?.tasks ?? pendingTasks.length,
+      isLoading: feedQuery.isLoading,
+      isLive,
+      hasMore: Boolean(nextCursor),
+      isLoadingOlder,
+      markAsRead,
+      markAllRead,
+      loadOlder,
+      refetch,
+    }),
+    [
+      countsQuery.data,
+      feedQuery.isLoading,
+      isLive,
+      isLoadingOlder,
+      loadOlder,
+      markAllRead,
+      markAsRead,
+      nextCursor,
+      notifications,
+      pendingTasks,
+      refetch,
+    ],
+  );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
 }
 
 export function useNotificationsContext() {
   const context = useContext(NotificationsContext);
-  if (!context) throw new Error("useNotificationsContext must be used within a NotificationsProvider");
+  if (!context)
+    throw new Error("useNotificationsContext must be used within a NotificationsProvider");
   return context;
 }

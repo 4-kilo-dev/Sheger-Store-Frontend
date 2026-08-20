@@ -1,4 +1,12 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useAuthUser } from "@/hooks/use-auth-user";
@@ -69,22 +77,46 @@ function sortedNotifications(byId: Map<string, Notification>) {
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const authUser = useAuthUser();
-  const token = authStorage.getToken();
-  const isAuthenticated = Boolean(token && token !== "undefined" && token !== "null" && authUser?.id);
+  const [token, setToken] = useState(() => authStorage.getToken());
+  const isAuthenticated = Boolean(
+    token && token !== "undefined" && token !== "null" && authUser?.id,
+  );
   const [state, setState] = useState<NotificationState>(INITIAL_STATE);
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // Token changes can happen without a user change (refresh, revocation, or a
+  // different tab). The SSE effect below must recreate its EventSource then.
+  useEffect(() => {
+    const syncToken = () => setToken(authStorage.getToken());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "vortex_auth_token") syncToken();
+    };
+    window.addEventListener("vortex-auth-change", syncToken);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("vortex-auth-change", syncToken);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
   const refreshUnreadCounts = useCallback(async () => {
     const counts = await getUnreadNotificationCountsApi();
-    setState((current) => ({ ...current, unreadCount: counts.unread, unreadTaskCount: counts.tasks }));
+    setState((current) => ({
+      ...current,
+      unreadCount: counts.unread,
+      unreadTaskCount: counts.tasks,
+    }));
   }, []);
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) return;
     setState((current) => ({ ...current, isLoading: true }));
     try {
-      const [feed, counts] = await Promise.all([getNotificationFeedApi(), getUnreadNotificationCountsApi()]);
+      const [feed, counts] = await Promise.all([
+        getNotificationFeedApi(),
+        getUnreadNotificationCountsApi(),
+      ]);
       setState((current) => ({
         ...current,
         byId: upsert(current.byId, feed.items),
@@ -121,27 +153,38 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     }
   }, [isAuthenticated, refresh]);
 
-  const markAsRead = useCallback(async (id: string) => {
-    const previous = stateRef.current.byId.get(id);
-    if (!previous || previous.readAt) return;
-    const optimistic = { ...previous, readAt: new Date().toISOString() };
-    setState((current) => ({ ...current, byId: upsert(current.byId, [optimistic]) }));
-    try {
-      const updated = await markNotificationReadApi(id);
-      setState((current) => ({ ...current, byId: upsert(current.byId, [updated]) }));
-      await refreshUnreadCounts();
-    } catch (error) {
-      setState((current) => ({ ...current, byId: upsert(current.byId, [previous]) }));
-      toast.error("Notification could not be marked as read");
-    }
-  }, [refreshUnreadCounts]);
+  const markAsRead = useCallback(
+    async (id: string) => {
+      const previous = stateRef.current.byId.get(id);
+      if (!previous || previous.readAt) return;
+      const optimisticReadAt = new Date().toISOString();
+      const optimistic = { ...previous, readAt: optimisticReadAt };
+      setState((current) => ({ ...current, byId: upsert(current.byId, [optimistic]) }));
+      try {
+        const updated = await markNotificationReadApi(id);
+        setState((current) => ({ ...current, byId: upsert(current.byId, [updated]) }));
+        await refreshUnreadCounts();
+      } catch (error) {
+        setState((current) => {
+          const currentNotification = current.byId.get(id);
+          if (currentNotification?.readAt !== optimisticReadAt) return current;
+          return { ...current, byId: upsert(current.byId, [previous]) };
+        });
+        toast.error("Notification could not be marked as read");
+      }
+    },
+    [refreshUnreadCounts],
+  );
 
   const markAllRead = useCallback(async () => {
     const changedAt = new Date().toISOString();
-    const before = stateRef.current.byId;
-    const optimistic = new Map(before);
+    const originalReadAt = new Map<string, string | null>();
+    const optimistic = new Map(stateRef.current.byId);
     for (const [id, notification] of optimistic) {
-      if (!notification.readAt) optimistic.set(id, { ...notification, readAt: changedAt });
+      if (!notification.readAt) {
+        originalReadAt.set(id, notification.readAt);
+        optimistic.set(id, { ...notification, readAt: changedAt });
+      }
     }
     setState((current) => ({ ...current, byId: optimistic }));
     try {
@@ -150,7 +193,14 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       await refreshUnreadCounts();
       toast.success("All notifications marked as read");
     } catch (error) {
-      setState((current) => ({ ...current, byId: before }));
+      setState((current) => {
+        const byId = new Map(current.byId);
+        for (const [id, readAt] of originalReadAt) {
+          const notification = byId.get(id);
+          if (notification?.readAt === changedAt) byId.set(id, { ...notification, readAt });
+        }
+        return { ...current, byId };
+      });
       toast.error("Notifications could not be marked as read");
     }
   }, [refreshUnreadCounts]);
@@ -184,7 +234,11 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     const disconnect = connectNotificationsStream({
       onNotification: (notification) => {
         const isNew = !stateRef.current.byId.has(notification.id);
-        setState((current) => ({ ...current, byId: upsert(current.byId, [notification]), isLive: true }));
+        setState((current) => ({
+          ...current,
+          byId: upsert(current.byId, [notification]),
+          isLive: true,
+        }));
         void refreshUnreadCounts().catch(() => undefined);
         if (isNew) {
           const display = resolveNotificationDisplay(notification);
@@ -201,32 +255,39 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         void refresh().catch(() => undefined);
       },
       onError: () => {
-        setState((current) => ({ ...current, isLive: false, sseFailures: current.sseFailures + 1 }));
+        setState((current) => ({
+          ...current,
+          isLive: false,
+          sseFailures: current.sseFailures + 1,
+        }));
       },
     });
     return disconnect;
-  }, [isAuthenticated, navigate, refresh, refreshUnreadCounts]);
+  }, [isAuthenticated, navigate, refresh, refreshUnreadCounts, token]);
 
   const notifications = useMemo(() => sortedNotifications(state.byId), [state.byId]);
   const pendingTasks = useMemo(
     () => notifications.filter((notification) => notification.isTask && !notification.readAt),
     [notifications],
   );
-  const value = useMemo<NotificationsContextType>(() => ({
-    notifications,
-    pendingTasks,
-    unreadCount: state.unreadCount,
-    unreadTaskCount: state.unreadTaskCount,
-    isLoading: state.isLoading,
-    isLoadingOlder: state.isLoadingOlder,
-    hasMore: Boolean(state.nextCursor),
-    isLive: state.isLive,
-    isReconnecting: !state.isLive && state.sseFailures >= 2,
-    markAsRead,
-    markAllRead,
-    loadOlder,
-    refresh,
-  }), [loadOlder, markAllRead, markAsRead, notifications, pendingTasks, refresh, state]);
+  const value = useMemo<NotificationsContextType>(
+    () => ({
+      notifications,
+      pendingTasks,
+      unreadCount: state.unreadCount,
+      unreadTaskCount: state.unreadTaskCount,
+      isLoading: state.isLoading,
+      isLoadingOlder: state.isLoadingOlder,
+      hasMore: Boolean(state.nextCursor),
+      isLive: state.isLive,
+      isReconnecting: !state.isLive && state.sseFailures >= 2,
+      markAsRead,
+      markAllRead,
+      loadOlder,
+      refresh,
+    }),
+    [loadOlder, markAllRead, markAsRead, notifications, pendingTasks, refresh, state],
+  );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
 }
