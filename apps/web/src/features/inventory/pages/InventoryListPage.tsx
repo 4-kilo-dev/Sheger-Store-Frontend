@@ -62,9 +62,7 @@ export function InventoryPage() {
 
   const categoryTabs = useMemo(() => {
     const live = [...new Set(inventoryList.map((i) => i.category).filter(Boolean))].sort();
-    const staticWithoutAll = INVENTORY_CATEGORIES.filter((c) => c !== "All") as string[];
-    const merged = ["All", ...new Set([...staticWithoutAll, ...live])];
-    return merged;
+    return ["All", ...live];
   }, [inventoryList]);
 
   const rows = useMemo(() => {
@@ -99,10 +97,10 @@ export function InventoryPage() {
 
   return (
     <AppShell>
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-start sm:gap-4">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-start sm:gap-3">
         <div>
-          <div className="label-eyebrow mb-1">Warehouse Control</div>
-          <h1 className="text-[20px] sm:text-[24px] font-bold tracking-tight">Inventory</h1>
+          <div className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-3)" }}>Warehouse Control</div>
+          <h1 className="text-[18px] sm:text-[20px] font-bold tracking-tight leading-tight">Inventory</h1>
         </div>
         {canManage && (
           <div className="flex w-fit flex-wrap items-center justify-start gap-2">
@@ -116,45 +114,50 @@ export function InventoryPage() {
         )}
       </div>
 
-      <div className="mb-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="mb-3 grid grid-cols-2 xl:grid-cols-4 gap-2.5">
         {[
           { label: "Total Units", value: totals.units, icon: Boxes, tone: "var(--foreground)" },
           { label: "Available Now", value: totals.available, icon: PackageCheck, tone: "var(--color-bom-returned)" },
           { label: "Currently Onsite", value: totals.onsite, icon: Wrench, tone: "var(--color-status-accepted)" },
           { label: "Damaged / Hold", value: totals.attention, icon: ShieldAlert, tone: "var(--destructive)" },
         ].map(({ label, value, icon: Icon, tone }) => (
-          <div key={label} className="flex items-center justify-between rounded-lg border bg-surface p-4">
+          <div key={label} className="flex items-center justify-between rounded-lg border bg-surface px-4 py-3">
             <div>
-              <div className="label-eyebrow">{label}</div>
-              <div className="mt-1.5 font-mono text-[24px] font-bold">{value}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-3)" }}>{label}</div>
+              <div className="mt-1 font-mono text-[20px] font-bold leading-tight">{value}</div>
             </div>
             <Icon className="h-5 w-5" style={{ color: tone }} />
           </div>
         ))}
       </div>
 
-      <div className="mb-3 scrollable-tabs gap-1 border-b border-border">
-        {categoryTabs.map((item) => (
-          <button
-            key={item}
-            onClick={() => setCategory(item)}
-            className="relative px-3 py-2.5 text-[12px] font-semibold whitespace-nowrap"
-            style={{ color: category === item ? "var(--foreground)" : "var(--text-2)" }}
-          >
-            {item}
-            {category === item && <span className="absolute inset-x-2 -bottom-px h-0.5 bg-accent" />}
-          </button>
-        ))}
+      <div className="mb-2 flex flex-wrap gap-1">
+        {categoryTabs.map((item) => {
+          const active = category === item;
+          return (
+            <button
+              key={item}
+              onClick={() => setCategory(item)}
+              className="rounded-md px-2 py-1 text-[11px] font-semibold transition"
+              style={{
+                background: active ? "var(--accent)" : "var(--surface-2)",
+                color: active ? "var(--accent-foreground)" : "var(--text-2)",
+              }}
+            >
+              {item}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
+      <div className="mb-2 flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
         <div className="relative w-full sm:w-auto sm:flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-3" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search item, asset code, model…"
-            className="h-9 w-full rounded-md border border-border bg-surface-2 pl-8 pr-3 text-[12px] outline-none focus:border-accent"
+            className="h-8 w-full rounded-md border border-border bg-surface-2 pl-8 pr-3 text-[12px] outline-none focus:border-accent"
           />
         </div>
         <FilterDropdown
@@ -193,94 +196,97 @@ export function InventoryPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border bg-surface">
-        <table className="w-full text-[12px]">
-          <thead className="bg-surface-2">
-            <tr>
-              {[
-                "Asset / Item",
-                "Category",
-                "Location",
-                "Stock allocation",
-                "Available",
-                "Condition",
-                "Next service",
-                ...(canManage ? ["Actions"] : []),
-              ].map((h) => (
-                <th key={h} className="border-b border-border px-4 py-3 text-left label-eyebrow">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
+      {/* Table — scrolls independently (both axes) */}
+      <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-surface" style={{ flex: "1 1 0%", maxHeight: "calc(100vh - 280px)", minHeight: 0 }}>
+        <div className="flex-1 overflow-auto scrollbar-thin" style={{ minHeight: 0 }}>
+          <table className="w-full min-w-[900px] text-[12px]">
+            <thead className="sticky top-0 z-10 bg-surface-2">
               <tr>
-                <td
-                  colSpan={canManage ? 8 : 7}
-                  className="px-4 py-12 text-center text-[13px]"
-                  style={{ color: "var(--text-3)" }}
-                >
-                  No items match your current filters.
-                </td>
+                {[
+                  "Asset / Item",
+                  "Category",
+                  "Location",
+                  "Stock allocation",
+                  "Available",
+                  "Condition",
+                  "Next service",
+                  ...(canManage ? ["Actions"] : []),
+                ].map((h) => (
+                  <th key={h} className="border-b border-border px-3 py-2 text-left label-eyebrow">
+                    {h}
+                  </th>
+                ))}
               </tr>
-            ) : (
-              rows.map((item) => {
-                const utilized = item.total > 0 ? ((item.reserved + item.onsite) / item.total) * 100 : 0;
-                return (
-                  <tr key={`${item.entityKind}-${item.entityId}`} className="border-b border-border transition hover:bg-surface-2 last:border-0">
-                    <td className="px-4 py-3">
-                      <Link to="/inventory/$itemId" params={{ itemId: item.id }} className="font-semibold hover:text-accent">
-                        {item.name}
-                      </Link>
-                      <div className="mt-0.5 font-mono text-[10px] text-text-3">
-                        {item.id} · {item.model}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-text-2">{item.category}</td>
-                    <td className="px-4 py-3 text-text-2">{item.location}</td>
-                    <td className="w-56 px-4 py-3">
-                      <div className="mb-1.5 flex justify-between font-mono text-[10px] text-text-2">
-                        <span>
-                          {item.reserved} reserved · {item.onsite} onsite
-                        </span>
-                        <span>{item.total}</span>
-                      </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
-                        <div className="h-full rounded-full bg-accent" style={{ width: `${utilized}%` }} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[14px] font-bold">{item.available}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[10px] font-bold"
-                        style={{ color: conditionColor[item.condition] }}
-                      >
-                        {item.condition !== "GOOD" && <AlertTriangle className="h-3 w-3" />}
-                        {item.condition}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-text-2">{formatDate(item.nextService)}</td>
-                    {canManage && (
-                      <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => setEditingItem(item)}
-                          className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition hover:border-[var(--accent)]"
-                          style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
-                          title="Edit or delete"
-                        >
-                          <Pencil className="h-3 w-3" /> Edit
-                        </button>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={canManage ? 8 : 7}
+                    className="px-4 py-12 text-center text-[13px]"
+                    style={{ color: "var(--text-3)" }}
+                  >
+                    No items match your current filters.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((item) => {
+                  const utilized = item.total > 0 ? ((item.reserved + item.onsite) / item.total) * 100 : 0;
+                  return (
+                    <tr key={`${item.entityKind}-${item.entityId}`} className="border-b border-border transition hover:bg-surface-2 last:border-0">
+                      <td className="px-3 py-2.5">
+                        <Link to="/inventory/$itemId" params={{ itemId: item.id }} className="text-[12px] font-semibold hover:text-accent">
+                          {item.name}
+                        </Link>
+                        <div className="mt-0.5 font-mono text-[10px] text-text-3">
+                          {item.id} · {item.model}
+                        </div>
                       </td>
-                    )}
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-        <div className="flex items-center justify-between border-t border-border px-4 py-3 text-[11px] text-text-2">
+                      <td className="px-3 py-2.5 text-text-2">{item.category}</td>
+                      <td className="px-3 py-2.5 text-text-2">{item.location}</td>
+                      <td className="w-44 px-3 py-2.5">
+                        <div className="mb-1 flex justify-between font-mono text-[10px] text-text-2">
+                          <span>
+                            {item.reserved} reserved · {item.onsite} onsite
+                          </span>
+                          <span>{item.total}</span>
+                        </div>
+                        <div className="h-1 overflow-hidden rounded-full bg-surface-2">
+                          <div className="h-full rounded-full bg-accent" style={{ width: `${utilized}%` }} />
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[13px] font-bold">{item.available}</td>
+                      <td className="px-3 py-2.5">
+                        <span
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[10px] font-bold"
+                          style={{ color: conditionColor[item.condition] }}
+                        >
+                          {item.condition !== "GOOD" && <AlertTriangle className="h-2.5 w-2.5" />}
+                          {item.condition}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-text-2">{formatDate(item.nextService)}</td>
+                      {canManage && (
+                        <td className="px-3 py-2.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingItem(item)}
+                            className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold transition hover:border-[var(--accent)]"
+                            style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+                            title="Edit or delete"
+                          >
+                            <Pencil className="h-2.5 w-2.5" /> Edit
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[10px] text-text-2 shrink-0">
           <span>Showing {rows.length} equipment groups</span>
           <span>{totals.units} serialized and pooled units tracked</span>
         </div>

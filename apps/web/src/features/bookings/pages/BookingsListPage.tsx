@@ -675,12 +675,12 @@ export function BookingsIndex() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* Table */}
-      <div className="overflow-hidden rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-        <div className="overflow-x-auto scrollbar-thin">
+      {/* Table — scrolls independently; header/tabs/filters stay pinned */}
+      <div className="flex flex-col overflow-hidden rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--surface)", minHeight: 0, flex: "1 1 0%", maxHeight: "calc(100vh - 260px)" }}>
+        <div className="flex-1 overflow-auto scrollbar-thin" style={{ minHeight: 0 }}>
           <table className="w-full min-w-[1400px] border-collapse text-[12px]">
-            <thead>
-              <tr className="sticky top-0 z-10" style={{ background: "var(--surface-2)" }}>
+            <thead className="sticky top-0 z-10">
+              <tr style={{ background: "var(--surface-2)" }}>
                 {[
                   { k: "chk", w: 36 },
                   { k: "CODE", w: 80 },
@@ -779,8 +779,8 @@ export function BookingsIndex() {
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t px-4 py-3 text-[12px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
+        {/* Pagination — pinned at bottom of table container */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t px-4 py-3 text-[12px] shrink-0" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>
           <div>Showing <span className="font-semibold text-foreground">{rows.length === 0 ? 0 : (safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)}</span> of {filtered.length}</div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="hidden sm:inline">Rows per page</span>
