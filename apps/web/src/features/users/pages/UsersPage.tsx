@@ -1,5 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Search, UserCheck, Users, Radio, BriefcaseBusiness, Phone, Calendar } from "lucide-react";
+import {
+  Search,
+  UserCheck,
+  Users,
+  Radio,
+  BriefcaseBusiness,
+  Phone,
+  Calendar,
+  ShieldCheck,
+  UsersRound,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
@@ -10,7 +20,14 @@ import {
 import { AddStaffModal } from "../components/AddStaffModal";
 import { AssignStaffToBookingModal } from "../components/AssignStaffToBookingModal";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getStaffApi, resetPasswordApi, toggleUserActiveApi, setStaffFreelancerApi } from "@/features/users/services/staff.api";
+import {
+  getStaffApi,
+  getRolesWithPermissionsApi,
+  resetPasswordApi,
+  toggleUserActiveApi,
+  setStaffFreelancerApi,
+  type RoleWithPermissions,
+} from "@/features/users/services/staff.api";
 import { getBookingsApi } from "@/features/bookings/services/bookings.api";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
@@ -35,6 +52,7 @@ const statusColor: Record<string, string> = {
 };
 
 export function StaffPage() {
+  const [activeView, setActiveView] = useState<"staff" | "roles">("staff");
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<(typeof STAFF_ROLES)[number]>("All");
   const [assignPerson, setAssignPerson] = useState<StaffMember | null>(null);
@@ -42,6 +60,7 @@ export function StaffPage() {
   const { formatDate } = useDateFormatter();
   const canViewStaff = can(PERMISSION.USER_VIEW);
   const canManageStaff = can(PERMISSION.USER_MANAGE);
+  const canViewRoles = can(PERMISSION.ROLE_VIEW);
   const canAssignStaff =
     can(PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN) || can(PERMISSION.ASSIGNMENT_ASSIGN_CREW);
   const queryClient = useQueryClient();
@@ -50,6 +69,11 @@ export function StaffPage() {
     queryKey: ["staff"],
     queryFn: getStaffApi,
     enabled: canViewStaff,
+  });
+  const { data: roles = [], isLoading: rolesLoading } = useQuery<RoleWithPermissions[]>({
+    queryKey: ["roles-with-permissions"],
+    queryFn: getRolesWithPermissionsApi,
+    enabled: canViewStaff && canViewRoles && activeView === "roles",
   });
 
   const canViewBookings =
@@ -179,6 +203,35 @@ export function StaffPage() {
         ))}
       </div>
 
+      {canViewRoles && (
+        <div className="mb-4 flex border-b" style={{ borderColor: "var(--border)" }}>
+          <button
+            type="button"
+            onClick={() => setActiveView("staff")}
+            className="flex items-center gap-1.5 border-b-2 px-3 py-2 text-[12px] font-semibold"
+            style={{
+              borderColor: activeView === "staff" ? "var(--accent)" : "transparent",
+              color: activeView === "staff" ? "var(--foreground)" : "var(--text-2)",
+            }}
+          >
+            <Users className="h-3.5 w-3.5" /> Staff
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveView("roles")}
+            className="flex items-center gap-1.5 border-b-2 px-3 py-2 text-[12px] font-semibold"
+            style={{
+              borderColor: activeView === "roles" ? "var(--accent)" : "transparent",
+              color: activeView === "roles" ? "var(--foreground)" : "var(--text-2)",
+            }}
+          >
+            <ShieldCheck className="h-3.5 w-3.5" /> Roles
+          </button>
+        </div>
+      )}
+
+      {activeView === "staff" ? (
+      <>
       {/* Role filter tabs */}
       <div className="mb-3 scrollable-tabs gap-1 border-b" style={{ borderColor: "var(--border)" }}>
         {STAFF_ROLES.map((role) => {
@@ -332,6 +385,85 @@ export function StaffPage() {
           );
         })}
       </div>
+      </>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {rolesLoading ? (
+            <div className="col-span-full py-10 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
+              Loading roles…
+            </div>
+          ) : (
+            roles.map((role) => {
+              const members = staffList.filter(
+                (person) =>
+                  person.roleKey === role.key ||
+                  person.role.toLowerCase() === role.displayName.toLowerCase(),
+              );
+              return (
+                <section
+                  key={role.id}
+                  className="rounded-lg border p-4"
+                  style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 text-[14px] font-bold">
+                        <ShieldCheck className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                        {role.displayName}
+                      </div>
+                      <div className="mt-1 font-mono text-[10px]" style={{ color: "var(--text-3)" }}>
+                        {role.key}
+                      </div>
+                    </div>
+                    <span
+                      className="rounded border px-2 py-0.5 text-[10px] font-semibold"
+                      style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+                    >
+                      {role.permissions.length} permissions
+                    </span>
+                  </div>
+
+                  <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                    <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+                      <UsersRound className="h-3.5 w-3.5" /> {members.length} staff members
+                    </div>
+                    {members.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {members.map((member) => (
+                          <span
+                            key={member.id || member.name}
+                            className="rounded border px-2 py-1 text-[10px]"
+                            style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+                          >
+                            {member.name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-[11px]" style={{ color: "var(--text-3)" }}>No staff assigned</span>
+                    )}
+                  </div>
+
+                  <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                    <div className="mb-2 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>Granted permissions</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {role.permissions.map((permission) => (
+                        <span
+                          key={permission.id}
+                          className="rounded border px-1.5 py-0.5 font-mono text-[9px]"
+                          style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+                        >
+                          {permission.key}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              );
+            })
+          )}
+        </div>
+      )}
       </>
       )}
       <AssignStaffToBookingModal
