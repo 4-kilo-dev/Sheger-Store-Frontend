@@ -12,7 +12,7 @@ import {
   getInventoryCategoriesApi,
   getInventoryPoolsApi,
 } from "@/features/inventory/services/inventory.api";
-import { filterScreenPools } from "@/features/inventory/utils/screen-pools";
+import { filterScreenPools, isScreenPool } from "@/features/inventory/utils/screen-pools";
 import { useBookingPoolAvailability } from "@/features/bookings/hooks/useBookingPoolAvailability";
 import { getBookingRentalWindow } from "@/features/bookings/utils/bookingAvailability";
 import { Section } from "@/features/bookings/components/shared/Section";
@@ -53,8 +53,14 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
     enabled: !!b.id,
   });
 
-  const hasTechnicalHolds =
-    !!b.ctoNotes || (reservationsRes?.reservations && reservationsRes.reservations.length > 0);
+  const screenPoolIds = new Set(screenPools.map((sp) => sp.id));
+  const screenReservations = (reservationsRes?.reservations || []).filter((r: any) => {
+    if (r.poolId && screenPoolIds.has(r.poolId)) return true;
+    if (r.pool && isScreenPool(r.pool)) return true;
+    return false;
+  });
+
+  const hasTechnicalHolds = !!b.ctoNotes || screenReservations.length > 0;
   const [isEditingHolds, setIsEditingHolds] = useState(!hasTechnicalHolds);
 
   useEffect(() => {
@@ -77,7 +83,13 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
 
   useEffect(() => {
     if (reservationsRes) {
-      const mapped = (reservationsRes.reservations || []).map((r: any) => ({
+      const ids = new Set(screenPools.map((sp) => sp.id));
+      const filtered = (reservationsRes.reservations || []).filter((r: any) => {
+        if (r.poolId && ids.has(r.poolId)) return true;
+        if (r.pool && isScreenPool(r.pool)) return true;
+        return false;
+      });
+      const mapped = filtered.map((r: any) => ({
         poolId: r.poolId || "",
         quantity: parseFloat(r.quantity) || 0,
       }));
@@ -88,7 +100,7 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
         setIsEditingHolds(true);
       }
     }
-  }, [reservationsRes, b.ctoNotes]);
+  }, [reservationsRes, screenPools, b.ctoNotes]);
 
   const dateRangeLabel =
     b.assemblyDate && b.dismantleDate

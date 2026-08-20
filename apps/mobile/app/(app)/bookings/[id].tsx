@@ -86,7 +86,7 @@ import { useDateFormatter } from "@/context/CalendarSystemContext";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { getPaymentSummary, transitionBookingStatusApi } from "@/services/bookings-api";
 import { getInventoryCategoriesApi, getInventoryPoolsApi } from "@/services/inventory-api";
-import { filterScreenPools } from "@/utils/screen-pools";
+import { filterScreenPools, isScreenPool } from "@/utils/screen-pools";
 import { uploadBookingAttachmentApi } from "@/services/attachments.api";
 import {
   useBookingCapabilities,
@@ -597,7 +597,13 @@ function OverviewTab({
   const reservations = reservationsData?.reservations ?? [];
 
   useEffect(() => {
-    const mapped = reservations.map((r) => ({
+    const screenPoolIds = new Set(pools.map((p) => p.id));
+    const filteredReservations = reservations.filter((r) => {
+      if (r.poolId && screenPoolIds.has(r.poolId)) return true;
+      if ((r as any).pool && isScreenPool((r as any).pool)) return true;
+      return false;
+    });
+    const mapped = filteredReservations.map((r) => ({
       poolId: r.poolId || "",
       quantity: String(r.quantity ?? ""),
     }));
@@ -610,7 +616,7 @@ function OverviewTab({
       setAllocations([{ poolId: "", quantity: "" }]);
       setIsEditingHolds(true);
     }
-  }, [reservationsData, booking.ctoNotes]);
+  }, [reservationsData, pools, booking.ctoNotes]);
 
   const saveTechnicalHolds = async () => {
     const valid = allocations.filter((a) => a.poolId && Number(a.quantity) > 0);
