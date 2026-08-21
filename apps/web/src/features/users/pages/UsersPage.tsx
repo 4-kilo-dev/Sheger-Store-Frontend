@@ -22,7 +22,10 @@ import { AssignStaffToBookingModal } from "../components/AssignStaffToBookingMod
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getStaffApi,
+  getPermissionsApi,
   getRolesWithPermissionsApi,
+  addRolePermissionApi,
+  removeRolePermissionApi,
   resetPasswordApi,
   toggleUserActiveApi,
   setStaffFreelancerApi,
@@ -53,6 +56,7 @@ const statusColor: Record<string, string> = {
 
 export function StaffPage() {
   const [activeView, setActiveView] = useState<"staff" | "roles">("staff");
+  const [pendingPermissionByRole, setPendingPermissionByRole] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<(typeof STAFF_ROLES)[number]>("All");
   const [assignPerson, setAssignPerson] = useState<StaffMember | null>(null);
@@ -61,6 +65,7 @@ export function StaffPage() {
   const canViewStaff = can(PERMISSION.USER_VIEW);
   const canManageStaff = can(PERMISSION.USER_MANAGE);
   const canViewRoles = can(PERMISSION.ROLE_VIEW);
+  const canManageRoles = can(PERMISSION.ROLE_MANAGE);
   const canAssignStaff =
     can(PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN) || can(PERMISSION.ASSIGNMENT_ASSIGN_CREW);
   const queryClient = useQueryClient();
@@ -73,6 +78,11 @@ export function StaffPage() {
   const { data: roles = [], isLoading: rolesLoading } = useQuery<RoleWithPermissions[]>({
     queryKey: ["roles-with-permissions"],
     queryFn: getRolesWithPermissionsApi,
+    enabled: canViewStaff && canViewRoles && activeView === "roles",
+  });
+  const { data: permissions = [] } = useQuery({
+    queryKey: ["permissions-catalog"],
+    queryFn: getPermissionsApi,
     enabled: canViewStaff && canViewRoles && activeView === "roles",
   });
 
@@ -119,6 +129,21 @@ export function StaffPage() {
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to update freelancer flag");
+    },
+  });
+
+  const { mutate: updateRolePermission, isPending: updatingRolePermission } = useMutation({
+    mutationFn: ({ roleId, permissionId, granted }: { roleId: string; permissionId: string; granted: boolean }) =>
+      granted
+        ? removeRolePermissionApi(roleId, permissionId)
+        : addRolePermissionApi(roleId, permissionId),
+    onSuccess: (_, variables) => {
+      toast.success(variables.granted ? "Permission revoked" : "Permission granted");
+      queryClient.invalidateQueries({ queryKey: ["roles-with-permissions"] });
+      setPendingPermissionByRole((current) => ({ ...current, [variables.roleId]: "" }));
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update role permission");
     },
   });
 
@@ -399,6 +424,10 @@ export function StaffPage() {
                   person.roleKey === role.key ||
                   person.role.toLowerCase() === role.displayName.toLowerCase(),
               );
+              const availablePermissions = permissions.filter(
+                (permission) => !role.permissions.some((granted) => granted.id === permission.id),
+              );
+              const selectedPermissionId = pendingPermissionByRole[role.id] || "";
               return (
                 <section
                   key={role.id}
@@ -445,18 +474,72 @@ export function StaffPage() {
                   </div>
 
                   <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-                    <div className="mb-2 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>Granted permissions</div>
+                    <div className="mb-2 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+                      Granted permissions
+                    </div>
                     <div className="flex flex-wrap gap-1.5">
                       {role.permissions.map((permission) => (
-                        <span
+                        <button
+                          type="button"
                           key={permission.id}
-                          className="rounded border px-1.5 py-0.5 font-mono text-[9px]"
-                          style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+                          disabled={!canManageRoles || updatingRolePermission}
+                          onClick={() => {
+                            if (confirm(`Revoke ${permission.key} from ${role.displayName}?`)) {
+                              updateRolePermission({
+                                roleId: role.id,
+                                permissionId: permission.id,
+                                granted: true,
+                              });
+                            }
+                          }}
+                          title={canManageRoles ? `Revoke ${permission.key}` : undefined}
+                          className="rounded border px-1.5 py-0.5 font-mono text-[9px] disabled:cursor-default"
+                          style={{
+                            borderColor: "var(--border)",
+                            color: canManageRoles ? "var(--accent)" : "var(--text-2)",
+                          }}
                         >
                           {permission.key}
-                        </span>
+                        </button>
                       ))}
                     </div>
+                    {canManageRoles && (
+                      <div className="mt-3 flex gap-2">
+                        <select
+                          value={selectedPermissionId}
+                          onChange={(event) =>
+                            setPendingPermissionByRole((current) => ({
+                              ...current,
+                              [role.id]: event.target.value,
+                            }))
+                          }
+                          className="h-8 min-w-0 flex-1 rounded border bg-[var(--surface-2)] px-2 text-[10px]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          <option value="">Add a permission</option>
+                          {availablePermissions.map((permission) => (
+                            <option key={permission.id} value={permission.id}>
+                              {permission.key}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!selectedPermissionId || updatingRolePermission}
+                          onClick={() =>
+                            updateRolePermission({
+                              roleId: role.id,
+                              permissionId: selectedPermissionId,
+                              granted: false,
+                            })
+                          }
+                          className="h-8 shrink-0 rounded border px-2.5 text-[10px] font-semibold disabled:opacity-40"
+                          style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
+                        >
+                          Grant
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </section>
               );
