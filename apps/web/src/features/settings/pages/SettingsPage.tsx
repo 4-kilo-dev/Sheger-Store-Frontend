@@ -1,6 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Globe2, Save, UsersRound, Check, X, ClipboardCheck, Plus, SlidersHorizontal, Trash2, Pencil } from "lucide-react";
-import { useState, useEffect, Fragment } from "react";
+import {
+  Globe2,
+  Save,
+  UsersRound,
+  Check,
+  X,
+  ClipboardCheck,
+  Plus,
+  SlidersHorizontal,
+  Trash2,
+  Pencil,
+} from "lucide-react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -34,7 +45,10 @@ const _Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
       { title: "Settings · Vortex Visual" },
-      { name: "description", content: "Configure Vortex Visual operations, regional defaults, and access." },
+      {
+        name: "description",
+        content: "Configure Vortex Visual operations, regional defaults, and access.",
+      },
     ],
   }),
   component: SettingsPage,
@@ -57,7 +71,8 @@ const TIMEZONE_OPTIONS = [
   { value: "UTC", label: "UTC" },
 ] as const;
 
-const inputCls = "mt-2 h-10 w-full rounded-md border bg-[var(--surface-2)] px-3 text-[13px] outline-none focus:border-[var(--accent)]";
+const inputCls =
+  "mt-2 h-10 w-full rounded-md border bg-[var(--surface-2)] px-3 text-[13px] outline-none focus:border-[var(--accent)]";
 
 export function SettingsPage() {
   const { calendarSystem, numeralsSystem, commitSettings } = useCalendarSystem();
@@ -84,10 +99,7 @@ export function SettingsPage() {
     if (systemSettings.currency === "ETB" || systemSettings.currency === "USD") {
       setTempCurrency(systemSettings.currency);
     }
-    if (
-      systemSettings.timezone === "Africa/Addis_Ababa" ||
-      systemSettings.timezone === "UTC"
-    ) {
+    if (systemSettings.timezone === "Africa/Addis_Ababa" || systemSettings.timezone === "UTC") {
       setTempTimezone(systemSettings.timezone);
     }
   }, [systemSettings]);
@@ -113,17 +125,18 @@ export function SettingsPage() {
 
   const formatPreviewDate = (date: Date) => {
     if (tempCalendarSystem === "ethiopic") {
-      const locale = tempNumeralsSystem === "geez" ? "am-ET-u-ca-ethiopic" : "am-ET-u-ca-ethiopic-nu-latn";
+      const locale =
+        tempNumeralsSystem === "geez" ? "am-ET-u-ca-ethiopic" : "am-ET-u-ca-ethiopic-nu-latn";
       return new Intl.DateTimeFormat(locale, {
         year: "numeric",
         month: "long",
-        day: "numeric"
+        day: "numeric",
       }).format(date);
     }
     return new Intl.DateTimeFormat("en-US", {
       year: "numeric",
       month: "short",
-      day: "numeric"
+      day: "numeric",
     }).format(date);
   };
 
@@ -154,13 +167,18 @@ export function SettingsPage() {
         <div>
           <div className="label-eyebrow mb-1">Administration</div>
           <h1 className="text-[24px] font-bold tracking-tight">Settings</h1>
-          <p className="mt-1 text-[12px] text-text-2">Company defaults, role permissions, and regional preferences.</p>
+          <p className="mt-1 text-[12px] text-text-2">
+            Company defaults, role permissions, and regional preferences.
+          </p>
         </div>
       </div>
 
       <div className="grid gap-5 md:grid-cols-[240px_1fr]">
         {/* Nav */}
-        <nav className="h-fit rounded-lg border p-2" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <nav
+          className="h-fit rounded-lg border p-2"
+          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+        >
           {panels.map(({ icon: Icon, label }) => (
             <button
               key={label}
@@ -171,7 +189,10 @@ export function SettingsPage() {
                 color: active === label ? "var(--foreground)" : "var(--text-2)",
               }}
             >
-              <Icon className="h-4 w-4" style={{ color: active === label ? "var(--accent)" : "currentColor" }} />
+              <Icon
+                className="h-4 w-4"
+                style={{ color: active === label ? "var(--accent)" : "currentColor" }}
+              />
               {label}
             </button>
           ))}
@@ -179,13 +200,7 @@ export function SettingsPage() {
 
         {/* Content */}
         <div className="space-y-5">
-
-
-          {active === "Roles & permissions" && (
-            <RolesPermissionsPanel />
-          )}
-
-
+          {active === "Roles & permissions" && <RolesPermissionsPanel />}
 
           {active === "Regional" && (
             <Section title="Regional defaults" aside="Localization">
@@ -246,27 +261,34 @@ export function SettingsPage() {
                   </select>
                 </label>
               </div>
-              <div className="mt-5 rounded-md border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+              <div
+                className="mt-5 rounded-md border p-4"
+                style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+              >
                 <div className="label-eyebrow mb-2">Preview</div>
                 <div className="grid grid-cols-2 gap-3 text-[12px]">
-                  <div><span style={{ color: "var(--text-3)" }}>Date:</span> {formatPreviewDate(new Date())}</div>
-                  <div><span style={{ color: "var(--text-3)" }}>Currency:</span> {currencyPreview}</div>
-                  <div><span style={{ color: "var(--text-3)" }}>Time:</span> {formatPreviewTime(new Date())}</div>
-                  <div><span style={{ color: "var(--text-3)" }}>Timezone:</span> {tempTimezone}</div>
+                  <div>
+                    <span style={{ color: "var(--text-3)" }}>Date:</span>{" "}
+                    {formatPreviewDate(new Date())}
+                  </div>
+                  <div>
+                    <span style={{ color: "var(--text-3)" }}>Currency:</span> {currencyPreview}
+                  </div>
+                  <div>
+                    <span style={{ color: "var(--text-3)" }}>Time:</span>{" "}
+                    {formatPreviewTime(new Date())}
+                  </div>
+                  <div>
+                    <span style={{ color: "var(--text-3)" }}>Timezone:</span> {tempTimezone}
+                  </div>
                 </div>
               </div>
             </Section>
           )}
 
+          {active === "Performance Metrics" && <PerformanceMetricsPanel />}
 
-
-          {active === "Performance Metrics" && (
-            <PerformanceMetricsPanel />
-          )}
-
-          {active === "Custom Fields" && (
-            <CustomFieldsPanel />
-          )}
+          {active === "Custom Fields" && <CustomFieldsPanel />}
 
           {/* Save button */}
           {active === "Regional" && (
@@ -287,12 +309,33 @@ export function SettingsPage() {
   );
 }
 
-function Section({ title, aside, children }: { title: string; aside?: string; children: React.ReactNode }) {
+function Section({
+  title,
+  aside,
+  children,
+}: {
+  title: string;
+  aside?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-      <header className="flex h-11 items-center justify-between border-b px-4" style={{ borderColor: "var(--border)" }}>
+    <section
+      className="rounded-lg border"
+      style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+    >
+      <header
+        className="flex h-11 items-center justify-between border-b px-4"
+        style={{ borderColor: "var(--border)" }}
+      >
         <h2 className="text-[13px] font-bold">{title}</h2>
-        {aside && <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-2)" }}>{aside}</span>}
+        {aside && (
+          <span
+            className="text-[10px] font-semibold uppercase tracking-wider"
+            style={{ color: "var(--text-2)" }}
+          >
+            {aside}
+          </span>
+        )}
       </header>
       <div className="p-4">{children}</div>
     </section>
@@ -311,6 +354,20 @@ function humanizeDomain(domain: string): string {
   return domain.charAt(0).toUpperCase() + domain.slice(1);
 }
 
+/**
+ * Role payloads contain permission objects too. Merge them with the catalog so
+ * a freshly deployed permission stays manageable if the catalog is stale.
+ */
+function mergePermissionCatalog(catalog: Permission[], roles: RoleWithPermissions[]): Permission[] {
+  const byKey = new Map(catalog.map((permission) => [permission.key, permission]));
+  for (const role of roles) {
+    for (const permission of role.permissions ?? []) {
+      byKey.set(permission.key, permission);
+    }
+  }
+  return [...byKey.values()];
+}
+
 function RolesPermissionsPanel() {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
@@ -325,14 +382,28 @@ function RolesPermissionsPanel() {
     queryFn: getRolesWithPermissionsApi,
   });
 
-  const { data: permissions = [], isLoading: permsLoading } = useQuery<Permission[]>({
+  const {
+    data: permissions = [],
+    isLoading: permsLoading,
+    error: permissionsError,
+  } = useQuery<Permission[]>({
     queryKey: ["permissions-catalog"],
     queryFn: getPermissionsApi,
   });
 
   const { mutate: togglePermission, isPending: toggling } = useMutation({
-    mutationFn: ({ roleId, permissionId, active }: { roleId: string; permissionId: string; active: boolean }) =>
-      active ? addRolePermissionApi(roleId, permissionId) : removeRolePermissionApi(roleId, permissionId),
+    mutationFn: ({
+      roleId,
+      permissionId,
+      active,
+    }: {
+      roleId: string;
+      permissionId: string;
+      active: boolean;
+    }) =>
+      active
+        ? addRolePermissionApi(roleId, permissionId)
+        : removeRolePermissionApi(roleId, permissionId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["roles-with-permissions"] });
     },
@@ -343,30 +414,47 @@ function RolesPermissionsPanel() {
 
   // Map of roleId -> set of permission keys it holds, for O(1) cell lookups.
   const rolePermKeys = new Map<string, Set<string>>(
-    roles.map((r) => [r.id, new Set((r.permissions || []).map((p) => p.key))])
+    roles.map((r) => [r.id, new Set((r.permissions || []).map((p) => p.key))]),
   );
 
-  // Group permissions by domain prefix, preserving first-seen order.
-  const groups: { domain: string; perms: Permission[] }[] = [];
-  for (const p of permissions) {
-    const domain = p.key.includes(".") ? p.key.slice(0, p.key.indexOf(".")) : "other";
-    let group = groups.find((g) => g.domain === domain);
-    if (!group) {
-      group = { domain, perms: [] };
-      groups.push(group);
+  const groups = useMemo(() => {
+    const grouped: { domain: string; perms: Permission[] }[] = [];
+    for (const permission of mergePermissionCatalog(permissions, roles)) {
+      const domain = permission.key.includes(".")
+        ? permission.key.slice(0, permission.key.indexOf("."))
+        : "other";
+      let group = grouped.find((candidate) => candidate.domain === domain);
+      if (!group) {
+        group = { domain, perms: [] };
+        grouped.push(group);
+      }
+      group.perms.push(permission);
     }
-    group.perms.push(p);
-  }
+
+    // Keep delivery administration discoverable rather than burying it in a
+    // long, horizontally scrollable matrix.
+    return grouped.sort((left, right) => {
+      if (left.domain === "notification") return -1;
+      if (right.domain === "notification") return 1;
+      return 0;
+    });
+  }, [permissions, roles]);
 
   const loading = rolesLoading || permsLoading;
 
   return (
     <Section title="Role Permissions Matrix" aside="Access control">
       {loading ? (
-        <div className="py-8 text-center text-[12px]" style={{ color: "var(--text-3)" }}>Loading roles and permissions…</div>
-      ) : rolesError ? (
         <div className="py-8 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
-          Unable to load roles. You may not have permission to manage access control.
+          Loading roles and permissions…
+        </div>
+      ) : rolesError || permissionsError ? (
+        <div className="py-8 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
+          Unable to load the roles or permission catalog. You need role.view to view access control.
+        </div>
+      ) : groups.length === 0 ? (
+        <div className="py-8 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
+          No permissions are available from the server catalog yet.
         </div>
       ) : (
         <>
@@ -379,9 +467,20 @@ function RolesPermissionsPanel() {
             <table className="w-full text-[11px]">
               <thead>
                 <tr style={{ background: "var(--surface-2)" }}>
-                  <th className="border-b px-3 py-2.5 text-left label-eyebrow" style={{ borderColor: "var(--border)" }}>Permission</th>
+                  <th
+                    className="border-b px-3 py-2.5 text-left label-eyebrow"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Permission
+                  </th>
                   {roles.map((r) => (
-                    <th key={r.id} className="border-b px-3 py-2.5 text-center label-eyebrow" style={{ borderColor: "var(--border)" }}>{r.displayName}</th>
+                    <th
+                      key={r.id}
+                      className="border-b px-3 py-2.5 text-center label-eyebrow"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      {r.displayName}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -398,10 +497,19 @@ function RolesPermissionsPanel() {
                       </td>
                     </tr>
                     {group.perms.map((perm) => (
-                      <tr key={perm.id} className="border-b last:border-0 transition hover:bg-[var(--surface-2)]" style={{ borderColor: "var(--border)" }}>
+                      <tr
+                        key={perm.id}
+                        className="border-b last:border-0 transition hover:bg-[var(--surface-2)]"
+                        style={{ borderColor: "var(--border)" }}
+                      >
                         <td className="px-3 py-2.5 font-medium">
                           <div>{humanizePermissionAction(perm.key)}</div>
-                          <div className="font-mono text-[9.5px]" style={{ color: "var(--text-3)" }}>{perm.key}</div>
+                          <div
+                            className="font-mono text-[9.5px]"
+                            style={{ color: "var(--text-3)" }}
+                          >
+                            {perm.key}
+                          </div>
                         </td>
                         {roles.map((role) => {
                           const has = rolePermKeys.get(role.id)?.has(perm.key) ?? false;
@@ -410,13 +518,28 @@ function RolesPermissionsPanel() {
                               <button
                                 type="button"
                                 disabled={!canManage || toggling}
-                                onClick={() => togglePermission({ roleId: role.id, permissionId: perm.id, active: !has })}
+                                onClick={() =>
+                                  togglePermission({
+                                    roleId: role.id,
+                                    permissionId: perm.id,
+                                    active: !has,
+                                  })
+                                }
                                 className="mx-auto flex h-6 w-6 items-center justify-center rounded transition enabled:hover:bg-[var(--surface)] disabled:cursor-default"
-                                title={canManage ? (has ? "Click to revoke" : "Click to grant") : undefined}
+                                title={
+                                  canManage
+                                    ? has
+                                      ? "Click to revoke"
+                                      : "Click to grant"
+                                    : undefined
+                                }
                                 aria-label={`${has ? "Revoke" : "Grant"} ${perm.key} for ${role.displayName}`}
                               >
                                 {has ? (
-                                  <Check className="h-3.5 w-3.5" style={{ color: "var(--color-bom-returned)" }} />
+                                  <Check
+                                    className="h-3.5 w-3.5"
+                                    style={{ color: "var(--color-bom-returned)" }}
+                                  />
                                 ) : (
                                   <X className="h-3.5 w-3.5" style={{ color: "var(--text-3)" }} />
                                 )}
@@ -452,7 +575,9 @@ function PerformanceMetricsPanel() {
   const [newDesc, setNewDesc] = useState("");
   const [newOrder, setNewOrder] = useState(1);
   const [metricCategory, setMetricCategory] = useState<"internal" | "client_feedback">("internal");
-  const [valueType, setValueType] = useState<"boolean" | "rating_10" | "rating_5" | "percentage">("boolean");
+  const [valueType, setValueType] = useState<"boolean" | "rating_10" | "rating_5" | "percentage">(
+    "boolean",
+  );
 
   // Queries
   const { data: metrics, isLoading } = useQuery({
@@ -479,11 +604,12 @@ function PerformanceMetricsPanel() {
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to create metric");
-    }
+    },
   });
 
   const { mutate: updateMetric, isPending: updating } = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: any }) => updatePerformanceMetricApi(id, payload),
+    mutationFn: ({ id, payload }: { id: string; payload: any }) =>
+      updatePerformanceMetricApi(id, payload),
     onSuccess: () => {
       toast.success("Performance metric updated!");
       queryClient.invalidateQueries({ queryKey: ["all-settings-metrics"] });
@@ -492,7 +618,7 @@ function PerformanceMetricsPanel() {
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to update metric");
-    }
+    },
   });
 
   const handleToggleActive = (metric: PerformanceMetric) => {
@@ -529,7 +655,10 @@ function PerformanceMetricsPanel() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         {/* Category toggle tabs */}
-        <div className="flex rounded-md border p-1" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+        <div
+          className="flex rounded-md border p-1"
+          style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+        >
           <button
             onClick={() => setCategory("internal")}
             className="rounded px-3 py-1.5 text-[11px] font-semibold transition"
@@ -563,36 +692,99 @@ function PerformanceMetricsPanel() {
         )}
       </div>
 
-      <Section title={`${category === "internal" ? "Internal Operations" : "Client Survey"} Metrics Catalog`} aside="Module 11 Configuration">
+      <Section
+        title={`${category === "internal" ? "Internal Operations" : "Client Survey"} Metrics Catalog`}
+        aside="Module 11 Configuration"
+      >
         {isLoading ? (
-          <div className="py-6 text-center text-[12px]" style={{ color: "var(--text-3)" }}>Loading metrics...</div>
+          <div className="py-6 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
+            Loading metrics...
+          </div>
         ) : filteredMetrics.length === 0 ? (
-          <div className="py-8 text-center text-[12px]" style={{ color: "var(--text-3)" }}>No metrics defined for this category.</div>
+          <div className="py-8 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
+            No metrics defined for this category.
+          </div>
         ) : (
           <div className="overflow-x-auto scrollbar-thin">
             <table className="w-full text-[12px]">
               <thead>
                 <tr style={{ background: "var(--surface-2)" }}>
-                  <th className="border-b px-3 py-2.5 text-left label-eyebrow" style={{ borderColor: "var(--border)" }}>Sort</th>
-                  <th className="border-b px-3 py-2.5 text-left label-eyebrow" style={{ borderColor: "var(--border)" }}>Label</th>
-                  <th className="border-b px-3 py-2.5 text-left label-eyebrow" style={{ borderColor: "var(--border)" }}>Database Key</th>
-                  <th className="border-b px-3 py-2.5 text-left label-eyebrow" style={{ borderColor: "var(--border)" }}>Type</th>
-                  <th className="border-b px-3 py-2.5 text-center label-eyebrow" style={{ borderColor: "var(--border)" }}>Status</th>
-                  {isAdmin && <th className="border-b px-3 py-2.5 text-right label-eyebrow" style={{ borderColor: "var(--border)" }}>Actions</th>}
+                  <th
+                    className="border-b px-3 py-2.5 text-left label-eyebrow"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Sort
+                  </th>
+                  <th
+                    className="border-b px-3 py-2.5 text-left label-eyebrow"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Label
+                  </th>
+                  <th
+                    className="border-b px-3 py-2.5 text-left label-eyebrow"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Database Key
+                  </th>
+                  <th
+                    className="border-b px-3 py-2.5 text-left label-eyebrow"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Type
+                  </th>
+                  <th
+                    className="border-b px-3 py-2.5 text-center label-eyebrow"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Status
+                  </th>
+                  {isAdmin && (
+                    <th
+                      className="border-b px-3 py-2.5 text-right label-eyebrow"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {filteredMetrics.map((m) => (
-                  <tr key={m.id} className="border-b last:border-0 transition hover:bg-[var(--surface-2)]" style={{ borderColor: "var(--border)" }}>
-                    <td className="px-3 py-3 font-mono font-bold" style={{ color: "var(--accent)" }}>{m.sortOrder}</td>
+                  <tr
+                    key={m.id}
+                    className="border-b last:border-0 transition hover:bg-[var(--surface-2)]"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <td
+                      className="px-3 py-3 font-mono font-bold"
+                      style={{ color: "var(--accent)" }}
+                    >
+                      {m.sortOrder}
+                    </td>
                     <td className="px-3 py-3">
                       <div className="font-semibold">{m.label}</div>
-                      {m.description && <div className="text-[10px]" style={{ color: "var(--text-3)" }}>{m.description}</div>}
+                      {m.description && (
+                        <div className="text-[10px]" style={{ color: "var(--text-3)" }}>
+                          {m.description}
+                        </div>
+                      )}
                     </td>
-                    <td className="px-3 py-3 font-mono text-[11px]" style={{ color: "var(--text-2)" }}>{m.key}</td>
+                    <td
+                      className="px-3 py-3 font-mono text-[11px]"
+                      style={{ color: "var(--text-2)" }}
+                    >
+                      {m.key}
+                    </td>
                     <td className="px-3 py-3 text-[11px]" style={{ color: "var(--text-2)" }}>
                       <span className="font-semibold uppercase tracking-wider text-[9px] px-1.5 py-0.5 rounded bg-[var(--surface)] border border-[var(--border)]">
-                        {m.valueType === "boolean" ? "Met/Not Met" : m.valueType === "rating_10" ? "0-10 Rating" : m.valueType === "rating_5" ? "1-5 Stars" : "0-100%"}
+                        {m.valueType === "boolean"
+                          ? "Met/Not Met"
+                          : m.valueType === "rating_10"
+                            ? "0-10 Rating"
+                            : m.valueType === "rating_5"
+                              ? "1-5 Stars"
+                              : "0-100%"}
                       </span>
                     </td>
                     <td className="px-3 py-3 text-center">
@@ -601,9 +793,11 @@ function PerformanceMetricsPanel() {
                         onClick={() => handleToggleActive(m)}
                         className={`rounded px-2 py-0.5 text-[10px] font-bold transition hover:opacity-80 disabled:opacity-50`}
                         style={{
-                          background: m.isActive ? "rgba(48, 164, 108, 0.15)" : "rgba(113, 113, 122, 0.15)",
+                          background: m.isActive
+                            ? "rgba(48, 164, 108, 0.15)"
+                            : "rgba(113, 113, 122, 0.15)",
                           color: m.isActive ? "var(--color-status-done)" : "var(--text-3)",
-                          border: `1px solid ${m.isActive ? "rgba(48, 164, 108, 0.3)" : "rgba(113, 113, 122, 0.3)"}`
+                          border: `1px solid ${m.isActive ? "rgba(48, 164, 108, 0.3)" : "rgba(113, 113, 122, 0.3)"}`,
                         }}
                       >
                         {m.isActive ? "Active" : "Inactive"}
@@ -631,20 +825,25 @@ function PerformanceMetricsPanel() {
       {/* Create/Edit Modal */}
       {(showAddModal || editingMetric) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div 
+          <div
             className="w-full max-w-lg rounded-lg border p-5 shadow-xl animate-in fade-in zoom-in duration-200"
             style={{ background: "var(--surface)", borderColor: "var(--border)" }}
           >
-            <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: "var(--border)" }}>
+            <div
+              className="flex items-center justify-between border-b pb-3 mb-4"
+              style={{ borderColor: "var(--border)" }}
+            >
               <h3 className="text-[15px] font-bold">
-                {editingMetric ? `Edit Metric: ${editingMetric.label}` : "Create Performance Metric"}
+                {editingMetric
+                  ? `Edit Metric: ${editingMetric.label}`
+                  : "Create Performance Metric"}
               </h3>
-              <button 
+              <button
                 onClick={() => {
                   setShowAddModal(false);
                   setEditingMetric(null);
-                }} 
-                className="text-[12px] font-semibold hover:opacity-80" 
+                }}
+                className="text-[12px] font-semibold hover:opacity-80"
                 style={{ color: "var(--text-3)" }}
               >
                 ✕
@@ -653,60 +852,77 @@ function PerformanceMetricsPanel() {
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                <label
+                  className="text-[11px] font-semibold block"
+                  style={{ color: "var(--text-2)" }}
+                >
                   Metric Name / Label
-                  <input 
-                    type="text" 
-                    value={newLabel} 
-                    onChange={(e) => setNewLabel(e.target.value)} 
+                  <input
+                    type="text"
+                    value={newLabel}
+                    onChange={(e) => setNewLabel(e.target.value)}
                     placeholder="e.g. PPE Compliance"
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
-                    style={{ borderColor: "var(--border)" }} 
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
+                    style={{ borderColor: "var(--border)" }}
                   />
                 </label>
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                <label
+                  className="text-[11px] font-semibold block"
+                  style={{ color: "var(--text-2)" }}
+                >
                   Database Key
-                  <input 
-                    type="text" 
-                    value={newKey} 
-                    onChange={(e) => setNewKey(e.target.value)} 
+                  <input
+                    type="text"
+                    value={newKey}
+                    onChange={(e) => setNewKey(e.target.value)}
                     placeholder="e.g. ppe"
                     disabled={!!editingMetric} // Key shouldn't change after creation
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] disabled:opacity-50" 
-                    style={{ borderColor: "var(--border)" }} 
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] disabled:opacity-50"
+                    style={{ borderColor: "var(--border)" }}
                   />
                 </label>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                <label
+                  className="text-[11px] font-semibold block"
+                  style={{ color: "var(--text-2)" }}
+                >
                   Sort Order
-                  <input 
-                    type="number" 
-                    value={newOrder} 
-                    onChange={(e) => setNewOrder(parseInt(e.target.value) || 1)} 
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
-                    style={{ borderColor: "var(--border)" }} 
+                  <input
+                    type="number"
+                    value={newOrder}
+                    onChange={(e) => setNewOrder(parseInt(e.target.value) || 1)}
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
+                    style={{ borderColor: "var(--border)" }}
                   />
                 </label>
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                <label
+                  className="text-[11px] font-semibold block"
+                  style={{ color: "var(--text-2)" }}
+                >
                   Category
-                  <select 
+                  <select
                     value={metricCategory}
-                    onChange={(e) => setMetricCategory(e.target.value as "internal" | "client_feedback")}
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
+                    onChange={(e) =>
+                      setMetricCategory(e.target.value as "internal" | "client_feedback")
+                    }
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
                     style={{ borderColor: "var(--border)" }}
                   >
                     <option value="internal">Internal Review</option>
                     <option value="client_feedback">Client Feedback</option>
                   </select>
                 </label>
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                <label
+                  className="text-[11px] font-semibold block"
+                  style={{ color: "var(--text-2)" }}
+                >
                   Value Type / Scale
-                  <select 
+                  <select
                     value={valueType}
                     onChange={(e) => setValueType(e.target.value as any)}
-                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]" 
+                    className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
                     style={{ borderColor: "var(--border)" }}
                   >
                     <option value="boolean">Met / Not Met</option>
@@ -719,17 +935,20 @@ function PerformanceMetricsPanel() {
 
               <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
                 Description
-                <textarea 
-                  value={newDesc} 
-                  onChange={(e) => setNewDesc(e.target.value)} 
+                <textarea
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
                   placeholder="Detailed description of what this metric evaluates..."
-                  className="mt-1 h-20 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px]" 
-                  style={{ borderColor: "var(--border)" }} 
+                  className="mt-1 h-20 w-full rounded border bg-[var(--surface-2)] p-2.5 text-[12px]"
+                  style={{ borderColor: "var(--border)" }}
                 />
               </label>
             </div>
 
-            <div className="mt-5 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+            <div
+              className="mt-5 flex items-center gap-2 border-t pt-3"
+              style={{ borderColor: "var(--border)" }}
+            >
               <button
                 onClick={() => {
                   if (!newLabel.trim() || !newKey.trim()) {
@@ -745,7 +964,7 @@ function PerformanceMetricsPanel() {
                         sortOrder: newOrder,
                         category: metricCategory,
                         valueType: valueType,
-                      }
+                      },
                     });
                   } else {
                     createMetric({
@@ -765,12 +984,12 @@ function PerformanceMetricsPanel() {
               >
                 {creating || updating ? "Saving..." : "Save Metric"}
               </button>
-              <button 
+              <button
                 onClick={() => {
                   setShowAddModal(false);
                   setEditingMetric(null);
-                }} 
-                className="rounded border px-4 py-2 text-[12px]" 
+                }}
+                className="rounded border px-4 py-2 text-[12px]"
                 style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
               >
                 Cancel
@@ -794,7 +1013,9 @@ function CustomFieldsPanel() {
   // Form States
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
-  const [type, setType] = useState<"boolean" | "number" | "string" | "date" | "enum" | "multi_select">("string");
+  const [type, setType] = useState<
+    "boolean" | "number" | "string" | "date" | "enum" | "multi_select"
+  >("string");
   const [optionsList, setOptionsList] = useState<string[]>([]);
   const [currentOption, setCurrentOption] = useState("");
   const [editingOptionIdx, setEditingOptionIdx] = useState<number | null>(null);
@@ -995,7 +1216,10 @@ function CustomFieldsPanel() {
         >
           <table className="w-full text-left text-[12px]">
             <thead>
-              <tr className="border-b" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+              <tr
+                className="border-b"
+                style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+              >
                 <th className="p-3 font-semibold">Field Name</th>
                 <th className="p-3 font-semibold">JSON Key</th>
                 <th className="p-3 font-semibold">Type</th>
@@ -1011,11 +1235,16 @@ function CustomFieldsPanel() {
                   <td className="p-3 font-mono text-[11px]" style={{ color: "var(--accent)" }}>
                     {field.key}
                   </td>
-                  <td className="p-3 uppercase text-[10px] font-bold" style={{ color: "var(--text-2)" }}>
+                  <td
+                    className="p-3 uppercase text-[10px] font-bold"
+                    style={{ color: "var(--text-2)" }}
+                  >
                     {field.type}
                   </td>
                   <td className="p-3 max-w-[200px] truncate" style={{ color: "var(--text-3)" }}>
-                    {(field.type === "enum" || field.type === "multi_select") && field.options && field.options.length > 0
+                    {(field.type === "enum" || field.type === "multi_select") &&
+                    field.options &&
+                    field.options.length > 0
                       ? field.options.join(", ")
                       : "—"}
                   </td>
@@ -1137,8 +1366,13 @@ function CustomFieldsPanel() {
 
               {(type === "enum" || type === "multi_select") && (
                 <div className="space-y-2 animate-in fade-in duration-200">
-                  <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-                    {editingOptionIdx !== null ? "Edit Option" : "Add Options (Press Enter or click Add)"}
+                  <label
+                    className="text-[11px] font-semibold block"
+                    style={{ color: "var(--text-2)" }}
+                  >
+                    {editingOptionIdx !== null
+                      ? "Edit Option"
+                      : "Add Options (Press Enter or click Add)"}
                     <div className="flex gap-2 mt-1">
                       <input
                         type="text"
@@ -1188,7 +1422,8 @@ function CustomFieldsPanel() {
                           key={idx}
                           className="flex items-center gap-1.5 rounded bg-[var(--surface)] border pl-2.5 pr-1 py-0.5 text-[11px] font-medium"
                           style={{
-                            borderColor: editingOptionIdx === idx ? "var(--accent)" : "var(--border)",
+                            borderColor:
+                              editingOptionIdx === idx ? "var(--accent)" : "var(--border)",
                           }}
                         >
                           <span
@@ -1227,7 +1462,10 @@ function CustomFieldsPanel() {
                 </div>
               )}
 
-              <label className="flex items-center gap-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--text-2)" }}>
+              <label
+                className="flex items-center gap-2 text-[11px] font-semibold cursor-pointer"
+                style={{ color: "var(--text-2)" }}
+              >
                 <input
                   type="checkbox"
                   checked={required}
@@ -1252,8 +1490,8 @@ function CustomFieldsPanel() {
                     ? "Saving..."
                     : "Save Changes"
                   : creating
-                  ? "Creating..."
-                  : "Create Custom Field"}
+                    ? "Creating..."
+                    : "Create Custom Field"}
               </button>
               <button
                 type="button"

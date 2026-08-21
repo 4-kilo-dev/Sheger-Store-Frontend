@@ -13,7 +13,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import {
   AppText,
@@ -83,19 +83,14 @@ export default function SettingsScreen() {
   const { can } = usePermissions();
   const { authUser, activeProfile } = useAppContext();
   const canManageRoles = can(PERMISSION.ROLE_MANAGE);
-  const isAdmin =
-    (authUser?.role || activeProfile?.role || "").toLowerCase() === "admin";
+  const isAdmin = (authUser?.role || activeProfile?.role || "").toLowerCase() === "admin";
 
   const rolesQuery = useRolesWithPermissions();
   const permsQuery = usePermissionsCatalog();
   const togglePermission = useToggleRolePermission();
   const settingsQuery = useSettings();
   const updateSettings = useUpdateSettings();
-  const {
-    calendarSystem,
-    numeralsSystem,
-    commitSettings,
-  } = useCalendarSystem();
+  const { calendarSystem, numeralsSystem, commitSettings } = useCalendarSystem();
 
   const [language, setLanguage] = useState("en");
   const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">("ETB");
@@ -167,21 +162,37 @@ export default function SettingsScreen() {
   const [addFieldOpen, setAddFieldOpen] = useState(false);
   const [editingField, setEditingField] = useState<CustomFieldDefinition | null>(null);
 
-
   const rolePermKeys = new Map<string, Set<string>>(
     roles.map((r) => [r.id, new Set((r.permissions || []).map((p) => p.key))]),
   );
 
-  const groups: { domain: string; perms: Permission[] }[] = [];
-  for (const p of permissions) {
-    const domain = p.key.includes(".") ? p.key.slice(0, p.key.indexOf(".")) : "other";
-    let group = groups.find((g) => g.domain === domain);
-    if (!group) {
-      group = { domain, perms: [] };
-      groups.push(group);
+  const groups = useMemo(() => {
+    const byKey = new Map(permissions.map((permission) => [permission.key, permission]));
+    for (const role of roles) {
+      for (const permission of role.permissions ?? []) {
+        byKey.set(permission.key, permission);
+      }
     }
-    group.perms.push(p);
-  }
+
+    const grouped: { domain: string; perms: Permission[] }[] = [];
+    for (const permission of byKey.values()) {
+      const domain = permission.key.includes(".")
+        ? permission.key.slice(0, permission.key.indexOf("."))
+        : "other";
+      let group = grouped.find((candidate) => candidate.domain === domain);
+      if (!group) {
+        group = { domain, perms: [] };
+        grouped.push(group);
+      }
+      group.perms.push(permission);
+    }
+
+    return grouped.sort((left, right) => {
+      if (left.domain === "notification") return -1;
+      if (right.domain === "notification") return 1;
+      return 0;
+    });
+  }, [permissions, roles]);
 
   const handleSaveChanges = async () => {
     setSavingSettings(true);
@@ -542,7 +553,10 @@ export default function SettingsScreen() {
       {active === "Performance Metrics" ? <PerformanceMetricsPanel isAdmin={isAdmin} /> : null}
 
       {active === "Custom Fields" ? (
-        <Section title="Booking Custom Fields" icon={SlidersHorizontal} aside="Dynamic inputs"
+        <Section
+          title="Booking Custom Fields"
+          icon={SlidersHorizontal}
+          aside="Dynamic inputs"
           action={
             isAdmin ? (
               <Button variant="ghost" icon={Plus} onPress={() => setAddFieldOpen(true)}>
@@ -550,7 +564,9 @@ export default function SettingsScreen() {
               </Button>
             ) : undefined
           }
-        >          {!isAdmin ? (
+        >
+          {" "}
+          {!isAdmin ? (
             <AppText variant="subtitle" color={colors.text2}>
               Only administrators can create or delete custom fields.
             </AppText>
@@ -558,7 +574,10 @@ export default function SettingsScreen() {
           {customFieldsLoading ? (
             <LoadingState label="Loading custom fields..." />
           ) : customFields.length === 0 ? (
-            <EmptyState title="No custom fields configured" detail="Tap Add to create a booking custom field." />
+            <EmptyState
+              title="No custom fields configured"
+              detail="Tap Add to create a booking custom field."
+            />
           ) : (
             <View style={{ gap: 10 }}>
               {customFields.map((field) => (
@@ -568,11 +587,13 @@ export default function SettingsScreen() {
                     <AppText variant="small" color={colors.text3}>
                       {field.key} · {field.type}
                     </AppText>
-                    {(field.type === "enum" || field.type === "multi_select") && field.options && field.options.length > 0 && (
-                      <AppText variant="small" color={colors.text3}>
-                        {field.options.join(", ")}
-                      </AppText>
-                    )}
+                    {(field.type === "enum" || field.type === "multi_select") &&
+                      field.options &&
+                      field.options.length > 0 && (
+                        <AppText variant="small" color={colors.text3}>
+                          {field.options.join(", ")}
+                        </AppText>
+                      )}
                   </View>
                   {isAdmin ? (
                     <View style={{ flexDirection: "row", gap: 4 }}>
@@ -661,10 +682,19 @@ function CustomFieldSheet({
 
   const handleSubmit = async () => {
     const trimmedName = name.trim();
-    const autoKey = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    const autoKey = trimmedName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
     const trimmedKey = key.trim() || autoKey;
-    if (!trimmedName) { setError("Field name is required."); return; }
-    if (!trimmedKey) { setError("Field key is required."); return; }
+    if (!trimmedName) {
+      setError("Field name is required.");
+      return;
+    }
+    if (!trimmedKey) {
+      setError("Field key is required.");
+      return;
+    }
     if (!/^[a-z][a-z0-9_]*$/.test(trimmedKey)) {
       setError("Field key must be snake_case (e.g. hanging_or_sitting).");
       return;
@@ -675,7 +705,10 @@ function CustomFieldSheet({
     }
     const options =
       type === "enum" || type === "multi_select"
-        ? optionsText.split(",").map((o) => o.trim()).filter(Boolean)
+        ? optionsText
+            .split(",")
+            .map((o) => o.trim())
+            .filter(Boolean)
         : [];
     setError(null);
     try {
@@ -699,7 +732,11 @@ function CustomFieldSheet({
           required,
         });
       }
-      setName(""); setKey(""); setType("string"); setOptionsText(""); setRequired(false);
+      setName("");
+      setKey("");
+      setType("string");
+      setOptionsText("");
+      setRequired(false);
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save custom field.");
@@ -709,21 +746,35 @@ function CustomFieldSheet({
   const isPending = createCustomField.isPending || updateCustomField.isPending;
 
   return (
-    <BottomSheet visible={visible} title={field ? "Edit Custom Field" : "Add Custom Field"} onClose={onClose}>
+    <BottomSheet
+      visible={visible}
+      title={field ? "Edit Custom Field" : "Add Custom Field"}
+      onClose={onClose}
+    >
       <Field label="Field name">
         <Input
           value={name}
           onChangeText={(v) => {
             setName(v);
             if (!field) {
-              setKey(v.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
+              setKey(
+                v
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "_")
+                  .replace(/^_|_$/g, ""),
+              );
             }
           }}
           placeholder="e.g. Hanging or Sitting"
         />
       </Field>
       <Field label="Field key (editable)">
-        <Input value={key} onChangeText={setKey} placeholder="e.g. hanging_or_sitting" autoCapitalize="none" />
+        <Input
+          value={key}
+          onChangeText={setKey}
+          placeholder="e.g. hanging_or_sitting"
+          autoCapitalize="none"
+        />
       </Field>
       <Field label="Type">
         <View style={styles.choiceWrap}>
@@ -732,9 +783,13 @@ function CustomFieldSheet({
           ))}
         </View>
       </Field>
-      {(type === "enum" || type === "multi_select") ? (
+      {type === "enum" || type === "multi_select" ? (
         <Field label="Options (comma-separated)">
-          <Input value={optionsText} onChangeText={setOptionsText} placeholder="hanging, sitting, folding" />
+          <Input
+            value={optionsText}
+            onChangeText={setOptionsText}
+            placeholder="hanging, sitting, folding"
+          />
         </Field>
       ) : null}
       <Field label="Required">
@@ -743,7 +798,11 @@ function CustomFieldSheet({
           <ChoiceChip label="No" active={!required} onPress={() => setRequired(false)} />
         </View>
       </Field>
-      {error ? <AppText variant="small" color={colors.destructive}>{error}</AppText> : null}
+      {error ? (
+        <AppText variant="small" color={colors.destructive}>
+          {error}
+        </AppText>
+      ) : null}
       <Button disabled={isPending} onPress={handleSubmit}>
         {isPending ? "Saving..." : field ? "Save Changes" : "Create Custom Field"}
       </Button>
