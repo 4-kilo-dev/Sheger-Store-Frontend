@@ -9,6 +9,7 @@ import {
   createDamageReportApi,
   updateBookingApi,
   transitionBookingStatusApi,
+  forceDoneBookingApi,
   recordBookingPaymentApi,
   createAssignmentApi,
   deleteAssignmentApi,
@@ -188,25 +189,37 @@ export function useBookingActions(
       reportType: "DAMAGE" | "MISSING";
       quantity?: string;
       attachments?: File[];
+      reports?: Array<{
+        poolId?: string;
+        itemId?: string;
+        quantity?: string;
+      }>;
     }) => {
       if (!booking) throw new Error("Booking is undefined");
-      const { attachments: files = [], ...reportPayload } = payload;
-      const report = await createDamageReportApi(booking.id, reportPayload);
+      const { attachments: files = [], reports, ...reportPayload } = payload;
+      const reportInputs = reports?.length ? reports : [reportPayload];
+      const createdReports = await Promise.all(
+        reportInputs.map((reportInput) =>
+          createDamageReportApi(booking.id, { ...reportPayload, ...reportInput }),
+        ),
+      );
 
-      if (files.length > 0 && report?.id) {
+      if (files.length > 0) {
         await Promise.all(
-          files.map((file) =>
-            uploadBookingAttachmentApi(booking.id, file, {
-              relatedEntity: "damage_missing_report",
-              relatedId: report.id,
-            }),
+          createdReports.flatMap((report) =>
+            files.map((file) =>
+              uploadBookingAttachmentApi(booking.id, file, {
+                relatedEntity: "damage_missing_report",
+                relatedId: report.id,
+              }),
+            ),
           ),
         );
       }
 
-      return report;
+      return createdReports;
     },
-    onSuccess: (_report, variables) => {
+    onSuccess: (_reports, variables) => {
       const attachmentCount = variables.attachments?.length ?? 0;
       toast.success(
         attachmentCount > 0
@@ -227,7 +240,7 @@ export function useBookingActions(
   });
 
   const { mutate: performCheckout, isPending: isCheckingOut } = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (checkoutOptions?: { override?: boolean; reason?: string }) => {
       if (!booking) throw new Error("Booking is undefined");
 
       // 1. Update logistics details
@@ -245,7 +258,13 @@ export function useBookingActions(
             : { poolId: item.poolId, quantity: String(item.qty) },
         ),
       );
-      const payload = { assets };
+      const payload = {
+        assets,
+        ...(checkoutOptions?.override ? {
+          override: true,
+          overrideReason: checkoutOptions.reason?.trim(),
+        } : {}),
+      };
       return checkoutBookingApi(booking.id, payload, checkoutAttempt.current.keyFor(payload));
     },
     onSuccess: () => {
@@ -275,9 +294,17 @@ export function useBookingActions(
   });
 
   const { mutate: performCheckin, isPending: isCheckingIn } = useMutation({
-    mutationFn: async (returns: CheckinReturn[]) => {
+    mutationFn: async ({
+      returns,
+      forceMissing = false,
+      forceReason,
+    }: {
+      returns: CheckinReturn[];
+      forceMissing?: boolean;
+      forceReason?: string;
+    }) => {
       if (!booking) throw new Error("Booking is undefined");
-      return checkinBookingApi(booking.id, { returns });
+      return checkinBookingApi(booking.id, { returns, forceMissing, forceReason });
     },
     onSuccess: (result) => {
       toast.success(
@@ -337,6 +364,21 @@ export function useBookingActions(
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to advance booking state");
+    },
+  });
+
+  const { mutate: forceDone, isPending: isForcingDone } = useMutation({
+    mutationFn: (reason: string) => forceDoneBookingApi(code, reason),
+    onSuccess: () => {
+      toast.success("Booking force-marked as DONE");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking-allowed-transitions", booking?.id] });
+      setShowActionModal(false);
+      setSelectedAction(null);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to force booking to DONE");
     },
   });
 
@@ -547,6 +589,8 @@ export function useBookingActions(
     isReversingCheckout,
     transitionStatus,
     isTransitioning,
+    forceDone,
+    isForcingDone,
     recordPayment,
     isRecordingPayment,
     confirmBookingWithPayment,

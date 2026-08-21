@@ -165,6 +165,7 @@ function parseBookingScreenFields(b: {
   customFields?: Record<string, any> | null;
   reservations?: Array<{
     releasedAt?: string | null;
+    source?: string | null;
     pool?: { name?: string | null; category?: { key?: string | null } | null } | null;
   }> | null;
   bomLines?: Array<{
@@ -187,26 +188,39 @@ function parseBookingScreenFields(b: {
   const backendSize = Number(b.screenAreaSqm);
   if (Number.isFinite(backendSize) && backendSize > 0) size = backendSize;
 
-  let screenType = extractScreenType(spec);
-
-  // Prefer live soft/hard holds, then BOM screen lines, when spec text has no pitch
-  if (!screenType) {
-    const fromReservations = extractScreenTypesFromEquipment(
-      (b.reservations || [])
-        .filter((r) => !r.releasedAt)
-        .map((r) => ({
-          name: r.pool?.name,
-          categoryKey: r.pool?.category?.key,
-        })),
-    );
-    const fromBom = extractScreenTypesFromEquipment(
-      (b.bomLines || []).map((line) => ({
-        name: line.pool?.name,
-        categoryKey: line.pool?.category?.key,
-      })),
-    );
-    screenType = fromReservations || fromBom;
-  }
+  const screenReservations = (b.reservations || []).filter(
+    (reservation) => reservation.source === "SCREEN",
+  );
+  const activeScreenReservations = screenReservations.filter(
+    (reservation) => !reservation.releasedAt,
+  );
+  const latestReleasedAt = screenReservations.reduce<string | null>(
+    (latest, reservation) => {
+      if (!reservation.releasedAt) return latest;
+      return !latest || reservation.releasedAt > latest ? reservation.releasedAt : latest;
+    },
+    null,
+  );
+  const finalScreenReservations = activeScreenReservations.length
+    ? activeScreenReservations
+    : screenReservations.filter(
+        (reservation) => reservation.releasedAt === latestReleasedAt,
+      );
+  const fromReservations = extractScreenTypesFromEquipment(
+    finalScreenReservations.map((reservation) => ({
+      name: reservation.pool?.name,
+      categoryKey: reservation.pool?.category?.key,
+    })),
+  );
+  const fromSpec = extractScreenType(spec);
+  const fromBom = extractScreenTypesFromEquipment(
+    (b.bomLines || []).map((line) => ({
+      name: line.pool?.name,
+      categoryKey: line.pool?.category?.key,
+    })),
+  );
+  // CTO booking-screen allocations are authoritative and may contain multiple types.
+  const screenType = fromReservations || fromSpec || fromBom;
 
   // Layout text candidates (preferred). Mount style is a separate fallback.
   const layoutCandidates: Array<string | null | undefined> = [
@@ -655,6 +669,10 @@ export async function transitionBookingStatusApi(
   });
 }
 
+export async function forceDoneBookingApi(bookingId: string, reason: string): Promise<any> {
+  return client.post(`/api/bookings/${bookingId}/force-done`, { reason });
+}
+
 export interface AllowedTransition {
   fromStatus: BookingStatus;
   toStatus: BookingStatus;
@@ -760,7 +778,8 @@ export async function createAssignmentApi(
 }
 
 export async function getBookingReservationsApi(bookingId: string): Promise<any> {
-  return client.get(`/api/bookings/${bookingId}/reservations?active=true`);
+  // Include released holds so completed and done bookings retain their allocation history.
+  return client.get(`/api/bookings/${bookingId}/reservations`);
 }
 
 export async function deleteReservationApi(bookingId: string, id: string): Promise<any> {
@@ -812,6 +831,10 @@ export async function createDamageReportApi(
     return client.post(`/api/bookings/${bookingId}/damage-reports`, payload);
   }
   return client.post(`/api/damage-reports`, payload);
+}
+
+export async function getBookingDamageReportsApi(bookingId: string): Promise<any[]> {
+  return client.get(`/api/bookings/${bookingId}/damage-reports`);
 }
 
 export async function submitEvaluationApi(bookingId: string, payload: any): Promise<any> {

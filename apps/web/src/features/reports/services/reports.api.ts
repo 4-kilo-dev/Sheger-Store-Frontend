@@ -85,6 +85,7 @@ export interface EvaluationReportRecord {
   id: string;
   bookingId: string;
   bookingCode: string;
+  clientName: string | null;
   clientNameVenue: string;
   eventDate: string;
   teamSize: number;
@@ -331,8 +332,11 @@ export interface FreelancerWorkloadRow {
   userId: string;
   name: string;
   email: string | null;
+  phone: string | null;
+  role: string;
   isFreelancer: boolean;
   bookingsCount: number;
+  totalDays: number;
   /** Rounded to 2 decimals by the backend */
   sqmCovered: number;
 }

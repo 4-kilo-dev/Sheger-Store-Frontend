@@ -9,8 +9,12 @@ import {
   getInventoryItemsApi,
   getInventoryPoolsApi,
 } from "@/features/inventory/services/inventory.api";
+import { getInventoryReportApi } from "@/features/reports/services/reports.api";
 import { getBookingsApi, createDamageReportApi } from "@/features/bookings/services/bookings.api";
 import { uploadBookingAttachmentApi } from "@/features/bookings/services/attachments.api";
+import { getDamageReportsApi, resolveDamageReportApi } from "@/features/damage-reports/services/damage.api";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const MAX_ATTACHMENTS = 10;
@@ -21,6 +25,7 @@ type AssetOption = {
   itemId?: string;
   label: string;
   stockLabel: string;
+  availableQuantity: number;
   unit: string;
   isSerialized: boolean;
 };
@@ -29,6 +34,8 @@ export function DamageReportPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const search = useSearch({ from: "/damage-report" });
+  const { can } = usePermissions();
+  const canResolveDamage = can(PERMISSION.DAMAGE_RESOLVE);
   const [submitted, setSubmitted] = useState(false);
   const [assetKey, setAssetKey] = useState("");
   const [bookingCode, setBookingCode] = useState(search.booking || "");
@@ -39,6 +46,7 @@ export function DamageReportPage() {
   const [discovered, setDiscovered] = useState("Warehouse inspection");
   const [assetPrefillApplied, setAssetPrefillApplied] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [resolutionActions, setResolutionActions] = useState<Record<string, string>>({});
   const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   const fieldClass =
@@ -54,14 +62,32 @@ export function DamageReportPage() {
     queryFn: getInventoryItemsApi,
   });
 
+  const { data: inventoryReport = [] } = useQuery({
+    queryKey: ["inventory-report"],
+    queryFn: getInventoryReportApi,
+  });
+
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
     queryKey: ["bookings"],
     queryFn: getBookingsApi,
   });
 
+  const { data: reports = [], isLoading: reportsLoading } = useQuery({
+    queryKey: ["damage-reports"],
+    queryFn: getDamageReportsApi,
+    enabled: canResolveDamage,
+  });
+
   const assetOptions = useMemo<AssetOption[]>(() => {
+    const poolAvailability = new Map<string, number>();
+    for (const category of inventoryReport) {
+      for (const pool of category.pools || []) {
+        if (pool.poolId) poolAvailability.set(pool.poolId, pool.availableQuantity);
+      }
+    }
     const poolOptions: AssetOption[] = pools.map((p: any) => {
-      const stock = Number.parseFloat(String(p.totalQuantity ?? "0").replace(/,/g, ""));
+      const total = Number.parseFloat(String(p.totalQuantity ?? "0").replace(/,/g, ""));
+      const stock = poolAvailability.get(p.id) ?? total;
       const unit = p.unit || p.category?.unit || "pcs";
       const sku = p.sku ? `${p.sku} · ` : "";
       return {
@@ -69,6 +95,7 @@ export function DamageReportPage() {
         poolId: p.id,
         label: `${sku}${p.name}`,
         stockLabel: Number.isFinite(stock) ? `${stock} ${unit}` : `— ${unit}`,
+        availableQuantity: Number.isFinite(stock) ? Math.max(0, stock) : 0,
         unit,
         isSerialized: false,
       };
@@ -82,13 +109,14 @@ export function DamageReportPage() {
         itemId: i.id,
         label: `${tag} · ${i.name}`,
         stockLabel: cond === "AVAILABLE" ? "1 pcs" : `0 · ${cond}`,
+        availableQuantity: cond === "AVAILABLE" ? 1 : 0,
         unit: "pcs",
         isSerialized: true,
       };
     });
 
     return [...poolOptions, ...itemOptions].sort((a, b) => a.label.localeCompare(b.label));
-  }, [pools, items]);
+  }, [pools, items, inventoryReport]);
 
   useEffect(() => {
     if (!assetOptions.length || assetPrefillApplied) return;
@@ -117,6 +145,17 @@ export function DamageReportPage() {
 
   const selected = assetOptions.find((o) => o.key === assetKey);
   const selectedBooking = bookings.find((booking) => booking.code === bookingCode);
+
+  useEffect(() => {
+    if (selected?.isSerialized) setQuantity("1");
+  }, [selected?.isSerialized]);
+
+  const enteredQuantity = Number.parseFloat(quantity);
+  const quantityExceedsStock =
+    !!selected &&
+    !selected.isSerialized &&
+    Number.isFinite(enteredQuantity) &&
+    enteredQuantity > selected.availableQuantity;
 
   const addAttachments = (files: FileList | null) => {
     if (!files) return;
@@ -152,6 +191,8 @@ export function DamageReportPage() {
         const n = parseFloat(quantity);
         if (!Number.isFinite(n) || n <= 0)
           throw new Error("Affected quantity must be greater than 0");
+        if (n > selected.availableQuantity)
+          throw new Error(`Affected quantity cannot exceed available stock (${selected.stockLabel})`);
       }
 
       const notes = [description.trim(), `Severity: ${severity}`, `Discovered: ${discovered}`].join(
@@ -186,6 +227,23 @@ export function DamageReportPage() {
     onError: (err: any) => {
       toast.error(err?.message || "Failed to submit damage report");
     },
+  });
+
+  const { mutate: resolveReport, isPending: isResolving } = useMutation({
+    mutationFn: ({ id, action, isItem }: { id: string; action: string; isItem: boolean }) =>
+      resolveDamageReportApi(id, {
+        status: "RESOLVED",
+        ...(isItem
+          ? { itemCondition: action as "AVAILABLE" | "UNDER_MAINTENANCE" | "DAMAGED" }
+          : { resolutionAction: action as "REPAIRED" | "WRITE_OFF" }),
+      }),
+    onSuccess: () => {
+      toast.success("Damage report resolved");
+      queryClient.invalidateQueries({ queryKey: ["damage-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-pools"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-items"] });
+    },
+    onError: (error: any) => toast.error(error?.message || "Unable to resolve report"),
   });
 
   const loading = poolsLoading || itemsLoading;
@@ -289,6 +347,7 @@ export function DamageReportPage() {
                     type="number"
                     required={!selected?.isSerialized}
                     min="1"
+                    max={selected && !selected.isSerialized ? selected.availableQuantity : undefined}
                     step="any"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
@@ -300,6 +359,11 @@ export function DamageReportPage() {
                         : undefined
                     }
                   />
+                  {quantityExceedsStock && (
+                    <span className="mt-1 block text-[11px] font-normal text-destructive">
+                      Only {selected?.stockLabel} is available.
+                    </span>
+                  )}
                 </label>
 
                 <label className="text-[12px] font-semibold">
@@ -426,7 +490,11 @@ export function DamageReportPage() {
                 </div>
               )}
               <div className="mt-5 border-t border-border pt-4">
-                <Button type="submit" className="w-full" disabled={isPending || loading}>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isPending || loading || quantityExceedsStock}
+                >
                   <ShieldAlert /> {isPending ? "Submitting…" : "Submit Damage Report"}
                 </Button>
                 <Button
@@ -441,6 +509,69 @@ export function DamageReportPage() {
             </div>
           </aside>
         </form>
+        {canResolveDamage && (
+          <section className="mt-6 overflow-hidden rounded-lg border border-border bg-surface">
+            <div className="flex items-center justify-between border-b border-border px-5 py-3">
+              <div>
+                <div className="label-eyebrow">Incident Queue</div>
+                <h2 className="mt-1 text-[15px] font-bold">Damage & Missing Reports</h2>
+              </div>
+              <span className="text-[11px] text-text-2">{reports.filter((report) => report.status !== "RESOLVED" && report.status !== "REJECTED").length} open</span>
+            </div>
+            {reportsLoading ? (
+              <p className="px-5 py-8 text-center text-[12px] text-text-3">Loading reports...</p>
+            ) : reports.length === 0 ? (
+              <p className="px-5 py-8 text-center text-[12px] text-text-3">No damage or missing reports recorded.</p>
+            ) : (
+              <div className="divide-y divide-border">
+                {reports.map((report) => {
+                  const isItem = !!report.itemId;
+                  const action = resolutionActions[report.id] || (isItem ? "AVAILABLE" : "REPAIRED");
+                  const isOpen = report.status === "OPEN" || report.status === "UNDER_REVIEW";
+                  return (
+                    <div key={report.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-[12px]">
+                      <div className="min-w-[220px] flex-1">
+                        <div className="font-semibold">{report.itemName || report.poolName || "Unknown inventory item"}</div>
+                        <div className="mt-0.5 text-[11px] text-text-2">
+                          {report.reportType === "MISSING" ? "Missing" : "Damaged"}
+                          {report.quantity ? ` · ${report.quantity}` : " · 1 unit"}
+                          {report.bookingCode ? ` · ${report.bookingCode}` : " · Warehouse"}
+                        </div>
+                      </div>
+                      <span className={report.reportType === "MISSING" ? "text-destructive" : "text-[var(--color-pay-advance)]"}>{report.reportType}</span>
+                      <span className="text-text-2">{report.status.replaceAll("_", " ")}</span>
+                      {isOpen && (
+                        <>
+                          <select
+                            value={action}
+                            onChange={(event) => setResolutionActions((current) => ({ ...current, [report.id]: event.target.value }))}
+                            className="h-8 rounded border border-border bg-surface-2 px-2 text-[11px]"
+                          >
+                            {isItem ? (
+                              <>
+                                <option value="AVAILABLE">Return to available</option>
+                                <option value="UNDER_MAINTENANCE">Send to maintenance</option>
+                                <option value="DAMAGED">Keep out of service</option>
+                              </>
+                            ) : (
+                              <>
+                                <option value="REPAIRED">Repaired / return to stock</option>
+                                <option value="WRITE_OFF">Write off inventory</option>
+                              </>
+                            )}
+                          </select>
+                          <Button size="sm" disabled={isResolving} onClick={() => resolveReport({ id: report.id, action, isItem })}>
+                            Resolve
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
       </div>
     </AppShell>
   );

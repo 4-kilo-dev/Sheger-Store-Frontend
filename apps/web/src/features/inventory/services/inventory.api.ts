@@ -1,4 +1,4 @@
-export type InventoryCondition = "GOOD" | "SERVICE DUE" | "DAMAGED";
+export type InventoryCondition = "GOOD" | "CHECKED OUT" | "SERVICE DUE" | "DAMAGED";
 export type InventoryAvailability = "AVAILABLE" | "RESERVED" | "ONSITE";
 export type InventoryEntityKind = "pool" | "item";
 
@@ -25,6 +25,7 @@ export interface InventoryItem {
   assetTag?: string;
   serialNumber?: string;
   itemCondition?: "AVAILABLE" | "DAMAGED" | "UNDER_MAINTENANCE" | "LOST" | "RETIRED";
+  checkedOut?: boolean;
   lastService: string;
   nextService: string;
 }
@@ -201,7 +202,13 @@ export async function getCombinedInventoryApi(): Promise<InventoryItem[]> {
     const availability: InventoryAvailability =
       onsite > 0 ? "ONSITE" : reserved > 0 ? "RESERVED" : "AVAILABLE";
     const condition: InventoryCondition =
-      damaged > 0 && available === 0 ? "DAMAGED" : damaged > 0 ? "SERVICE DUE" : "GOOD";
+      damaged > 0 && available === 0
+        ? "DAMAGED"
+        : damaged > 0
+          ? "SERVICE DUE"
+          : onsite > 0 && available === 0
+            ? "CHECKED OUT"
+            : "GOOD";
 
     return {
       id: p.sku || p.id,
@@ -229,6 +236,9 @@ export async function getCombinedInventoryApi(): Promise<InventoryItem[]> {
   const mappedItems: InventoryItem[] = items.map((i) => {
     const cat = categoryMap.get(i.categoryId);
     const base = mapItemCondition(i.condition);
+    const checkedOut = Boolean(i.checkedOut);
+    const condition: InventoryCondition =
+      checkedOut && base.condition === "GOOD" ? "CHECKED OUT" : base.condition;
 
     return {
       id: i.assetTag || i.id,
@@ -239,17 +249,18 @@ export async function getCombinedInventoryApi(): Promise<InventoryItem[]> {
       category: cat?.name || "Serialized Asset",
       model: i.serialNumber ? `S/N ${i.serialNumber}` : "Serialized",
       total: 1,
-      available: base.available,
-      reserved: base.available === 0 && base.damaged === 0 ? 1 : 0,
-      onsite: 0,
+      available: checkedOut ? 0 : base.available,
+      reserved: !checkedOut && base.available === 0 && base.damaged === 0 ? 1 : 0,
+      onsite: checkedOut ? 1 : 0,
       damaged: base.damaged,
-      condition: base.condition,
-      availability: base.availability,
-      location: "Warehouse",
+      condition,
+      availability: checkedOut ? "ONSITE" : base.availability,
+      location: checkedOut ? "Onsite / checked out" : "Warehouse",
       notes: i.notes || undefined,
       assetTag: i.assetTag || undefined,
       serialNumber: i.serialNumber || undefined,
       itemCondition: i.condition,
+      checkedOut,
       lastService: purchasedOrUnknown(i.purchasedAt),
       nextService: "—",
     };

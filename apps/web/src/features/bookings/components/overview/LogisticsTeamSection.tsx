@@ -4,7 +4,7 @@ import { KV } from "@/features/bookings/components/shared/KV";
 import type { OverviewSectionProps } from "./types";
 import { useSystemCurrency } from "@/hooks/use-system-currency";
 
-export function LogisticsTeamSection({ b }: OverviewSectionProps) {
+export function LogisticsTeamSection({ b, caps }: OverviewSectionProps) {
   const { formatMoney } = useSystemCurrency();
   return (
     <Section title="Logistics & Team" icon={Truck}>
@@ -12,7 +12,7 @@ export function LogisticsTeamSection({ b }: OverviewSectionProps) {
         <KV label="Team Leader" value={b.teamLeader} />
         <KV label="Stage Hand" value={b.stageHand} />
         <KV label="Driver" value={b.driver} />
-        <KV label="Meal Budget" value={formatMoney(b.mealBudget)} mono />
+        {caps.showFinancials && <KV label="Meal Budget" value={formatMoney(b.mealBudget)} mono />}
       </div>
     </Section>
   );

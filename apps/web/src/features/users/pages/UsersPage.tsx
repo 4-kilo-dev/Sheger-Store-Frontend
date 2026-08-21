@@ -9,6 +9,7 @@ import {
   Calendar,
   ShieldCheck,
   UsersRound,
+  Pencil,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
@@ -19,6 +20,7 @@ import {
 } from "@/features/checkout/services/operations.api";
 import { AddStaffModal } from "../components/AddStaffModal";
 import { AssignStaffToBookingModal } from "../components/AssignStaffToBookingModal";
+import { EditStaffModal } from "../components/EditStaffModal";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getStaffApi,
@@ -60,6 +62,7 @@ export function StaffPage() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<(typeof STAFF_ROLES)[number]>("All");
   const [assignPerson, setAssignPerson] = useState<StaffMember | null>(null);
+  const [editingPerson, setEditingPerson] = useState<StaffMember | null>(null);
   const { can } = usePermissions();
   const { formatDate } = useDateFormatter();
   const canViewStaff = can(PERMISSION.USER_VIEW);
@@ -357,6 +360,15 @@ export function StaffPage() {
                {canManageStaff && p.id && (
                 <div className="mt-3 flex flex-wrap gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
                   <button
+                    type="button"
+                    onClick={() => setEditingPerson(p)}
+                    title={`Edit ${p.name}`}
+                    className="rounded bg-[var(--surface-2)] p-1.5 transition hover:bg-border"
+                    style={{ color: "var(--text-2)", border: "1px solid var(--border)" }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
                     onClick={() => handleResetPassword(p.id!, p.name)}
                     className="rounded bg-[var(--surface-2)] px-2.5 py-1 text-[10px] font-semibold transition hover:bg-border cursor-pointer"
                     style={{ color: "var(--text-2)", border: "1px solid var(--border)" }}
@@ -553,6 +565,11 @@ export function StaffPage() {
         person={assignPerson}
         open={!!assignPerson}
         onClose={() => setAssignPerson(null)}
+      />
+      <EditStaffModal
+        person={editingPerson}
+        open={!!editingPerson}
+        onClose={() => setEditingPerson(null)}
       />
     </AppShell>
   );

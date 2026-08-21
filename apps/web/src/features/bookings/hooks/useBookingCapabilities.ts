@@ -87,6 +87,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     can(PERMISSION.BOOKING_EDIT) || (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned);
 
   const canDeleteBooking = can(PERMISSION.BOOKING_DELETE);
+  const canForceDone = can(PERMISSION.BOOKING_FORCE_DONE);
 
   /**
    * Core booking / vehicle / logistics field edits.
@@ -125,6 +126,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canAssignTechnician = can(PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN);
   const canAssignCrew = can(PERMISSION.ASSIGNMENT_ASSIGN_CREW);
   const canReverseCheckout = can(PERMISSION.INVENTORY_CHECKOUT_REVERSE);
+  const canOverrideAvailability = can(PERMISSION.INVENTORY_OVERRIDE_AVAILABILITY);
   const bomEditableStatus = booking?.status === "ACCEPTED" || booking?.status === "PREPARATION";
   const canEditBom =
     bomEditableStatus &&
@@ -203,8 +205,9 @@ export function useBookingCapabilities(booking: Booking | undefined) {
 
   const visibleTabs: TabName[] = useMemo(() => {
     const showPayments = can(PERMISSION.PAYMENT_MANAGE);
-    const showOpsTabs = canAny([
+    const canViewOperationalDetails = canAny([
       PERMISSION.BOOKING_VIEW_ALL,
+      PERMISSION.BOOKING_VIEW_ASSIGNED,
       PERMISSION.BOOKING_EDIT,
       PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN,
       PERMISSION.ASSIGNMENT_ASSIGN_CREW,
@@ -213,7 +216,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
 
     return TABS.filter((tab) => {
       if (tab === "Payments") return showPayments;
-      if (tab === "Schedule" || tab === "Team") return showOpsTabs;
+      if (tab === "Schedule" || tab === "Team") return canViewOperationalDetails;
       if (tab === "Evaluations") return canViewEval;
       return true;
     });
@@ -268,6 +271,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     canDeclineAssignment,
     canEditBooking,
     canDeleteBooking,
+    canForceDone,
     canEditLogistics,
     canManageCustomer,
     canEditDriverLogistics,
@@ -279,6 +283,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     canAssignTechnician,
     canAssignCrew,
     canReverseCheckout,
+    canOverrideAvailability,
     canEditBom,
     canAddBomMaterials,
     canWriteTechnicalHolds,

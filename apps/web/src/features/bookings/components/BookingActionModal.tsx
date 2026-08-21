@@ -13,6 +13,9 @@ import { StaffMultiSelect } from "@/features/bookings/components/shared/StaffMul
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { useSystemCurrency } from "@/hooks/use-system-currency";
 import { getBookingCustodyApi } from "@/features/checkout/services/operations.api";
+import { getBookingDamageReportsApi } from "@/features/bookings/services/bookings.api";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 import {
   buildCheckinReturns,
   isCheckinAction as isInventoryCheckinAction,
@@ -27,6 +30,7 @@ interface BookingActionModalProps {
 
 export function BookingActionModal({ booking, actions }: BookingActionModalProps) {
   const authUser = useAuthUser();
+  const { can } = usePermissions();
   const { currency, formatMoney } = useSystemCurrency();
   const {
     showActionModal,
@@ -64,6 +68,8 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
     isReversingCheckout,
     transitionStatus,
     isTransitioning,
+    forceDone,
+    isForcingDone,
     isRecordingPayment,
     confirmBookingWithPayment,
     isConfirmingWithPayment,
@@ -75,11 +81,32 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
   const [checkedCheckinItems, setCheckedCheckinItems] = useState<Set<string>>(new Set());
   const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
   const [returnConditions, setReturnConditions] = useState<Record<string, InventoryCondition>>({});
+  const [forceMissingMode, setForceMissingMode] = useState(false);
+  const [forceMissingReason, setForceMissingReason] = useState("");
+  const [forceUnpaidCheckout, setForceUnpaidCheckout] = useState(false);
+  const [forceUnpaidReason, setForceUnpaidReason] = useState("");
   const { data: custody = [] } = useQuery({
     queryKey: ["checkoutCustody", booking.id],
     queryFn: () => getBookingCustodyApi(booking.id),
     enabled: showActionModal && isCheckinAction,
   });
+  const { data: damageReports = [] } = useQuery({
+    queryKey: ["booking-damage-reports", booking.id],
+    queryFn: () => getBookingDamageReportsApi(booking.id),
+    enabled: showActionModal && isCheckinAction,
+  });
+  const activeReportsByAsset = useMemo(() => {
+    const result = new Map<string, { missing: boolean; damaged: number }>();
+    for (const report of damageReports) {
+      if (report.status !== "OPEN" && report.status !== "UNDER_REVIEW") continue;
+      const key = report.poolId ? `pool:${report.poolId}` : `item:${report.itemId}`;
+      const current = result.get(key) || { missing: false, damaged: 0 };
+      if (report.reportType === "MISSING") current.missing = true;
+      if (report.reportType === "DAMAGE") current.damaged += Number.parseFloat(report.quantity || "1") || 1;
+      result.set(key, current);
+    }
+    return result;
+  }, [damageReports]);
   const checkinItems = useMemo(
     () =>
       custody
@@ -95,9 +122,10 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
             name: source?.name || "Equipment",
             code: source?.code || line.poolId || line.itemId || "asset",
             outstandingQuantity: line.outstandingQuantity,
+            report: activeReportsByAsset.get(line.poolId ? `pool:${line.poolId}` : `item:${line.itemId}`),
           };
         }),
-    [booking.bomItems, custody],
+    [activeReportsByAsset, booking.bomItems, custody],
   );
 
   useEffect(() => {
@@ -105,6 +133,8 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
       setCheckedCheckinItems(new Set());
       setReturnQuantities({});
       setReturnConditions({});
+      setForceMissingMode(false);
+      setForceMissingReason("");
     }
   }, [showActionModal, isCheckinAction, selectedAction?.id]);
 
@@ -142,14 +172,17 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
   };
 
   const toggleAllCheckinItems = () => {
-    if (checkedCheckinItems.size === checkinItems.length) {
+    const eligibleItems = checkinItems.filter((item) => !item.report?.missing);
+    if (checkedCheckinItems.size === eligibleItems.length) {
       setCheckedCheckinItems(new Set());
     } else {
-      setCheckedCheckinItems(new Set(checkinItems.map((item) => item.id)));
+      setCheckedCheckinItems(new Set(eligibleItems.map((item) => item.id)));
     }
   };
 
-  const hasCheckinItemsSelected = checkedCheckinItems.size > 0;
+  const hasCheckinItemsSelected =
+    checkedCheckinItems.size > 0 ||
+    (forceMissingMode && checkinItems.some((item) => item.report?.missing));
 
   const stagehandLeaderName = booking.teamLeader || "— Not assigned —";
   const screenTypeLabel = booking.screenType || "—";
@@ -455,6 +488,34 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                       style={{ borderColor: "var(--border)" }}
                     />
                   </label>
+                  {booking.payment !== "PAID" && (
+                    <div className="col-span-2 rounded border border-destructive/50 bg-destructive/5 p-2.5">
+                      <div className="text-[11px] font-semibold text-destructive">
+                        Payment is {booking.payment === "ADVANCE" ? "advance only" : "unpaid"}. Full payment is required before checkout.
+                      </div>
+                      {can(PERMISSION.INVENTORY_FORCE_CHECKOUT) && (
+                        <>
+                          <label className="mt-2 flex items-center gap-2 text-[11px] font-semibold">
+                            <input
+                              type="checkbox"
+                              checked={forceUnpaidCheckout}
+                              onChange={(event) => setForceUnpaidCheckout(event.target.checked)}
+                            />
+                            Force checkout as admin
+                          </label>
+                          {forceUnpaidCheckout && (
+                            <textarea
+                              value={forceUnpaidReason}
+                              onChange={(event) => setForceUnpaidReason(event.target.value)}
+                              placeholder="Reason for allowing an unpaid booking to proceed..."
+                              className="mt-2 block h-16 w-full resize-none rounded border bg-[var(--surface-2)] p-2 text-[11px]"
+                              style={{ borderColor: "var(--border)" }}
+                            />
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div
@@ -533,7 +594,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                       className="text-[11px] font-semibold"
                       style={{ color: "var(--color-bom-returned)" }}
                     >
-                      {checkedCheckinItems.size === checkinItems.length
+                      {checkedCheckinItems.size === checkinItems.filter((item) => !item.report?.missing).length
                         ? "Uncheck All"
                         : "Check All"}
                     </button>
@@ -549,15 +610,16 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                     <ul className="max-h-48 divide-y overflow-y-auto" style={{ borderColor: "var(--border)" }}>
                       {checkinItems.map((item) => {
                         const checked = checkedCheckinItems.has(item.id);
+                        const isMissing = !!item.report?.missing;
                         return (
                           <li key={item.id}>
                             <div
-                              onClick={() => toggleCheckinItem(item.id)}
+                              onClick={() => !isMissing && toggleCheckinItem(item.id)}
                               className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-[var(--surface-2)]"
-                              style={{ opacity: checked ? 1 : 0.75 }}
+                              style={{ opacity: isMissing ? 0.48 : checked ? 1 : 0.75 }}
                               role="checkbox"
                               aria-checked={checked}
-                              tabIndex={0}
+                              tabIndex={isMissing ? -1 : 0}
                             >
                               <div
                                 className="flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition"
@@ -576,7 +638,14 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                               >
                                 {item.code}
                               </span>
-                              <span className="min-w-0 flex-1 truncate text-[11px]">{item.name}</span>
+                              <span className={`min-w-0 flex-1 truncate text-[11px] ${isMissing ? "line-through" : ""}`}>{item.name}</span>
+                              {isMissing ? (
+                                <span className="rounded px-1.5 py-0.5 text-[9px] font-bold text-destructive">MISSING</span>
+                              ) : item.report?.damaged ? (
+                                <span className="rounded px-1.5 py-0.5 text-[9px] font-bold" style={{ color: "var(--color-pay-advance)", background: "color-mix(in oklab, var(--color-pay-advance) 14%, transparent)" }}>
+                                  DAMAGED {item.report.damaged}
+                                </span>
+                              ) : null}
                               {item.poolId ? (
                                 <input
                                   aria-label={`Return quantity for ${item.name}`}
@@ -620,6 +689,28 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                         );
                       })}
                     </ul>
+                    {checkinItems.some((item) => item.report?.missing) && can(PERMISSION.INVENTORY_FORCE_CHECKIN) && (
+                      <div className="border-t px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
+                        <label className="block text-[10px] font-semibold" style={{ color: "var(--text-2)" }}>
+                          Admin force check-in reason (minimum 10 characters)
+                          <textarea
+                            value={forceMissingReason}
+                            onChange={(event) => setForceMissingReason(event.target.value)}
+                            placeholder="Explain why the missing materials are being force checked in..."
+                            className="mt-1 block h-16 w-full resize-none rounded border bg-[var(--surface-2)] p-2 text-[11px]"
+                            style={{ borderColor: "var(--border)" }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setForceMissingMode((enabled) => !enabled)}
+                          disabled={forceMissingReason.trim().length < 10}
+                          className="mt-2 text-[11px] font-bold text-destructive disabled:opacity-50"
+                        >
+                          {forceMissingMode ? "Force check-in enabled" : "Enable force check-in for missing materials"}
+                        </button>
+                      </div>
+                    )}
                     <div
                       className="flex items-center justify-between border-t px-3 py-2"
                       style={{ borderColor: "var(--border)" }}
@@ -686,13 +777,17 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                 toast.error("You must be signed in to check out gear.");
                 return;
               }
-              performCheckout();
+              performCheckout(
+                forceUnpaidCheckout
+                  ? { override: true, reason: forceUnpaidReason.trim() }
+                  : undefined,
+              );
             } else if (isCheckinAction) {
               try {
-                performCheckin(
-                  buildCheckinReturns(
+                performCheckin({
+                  returns: buildCheckinReturns(
                     checkinItems.map((item) => ({
-                      selected: checkedCheckinItems.has(item.id),
+                      selected: checkedCheckinItems.has(item.id) || (forceMissingMode && item.report?.missing),
                       poolId: item.poolId,
                       itemId: item.itemId,
                       outstandingQuantity: item.outstandingQuantity,
@@ -701,7 +796,9 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                       condition: returnConditions[item.id] ?? "AVAILABLE",
                     })),
                   ),
-                );
+                  forceMissing: forceMissingMode,
+                  forceReason: forceMissingReason.trim() || undefined,
+                });
               } catch (error) {
                 toast.error(
                   error instanceof Error
@@ -757,6 +854,8 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
                   pricingScreenSize: screenSize,
                 });
               }
+            } else if (selectedAction.id === "booking.force_done") {
+              forceDone(cancellationReason.trim());
             } else {
               transitionStatus({
                 toStatus: selectedAction.targetStatus,
@@ -767,12 +866,15 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
           }}
           disabled={
             isTransitioning ||
+            isForcingDone ||
             isRecordingPayment ||
             isConfirmingWithPayment ||
             isCheckingOut ||
             isCheckingIn ||
             isReversingCheckout ||
             isAssigningTechnicians ||
+            (isCheckoutAction && booking.payment !== "PAID" &&
+              (!forceUnpaidCheckout || forceUnpaidReason.trim().length < 10)) ||
             (selectedAction.requiresReason && cancellationReason.trim().length < 10) ||
             (isAssignTechnicianAction && selectedTechnicianIds.length === 0) ||
             (showPaymentCapture &&
@@ -794,6 +896,7 @@ export function BookingActionModal({ booking, actions }: BookingActionModalProps
           }}
         >
           {isTransitioning ||
+          isForcingDone ||
           isRecordingPayment ||
           isConfirmingWithPayment ||
           isCheckingOut ||

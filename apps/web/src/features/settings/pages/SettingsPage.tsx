@@ -575,9 +575,7 @@ function PerformanceMetricsPanel() {
   const [newDesc, setNewDesc] = useState("");
   const [newOrder, setNewOrder] = useState(1);
   const [metricCategory, setMetricCategory] = useState<"internal" | "client_feedback">("internal");
-  const [valueType, setValueType] = useState<"boolean" | "rating_10" | "rating_5" | "percentage">(
-    "boolean",
-  );
+  const [valueType, setValueType] = useState<"rating_2">("rating_2");
 
   // Queries
   const { data: metrics, isLoading } = useQuery({
@@ -647,7 +645,7 @@ function PerformanceMetricsPanel() {
     setNewDesc("");
     setNewOrder(filteredMetrics.length + 1);
     setMetricCategory(category);
-    setValueType(category === "internal" ? "boolean" : "rating_10");
+    setValueType("rating_2");
     setShowAddModal(true);
   };
 
@@ -778,13 +776,7 @@ function PerformanceMetricsPanel() {
                     </td>
                     <td className="px-3 py-3 text-[11px]" style={{ color: "var(--text-2)" }}>
                       <span className="font-semibold uppercase tracking-wider text-[9px] px-1.5 py-0.5 rounded bg-[var(--surface)] border border-[var(--border)]">
-                        {m.valueType === "boolean"
-                          ? "Met/Not Met"
-                          : m.valueType === "rating_10"
-                            ? "0-10 Rating"
-                            : m.valueType === "rating_5"
-                              ? "1-5 Stars"
-                              : "0-100%"}
+                        0-2 Rating
                       </span>
                     </td>
                     <td className="px-3 py-3 text-center">
@@ -921,14 +913,11 @@ function PerformanceMetricsPanel() {
                   Value Type / Scale
                   <select
                     value={valueType}
-                    onChange={(e) => setValueType(e.target.value as any)}
+                    onChange={() => setValueType("rating_2")}
                     className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
                     style={{ borderColor: "var(--border)" }}
                   >
-                    <option value="boolean">Met / Not Met</option>
-                    <option value="rating_10">0 - 10 Rating</option>
-                    <option value="rating_5">1 - 5 Stars</option>
-                    <option value="percentage">0 - 100%</option>
+                    <option value="rating_2">0 - 2 Rating</option>
                   </select>
                 </label>
               </div>

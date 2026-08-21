@@ -116,14 +116,7 @@ export function useBookingEvaluations(code: string, booking: Booking | undefined
     if (!booking || !canSubmitEval) return;
     const initialScores: Record<string, number> = {};
     internalMetrics.forEach((m) => {
-      initialScores[m.id] =
-        m.valueType === "boolean"
-          ? 1
-          : m.valueType === "rating_5"
-            ? 5
-            : m.valueType === "percentage"
-              ? 100
-              : 10;
+      initialScores[m.id] = 2;
     });
     setInternalScores(initialScores);
     setVenueName(booking.venue);
@@ -136,14 +129,7 @@ export function useBookingEvaluations(code: string, booking: Booking | undefined
   const openClientForm = () => {
     const initialScores: Record<string, number> = {};
     clientMetrics.forEach((m) => {
-      initialScores[m.key] =
-        m.valueType === "boolean"
-          ? 1
-          : m.valueType === "rating_5"
-            ? 5
-            : m.valueType === "percentage"
-              ? 100
-              : 10;
+      initialScores[m.key] = 2;
     });
     setClientScores(initialScores);
     setRespondentName("");

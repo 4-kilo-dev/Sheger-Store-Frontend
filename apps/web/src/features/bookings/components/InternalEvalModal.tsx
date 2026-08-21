@@ -98,15 +98,7 @@ export function InternalEvalModal({ booking, evaluations }: InternalEvalModalPro
                 </div>
               ) : (
                 internalMetrics.map((m) => {
-                  const score =
-                    internalScores[m.id] ??
-                    (m.valueType === "boolean"
-                      ? 1
-                      : m.valueType === "rating_5"
-                        ? 5
-                        : m.valueType === "percentage"
-                          ? 100
-                          : 10);
+                  const score = internalScores[m.id] ?? 2;
                   return (
                     <div
                       key={m.id}
