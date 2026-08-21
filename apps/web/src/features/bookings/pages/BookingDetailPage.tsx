@@ -30,7 +30,7 @@ import { FilesTab } from "../components/tabs/FilesTab";
 import { ActivityTab } from "../components/tabs/ActivityTab";
 import { EvaluationsTab } from "../components/tabs/EvaluationsTab";
 
-import type { TabName } from "../constants";
+import { createForceDoneAction, type TabName } from "../constants";
 import { getBookingPollCopy } from "@vortex/utils";
 
 const _Route = createFileRoute("/bookings/$code")({
@@ -68,7 +68,7 @@ export function BookingDetail() {
   const actions = useBookingActions(code, booking, {
     canFetchStaff: caps.canFetchStaff,
     onGoToEquipmentTab: () => setTab("Equipment"),
-    canOverrideAvailability: caps.canReverseCheckout,
+    canOverrideAvailability: caps.canOverrideAvailability,
   });
   const evaluations = useBookingEvaluations(code, booking);
 
@@ -78,6 +78,9 @@ export function BookingDetail() {
     if (caps.showFieldOpsBanner && a.permissionKey === "eval.submit_internal") return false;
     return true;
   });
+  if (caps.canForceDone && booking && booking.status !== "DONE" && booking.status !== "CANCELED") {
+    barActions.push(createForceDoneAction());
+  }
 
   // Keep active tab in the visible set when capabilities change
   const safeTab = caps.visibleTabs.includes(tab) ? tab : caps.visibleTabs[0] || "Overview";
@@ -178,6 +181,8 @@ export function BookingDetail() {
         onClose={() => actions.setShowCheckoutConflictModal(false)}
         onGoToEquipment={() => actions.onGoToEquipmentTab?.()}
         canOverride={actions.canOverrideAvailability}
+        isOverriding={actions.isCheckingOut}
+        onOverrideCheckout={(reason) => actions.performCheckout({ override: true, reason })}
       />
       {actions.showDeleteModal && (
         <DeleteConfirmModal

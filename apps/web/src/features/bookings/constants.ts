@@ -88,6 +88,7 @@ export const BOOKING_ACTION_UI: Record<string, BookingActionUI> = {
     AlertTriangle,
     "destructive"
   ),
+  "booking.force_done": ui("booking.force_done", "Force Done", AlertTriangle, "destructive"),
 
   // Reverse / undo edges — keep distinct action ids so forms (payment / assign) do not attach
   "booking.unconfirm": ui("booking.unconfirm", "Revert to Reserved", Undo2, "outline"),
@@ -115,7 +116,19 @@ export const BOOKING_ACTION_UI: Record<string, BookingActionUI> = {
     "outline"
   ),
   "eval.submit_internal": ui("eval.submit_internal", "Submit Event Evaluation", CheckCircle2),
+  "booking.force_done": ui("booking.force_done", "Force Done", AlertTriangle, "destructive"),
 };
+
+export function createForceDoneAction(): BookingAction {
+  const ui = BOOKING_ACTION_UI["booking.force_done"];
+  return {
+    ...ui,
+    targetStatus: "DONE",
+    permissionKey: "booking.force_done",
+    requiresReason: true,
+    reasonRequired: true,
+  };
+}
 
 /**
  * Status-transition edges that are actually assignment-row actions.
@@ -162,4 +175,3 @@ export function createAssignTechnicianAction(): BookingAction {
     permissionKey: "assignment.assign_technician",
   };
 }
-

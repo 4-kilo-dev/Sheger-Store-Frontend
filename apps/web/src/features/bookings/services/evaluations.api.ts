@@ -8,7 +8,7 @@ export interface PerformanceMetric {
   category: "internal" | "client_feedback";
   sortOrder: number;
   isActive: boolean;
-  valueType: "boolean" | "rating_10" | "rating_5" | "percentage"; // New configurable value type
+  valueType: "rating_2";
   createdAt: string;
   updatedAt: string;
 }
@@ -42,7 +42,7 @@ export interface InternalEvaluation {
     key?: string;
     label?: string;
     description?: string;
-    valueType?: "boolean" | "rating_10" | "rating_5" | "percentage"; // New
+    valueType?: "rating_2";
   }>;
 }
 
@@ -67,7 +67,7 @@ export interface ClientEvaluation {
     key?: string;
     label?: string;
     description?: string;
-    valueType?: "boolean" | "rating_10" | "rating_5" | "percentage"; // New
+    valueType?: "rating_2";
   }>;
 }
 
@@ -83,7 +83,7 @@ const DEFAULT_METRICS: PerformanceMetric[] = [
     category: "internal",
     sortOrder: 1,
     isActive: true,
-    valueType: "boolean",
+    valueType: "rating_2",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -95,7 +95,7 @@ const DEFAULT_METRICS: PerformanceMetric[] = [
     category: "internal",
     sortOrder: 2,
     isActive: true,
-    valueType: "boolean",
+    valueType: "rating_2",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -107,7 +107,7 @@ const DEFAULT_METRICS: PerformanceMetric[] = [
     category: "internal",
     sortOrder: 3,
     isActive: true,
-    valueType: "boolean",
+    valueType: "rating_2",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -119,7 +119,7 @@ const DEFAULT_METRICS: PerformanceMetric[] = [
     category: "internal",
     sortOrder: 4,
     isActive: true,
-    valueType: "boolean",
+    valueType: "rating_2",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -131,7 +131,7 @@ const DEFAULT_METRICS: PerformanceMetric[] = [
     category: "client_feedback",
     sortOrder: 1,
     isActive: true,
-    valueType: "rating_10",
+    valueType: "rating_2",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -143,7 +143,7 @@ const DEFAULT_METRICS: PerformanceMetric[] = [
     category: "client_feedback",
     sortOrder: 2,
     isActive: true,
-    valueType: "rating_10",
+    valueType: "rating_2",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -155,7 +155,7 @@ const DEFAULT_METRICS: PerformanceMetric[] = [
     category: "client_feedback",
     sortOrder: 3,
     isActive: true,
-    valueType: "rating_10",
+    valueType: "rating_2",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -180,7 +180,7 @@ function getLocalDb() {
       // Ensure all loaded metrics have valueType
       metrics = parsed.map((m: any) => ({
         ...m,
-        valueType: m.valueType || (m.category === "internal" ? "boolean" : "rating_10"),
+        valueType: "rating_2",
       }));
     } catch {
       // ignore

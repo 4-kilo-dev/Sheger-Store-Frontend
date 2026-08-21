@@ -1,4 +1,5 @@
 import { AlertTriangle, Package } from "lucide-react";
+import { useState } from "react";
 
 export interface UnfulfilledBomLine {
   lineId: string;
@@ -16,6 +17,8 @@ interface BomFulfillmentConflictModalProps {
   onClose: () => void;
   onGoToEquipment: () => void;
   canOverride?: boolean;
+  onOverrideCheckout?: (reason: string) => void;
+  isOverriding?: boolean;
 }
 
 export function BomFulfillmentConflictModal({
@@ -24,7 +27,10 @@ export function BomFulfillmentConflictModal({
   onClose,
   onGoToEquipment,
   canOverride = false,
+  onOverrideCheckout,
+  isOverriding = false,
 }: BomFulfillmentConflictModalProps) {
+  const [reason, setReason] = useState("");
   if (!open || lines.length === 0) return null;
 
   return (
@@ -78,10 +84,18 @@ export function BomFulfillmentConflictModal({
         </div>
 
         {canOverride && (
-          <p className="mt-3 text-[10px]" style={{ color: "var(--text-3)" }}>
-            Users with inventory override permission may still force checkout with a documented
-            reason.
-          </p>
+          <div className="mt-3">
+            <label className="block text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+              Override reason (minimum 10 characters)
+              <textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Explain why this checkout must proceed..."
+                className="mt-1 block h-20 w-full resize-none rounded border bg-[var(--surface-2)] p-2 text-[12px]"
+                style={{ borderColor: "var(--border)" }}
+              />
+            </label>
+          </div>
         )}
 
         <div
@@ -99,6 +113,17 @@ export function BomFulfillmentConflictModal({
             <Package className="h-4 w-4" />
             Open Equipment tab
           </button>
+          {canOverride && onOverrideCheckout && (
+            <button
+              type="button"
+              onClick={() => onOverrideCheckout(reason.trim())}
+              disabled={reason.trim().length < 10 || isOverriding}
+              className="rounded px-4 py-2 text-[12px] font-bold text-white transition hover:opacity-90 disabled:opacity-50"
+              style={{ background: "var(--destructive)" }}
+            >
+              {isOverriding ? "Overriding..." : "Force Checkout"}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="rounded border px-4 py-2 text-[12px]"

@@ -6,6 +6,7 @@ export interface StaffMember {
   roleKey?: string;
   team: string;
   phone: string;
+  email?: string | null;
   status: "ACTIVE" | "ONSITE" | "OFF DUTY" | "ON LEAVE";
   jobs: number;
   capacity: number;
@@ -93,7 +94,7 @@ export type CheckinResult = {
 
 export async function checkoutBookingApi(
   bookingId: string,
-  payload: { assets: CheckoutAsset[] },
+  payload: { assets: CheckoutAsset[]; override?: boolean; overrideReason?: string },
   idempotencyKey?: string,
 ): Promise<any> {
   return client.post(`/api/bookings/${bookingId}/checkout`, payload, {
@@ -105,7 +106,7 @@ export async function checkoutBookingApi(
 
 export async function checkinBookingApi(
   bookingId: string,
-  payload: { returns: CheckinReturn[] },
+  payload: { returns: CheckinReturn[]; forceMissing?: boolean; forceReason?: string },
 ): Promise<CheckinResult> {
   return client.post(`/api/bookings/${bookingId}/checkin`, payload);
 }

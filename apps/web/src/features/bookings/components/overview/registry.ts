@@ -35,12 +35,8 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
     id: "technical-holds",
     Component: TechnicalHoldsSection,
-    when: (caps, b) => {
-      if (TERMINAL_BOOKING_STATUSES.has(b.status)) return false;
-      // Writers can manage holds beyond RESERVED; others only see at RESERVED
-      if (caps.canWriteTechnicalHolds) return true;
-      return b.status === "RESERVED";
-    },
+    // Read-only allocations remain part of the job brief after completion.
+    when: () => true,
   },
   {
     id: "oo-crew-assignment",
@@ -50,7 +46,7 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
     id: "oo-vehicle-driver",
     Component: OoVehicleDriverSection,
-    when: (_caps, b) => !TERMINAL_BOOKING_STATUSES.has(b.status),
+    when: () => true,
   },
   {
     id: "client-contact",
@@ -66,7 +62,7 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
     id: "logistics-team",
     Component: LogisticsTeamSection,
-    when: (caps) => caps.showOpsSidebar,
+    when: () => true,
   },
   {
     id: "notes-requirements",

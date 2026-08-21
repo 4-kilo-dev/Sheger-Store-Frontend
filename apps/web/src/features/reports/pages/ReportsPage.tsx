@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { 
   Banknote, CalendarCheck, Download, Gauge, TrendingUp, BarChart3, 
-  Users, Filter, AlertTriangle, Check, ShieldAlert, AlertCircle, RefreshCw
+  Users, Filter, AlertTriangle, Check, ShieldAlert, AlertCircle, RefreshCw,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -29,9 +29,12 @@ import {
   CartesianGrid,
 } from "recharts";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 import { useSystemCurrency } from "@/hooks/use-system-currency";
+import { getBookingsApi, type Booking } from "@/features/bookings/services/bookings.api";
 
 function csvEscape(value: string | number | null | undefined): string {
   const text = value == null ? "" : String(value);
@@ -81,34 +84,159 @@ const TABS = [
 type TabId = "revenue_bookings" | "inventory_health" | "client_directory" | "quality_crew" | "audit_logs" | "staff_work_sheets";
 
 export function ReportsPage() {
+  const authUser = useAuthUser();
+  const roleKeys = (authUser?.roles || [authUser?.role || ""]).map((role) => role.toLowerCase());
+  const isManagementReporter =
+    roleKeys.includes("admin") ||
+    roleKeys.includes("ccr") ||
+    roleKeys.includes("oo") ||
+    roleKeys.includes("operations_officer") ||
+    roleKeys.includes("chief_tech") ||
+    roleKeys.includes("cto");
+
+  if (!isManagementReporter) {
+    return <AssignedStaffWorksheet />;
+  }
+
+  return <ManagementReportsPage />;
+}
+
+function AssignedStaffWorksheet() {
+  const { formatDate } = useDateFormatter();
+  const authUser = useAuthUser();
+  const { data: bookings = [], isLoading } = useQuery({
+    queryKey: ["staff-assigned-work-sheet"],
+    queryFn: getBookingsApi,
+  });
+  const activeBookings = bookings.filter(
+    (booking) =>
+      booking.status !== "CANCELED" &&
+      !!authUser?.id &&
+      (booking.assignments || []).some((assignment: any) => assignment.userId === authUser.id),
+  );
+
+  return (
+    <AppShell>
+      <main className="mx-auto w-full max-w-6xl px-4 py-6">
+        <div className="mb-5">
+          <div className="label-eyebrow">Assigned Work</div>
+          <h1 className="mt-1 text-[22px] font-bold">Staff Worksheet</h1>
+        </div>
+        <section className="overflow-hidden rounded-lg border border-border bg-surface">
+          <div className="border-b border-border px-4 py-3 text-[12px] font-semibold text-text-2">
+            {activeBookings.length} assigned booking{activeBookings.length === 1 ? "" : "s"}
+          </div>
+          {isLoading ? (
+            <p className="px-4 py-10 text-center text-[12px] text-text-3">Loading assigned work...</p>
+          ) : activeBookings.length === 0 ? (
+            <p className="px-4 py-10 text-center text-[12px] text-text-3">No bookings are currently assigned to you.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-[12px]">
+                <thead className="border-b border-border bg-surface-2 text-[10px] uppercase tracking-wide text-text-3">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Booking</th>
+                    <th className="px-4 py-3 font-semibold">Client</th>
+                    <th className="px-4 py-3 font-semibold">Venue</th>
+                    <th className="px-4 py-3 font-semibold">Assembly</th>
+                    <th className="px-4 py-3 font-semibold">Event</th>
+                    <th className="px-4 py-3 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeBookings.map((booking: Booking) => (
+                    <tr key={booking.id} className="border-b border-border last:border-0 hover:bg-surface-2">
+                      <td className="px-4 py-3 font-mono font-bold text-accent">
+                        <Link to="/bookings/$code" params={{ code: booking.code }}>{booking.code}</Link>
+                      </td>
+                      <td className="px-4 py-3 font-medium">{booking.client || "-"}</td>
+                      <td className="px-4 py-3">{booking.venue || "-"}</td>
+                      <td className="px-4 py-3">{booking.assemblyDate ? formatDate(booking.assemblyDate) : "-"}</td>
+                      <td className="px-4 py-3">{booking.eventDate ? formatDate(booking.eventDate) : "-"}</td>
+                      <td className="px-4 py-3"><span className="font-semibold text-text-2">{booking.status.replaceAll("_", " ")}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </main>
+    </AppShell>
+  );
+}
+
+function ManagementReportsPage() {
   const { formatDate } = useDateFormatter();
   const { currency, formatMoney } = useSystemCurrency();
   const authUser = useAuthUser();
+  const { can } = usePermissions();
   const userRole = authUser?.role?.toLowerCase() || "";
+  const roleKeys = (authUser?.roles || [userRole]).map((role) => role.toLowerCase());
+  const isOperationsOfficer =
+    roleKeys.includes("oo") || roleKeys.includes("operations_officer");
+  const isChiefTechnician = roleKeys.includes("chief_tech") || roleKeys.includes("cto");
   const isAdminOrSupervisor = userRole === "admin" || userRole === "supervisor";
+  const canViewBusinessReports = can(PERMISSION.REPORT_BUSINESS_VIEW);
 
   const renderedTabs = useMemo(() => {
+    if (isOperationsOfficer) {
+      return TABS.filter(
+        (tab) => tab.id === "inventory_health" || tab.id === "quality_crew",
+      );
+    }
+    if (isChiefTechnician) {
+      return [
+        ...TABS.filter(
+          (tab) => tab.id !== "revenue_bookings" && tab.id !== "client_directory",
+        ),
+        { id: "staff_work_sheets" as const, label: "Staff Work Sheets" },
+      ];
+    }
+    const visibleTabs = canViewBusinessReports
+      ? TABS
+      : TABS.filter(
+          (tab) => tab.id !== "revenue_bookings" && tab.id !== "client_directory",
+        );
     if (isAdminOrSupervisor) {
       return [
-        ...TABS,
+        ...visibleTabs,
         { id: "staff_work_sheets" as const, label: "Staff Work Sheets" }
       ];
     }
-    return TABS;
-  }, [isAdminOrSupervisor]);
+    return visibleTabs;
+  }, [canViewBusinessReports, isAdminOrSupervisor, isChiefTechnician, isOperationsOfficer]);
 
-  const [activeTab, setActiveTab] = useState<TabId>("revenue_bookings");
+  const [activeTab, setActiveTab] = useState<TabId>("inventory_health");
   
   // Filters State
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [status, setStatus] = useState("");
   const [location, setLocation] = useState("");
+  const [qualityDays, setQualityDays] = useState("30");
+  const [qualityView, setQualityView] = useState<"recent" | "all_done">("recent");
+  const [qualityCrew, setQualityCrew] = useState("");
+
+  const qualityDateRange = useMemo(() => {
+    if (qualityView === "all_done" || qualityDays === "all") {
+      return { startDate: undefined, endDate: undefined };
+    }
+    const days = Number.parseInt(qualityDays, 10);
+    const end = new Date();
+    const start = new Date(end);
+    start.setDate(start.getDate() - Math.max(0, days - 1));
+    return {
+      startDate: start.toISOString().slice(0, 10),
+      endDate: end.toISOString().slice(0, 10),
+    };
+  }, [qualityDays, qualityView]);
 
   // Queries
   const { data: bookingsReport, isLoading: loadingBookings, refetch: refetchBookings } = useQuery({
     queryKey: ["reports-bookings", { status, startDate, endDate, location }],
     queryFn: () => getBookingsReportApi({ status, startDate, endDate, location }),
+    enabled: canViewBusinessReports,
   });
 
   const { data: inventoryReport = [], isLoading: loadingInventory } = useQuery({
@@ -119,6 +247,7 @@ export function ReportsPage() {
   const { data: revenueReport, isLoading: loadingRevenue } = useQuery({
     queryKey: ["reports-revenue", { startDate, endDate }],
     queryFn: () => getRevenueReportApi({ startDate, endDate }),
+    enabled: canViewBusinessReports,
   });
 
   const revenueBookingCount = useMemo(() => {
@@ -142,12 +271,28 @@ export function ReportsPage() {
   const { data: customersReport = [], isLoading: loadingCustomers } = useQuery({
     queryKey: ["reports-customers"],
     queryFn: () => getCustomersReportApi(),
+    enabled: canViewBusinessReports,
   });
 
   const { data: evaluationsReport, isLoading: loadingEvaluations } = useQuery({
-    queryKey: ["reports-evaluations", { startDate, endDate }],
-    queryFn: () => getEvaluationsReportApi({ startDate, endDate }),
+    queryKey: ["reports-evaluations", qualityDateRange],
+    queryFn: () => getEvaluationsReportApi(qualityDateRange),
   });
+
+  const qualityCrewOptions = useMemo(
+    () =>
+      [...new Set((evaluationsReport?.evaluations || []).map((evaluation) => evaluation.evaluatorName))]
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [evaluationsReport?.evaluations],
+  );
+  const qualityEvaluations = useMemo(
+    () =>
+      (evaluationsReport?.evaluations || []).filter(
+        (evaluation) => !qualityCrew || evaluation.evaluatorName === qualityCrew,
+      ),
+    [evaluationsReport?.evaluations, qualityCrew],
+  );
 
   const { data: canceledReport = [], isLoading: loadingCanceled } = useQuery({
     queryKey: ["reports-canceled", { startDate, endDate }],
@@ -174,7 +319,7 @@ export function ReportsPage() {
         startDate: sheetStartDate || undefined,
         endDate: sheetEndDate || undefined,
       }),
-    enabled: isAdminOrSupervisor && activeTab === "staff_work_sheets",
+    enabled: (isAdminOrSupervisor || isChiefTechnician) && activeTab === "staff_work_sheets",
   });
 
   const {
@@ -188,7 +333,7 @@ export function ReportsPage() {
         startDate: sheetStartDate || undefined,
         endDate: sheetEndDate || undefined,
       }),
-    enabled: isAdminOrSupervisor && activeTab === "staff_work_sheets",
+    enabled: (isAdminOrSupervisor || isChiefTechnician) && activeTab === "staff_work_sheets",
   });
 
   const isTabLoading = useMemo(() => {
@@ -277,15 +422,13 @@ export function ReportsPage() {
           c.totalRevenueContributed,
         ]);
       } else if (activeTab === "quality_crew") {
-        headers = ["Booking Code", "Client Venue", "Event Date", "Team Size", "Evaluator", "Notes", "Scores"];
-        rows = (evaluationsReport?.evaluations || []).map((e) => [
-          e.bookingCode || e.bookingId,
-          e.clientNameVenue,
-          e.eventDate,
-          e.teamSize,
+        headers = ["Name", "Booking Code", "Client Name", "Event Date", "Total Score"];
+        rows = qualityEvaluations.map((e) => [
           e.evaluatorName,
-          e.notes,
-          e.scores.map((s) => `${s.metricLabel}:${s.score}`).join(" | "),
+          e.bookingCode || e.bookingId,
+          e.clientName || e.clientNameVenue || "",
+          e.eventDate,
+          e.scores.reduce((sum, score) => sum + (Number.parseFloat(score.score) || 0), 0).toFixed(2),
         ]);
       } else if (activeTab === "audit_logs") {
         headers = [
@@ -326,8 +469,11 @@ export function ReportsPage() {
         headers = [
           "Type",
           "Name",
+          "Role",
+          "Phone",
           "Email",
           "Bookings / Trips",
+          "Days",
           "Sqm / Approved",
           "Rejected",
           "Pending",
@@ -335,10 +481,13 @@ export function ReportsPage() {
         ];
         freelancerWorkload.forEach((row) => {
           rows.push([
-            "FREELANCER",
+            row.isFreelancer ? "FREELANCER" : "STAFF",
             row.name,
+            row.role,
+            row.phone || "",
             row.email || "",
             row.bookingsCount,
+            row.totalDays,
             row.sqmCovered,
             "",
             "",
@@ -349,8 +498,11 @@ export function ReportsPage() {
           rows.push([
             "DRIVER",
             row.name,
+            "",
+            "",
             row.email || "",
             row.tripsCount,
+            "",
             row.approvedCount,
             row.rejectedCount,
             row.pendingCount,
@@ -407,7 +559,7 @@ export function ReportsPage() {
       </div>
 
       {/* Interactive Filters Bar */}
-      {activeTab !== "staff_work_sheets" && (
+      {activeTab !== "staff_work_sheets" && activeTab !== "quality_crew" && (
         <div 
           className="mb-5 rounded-lg border p-4 flex flex-wrap items-center gap-4 text-[12px] no-print"
           style={{ borderColor: "var(--border)", background: "var(--surface)" }}
@@ -470,6 +622,66 @@ export function ReportsPage() {
           </button>
         )}
       </div>
+      )}
+
+      {activeTab === "quality_crew" && (
+        <div
+          className="mb-5 flex flex-wrap items-center gap-2 rounded-lg border p-3 text-[12px] no-print"
+          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+        >
+          <Filter className="h-3.5 w-3.5" style={{ color: "var(--text-2)" }} />
+          <select
+            value={qualityDays}
+            onChange={(event) => setQualityDays(event.target.value)}
+            disabled={qualityView === "all_done"}
+            className="h-8 rounded border bg-[var(--surface-2)] px-2 text-[11px] font-semibold"
+            style={{ borderColor: "var(--border)" }}
+            aria-label="Evaluation date range"
+          >
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+          <select
+            value={qualityCrew}
+            onChange={(event) => setQualityCrew(event.target.value)}
+            className="h-8 min-w-40 rounded border bg-[var(--surface-2)] px-2 text-[11px]"
+            style={{ borderColor: "var(--border)" }}
+            aria-label="Filter by assigned person"
+          >
+            <option value="">All assigned people</option>
+            {qualityCrewOptions.map((crewMember) => (
+              <option key={crewMember} value={crewMember}>{crewMember}</option>
+            ))}
+          </select>
+          <div className="ml-auto flex items-center gap-1 rounded border p-0.5" style={{ borderColor: "var(--border)" }}>
+            <button
+              type="button"
+              onClick={() => setQualityView("recent")}
+              className="h-7 rounded px-2 text-[10px] font-semibold"
+              style={{
+                background: qualityView === "recent" ? "var(--accent)" : "transparent",
+                color: qualityView === "recent" ? "var(--accent-foreground)" : "var(--text-2)",
+              }}
+            >
+              Recent completed
+            </button>
+            <button
+              type="button"
+              onClick={() => setQualityView("all_done")}
+              className="h-7 rounded px-2 text-[10px] font-semibold"
+              style={{
+                background: qualityView === "all_done" ? "var(--accent)" : "transparent",
+                color: qualityView === "all_done" ? "var(--accent-foreground)" : "var(--text-2)",
+              }}
+            >
+              View all done events
+            </button>
+          </div>
+          <span className="text-[11px]" style={{ color: "var(--text-3)" }}>
+            {qualityEvaluations.length} evaluations
+          </span>
+        </div>
       )}
 
       {/* Tabs Navigation Header */}
@@ -836,78 +1048,53 @@ export function ReportsPage() {
             ) : !evaluationsReport ? (
               <div className="text-center py-12 text-zinc-500">No performance logs found.</div>
             ) : (
-              <>
-                {/* Metric Averages */}
-                <div className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-                  <div className="label-eyebrow border-b pb-2 mb-3" style={{ borderColor: "var(--border)" }}>
-                    Overall Metric averages
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {Object.entries(evaluationsReport.metricAverages || {}).map(([key, item]) => {
-                      const avg = item.average;
-                      // Boolean metrics are expressed as percentages, others as raw values
-                      const isPercent = key.includes("ppe") || key.includes("signal");
-                      const displayScore = isPercent ? `${avg.toFixed(1)}%` : `${avg.toFixed(2)} / 10`;
-                      const pctWidth = isPercent ? avg : avg * 10;
-                      
-                      return (
-                        <div key={key} className="rounded-md border p-3 bg-[var(--surface-2)]" style={{ borderColor: "var(--border)" }}>
-                          <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">{item.label}</span>
-                          <div className="text-[18px] font-bold mt-1" style={{ color: "var(--accent)" }}>{displayScore}</div>
-                          <div className="h-1.5 mt-2 rounded-full overflow-hidden bg-zinc-800">
-                            <div className="h-full bg-[var(--accent)]" style={{ width: `${pctWidth}%` }} />
-                          </div>
-                          <div className="text-[9px] mt-1 text-zinc-500">{item.count} evaluations logged</div>
-                        </div>
-                      );
-                    })}
-                  </div>
+              <div className="overflow-hidden rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+                <div className="border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                  <span className="text-[13px] font-bold">
+                    {qualityView === "all_done" ? "All Done Events" : "Completed Events"}
+                  </span>
                 </div>
-
-                {/* Detailed Evaluations Log */}
-                <div className="rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-                  <div className="border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
-                    <span className="text-[13px] font-bold">Post-Event evaluations log</span>
+                {qualityEvaluations.length === 0 ? (
+                  <div className="px-4 py-12 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
+                    No completed evaluations match the current filters.
                   </div>
-                  <div className="p-4 space-y-3">
-                    {evaluationsReport.evaluations.map((e) => (
-                      <div 
-                        key={e.id} 
-                        className="rounded-md border p-4 bg-[var(--surface-2)] flex flex-col md:flex-row gap-4 justify-between"
-                        style={{ borderColor: "var(--border)" }}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                            <span className="font-bold text-[13px] text-foreground">{e.clientNameVenue}</span>
-                            <span className="text-[10px] text-zinc-500 font-mono">({formatDate(e.eventDate)})</span>
-                            <span className="text-[11px] font-bold">
-                              Booking: <Link to={`/bookings/${e.bookingCode || e.bookingId}` as any} className="text-[var(--accent)] hover:underline cursor-pointer">{e.bookingCode || e.bookingId}</Link>
-                            </span>
-                          </div>
-                          <p className="text-[11.5px] leading-relaxed text-zinc-300 italic mb-2.5">"{e.notes}"</p>
-                          <div className="text-[10px] text-zinc-400">
-                            Evaluated by: <span className="font-semibold">{e.evaluatorName}</span> · Team size: <span className="font-semibold">{e.teamSize} crew</span>
-                          </div>
-                        </div>
-
-                        {/* Scores grid on the side */}
-                        <div className="flex flex-wrap gap-2 md:w-56 shrink-0 md:justify-end items-start">
-                          {e.scores.map((s) => (
-                            <div 
-                              key={s.metricId}
-                              className="rounded border bg-[var(--surface)] text-[9.5px] px-2 py-1 flex items-center gap-1.5"
-                              style={{ borderColor: "var(--border)" }}
-                            >
-                              <span className="text-zinc-400">{s.metricLabel}:</span>
-                              <span className="font-bold font-mono" style={{ color: "var(--accent)" }}>{s.score}</span>
-                            </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[720px] text-left text-[12px]">
+                      <thead>
+                        <tr style={{ background: "var(--surface-2)" }}>
+                          {['Name', 'Booking Code', 'Client Name', 'Event Date', 'Total Score'].map((heading) => (
+                            <th key={heading} className="border-b px-4 py-2.5 label-eyebrow" style={{ borderColor: "var(--border)" }}>
+                              {heading}
+                            </th>
                           ))}
-                        </div>
-                      </div>
-                    ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {qualityEvaluations.map((evaluation) => {
+                          const totalScore = evaluation.scores.reduce(
+                            (sum, score) => sum + (Number.parseFloat(score.score) || 0),
+                            0,
+                          );
+                          return (
+                            <tr key={evaluation.id} className="border-b last:border-0 hover:bg-[var(--surface-2)]" style={{ borderColor: "var(--border)" }}>
+                              <td className="px-4 py-3 font-semibold">{evaluation.evaluatorName}</td>
+                              <td className="px-4 py-3 font-mono font-semibold">
+                                <Link to={`/bookings/${evaluation.bookingCode || evaluation.bookingId}` as any} className="hover:underline" style={{ color: "var(--accent)" }}>
+                                  {evaluation.bookingCode || evaluation.bookingId}
+                                </Link>
+                              </td>
+                              <td className="px-4 py-3">{evaluation.clientName || evaluation.clientNameVenue || "—"}</td>
+                              <td className="px-4 py-3 font-mono text-[11px]" style={{ color: "var(--text-2)" }}>{formatDate(evaluation.eventDate)}</td>
+                              <td className="px-4 py-3 font-mono font-bold" style={{ color: "var(--accent)" }}>{totalScore.toFixed(2)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
+                )}
                 </div>
-              </>
             )}
           </div>
         )}
@@ -1196,8 +1383,11 @@ export function ReportsPage() {
                       <tr className="border-b" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
                         <th className="px-4 py-2.5 label-eyebrow">Name</th>
                         <th className="px-4 py-2.5 label-eyebrow">Classification</th>
+                        <th className="px-4 py-2.5 label-eyebrow">Role</th>
+                        <th className="px-4 py-2.5 label-eyebrow">Phone</th>
                         <th className="px-4 py-2.5 label-eyebrow">Email</th>
                         <th className="px-4 py-2.5 label-eyebrow text-right">Bookings</th>
+                        <th className="px-4 py-2.5 label-eyebrow text-right">Days</th>
                         <th className="px-4 py-2.5 label-eyebrow text-right">Sqm Covered</th>
                       </tr>
                     </thead>
@@ -1217,8 +1407,11 @@ export function ReportsPage() {
                               {row.isFreelancer ? "Freelancer" : "Staff"}
                             </span>
                           </td>
+                          <td className="px-4 py-3 text-[11px] text-text-2">{row.role || "—"}</td>
+                          <td className="px-4 py-3 font-mono text-[11px] text-zinc-400">{row.phone || "—"}</td>
                           <td className="px-4 py-3 text-zinc-400 font-mono text-[11px]">{row.email || "—"}</td>
                           <td className="px-4 py-3 text-right font-mono font-bold">{row.bookingsCount}</td>
+                          <td className="px-4 py-3 text-right font-mono font-bold">{row.totalDays}</td>
                           <td className="px-4 py-3 text-right font-mono font-bold" style={{ color: "var(--accent)" }}>
                             {row.sqmCovered.toLocaleString()} ㎡
                           </td>

@@ -86,6 +86,7 @@ export async function getStaffApi(): Promise<StaffMember[]> {
       roleKey,
       team: u.team?.trim() || "—",
       phone: u.phone || "",
+      email: u.email || "",
       status,
       jobs,
       capacity: Math.max(jobs, 5),
@@ -150,6 +151,20 @@ export async function createStaffApi(payload: any): Promise<StaffMember> {
 
 export async function setStaffFreelancerApi(userId: string, isFreelancer: boolean): Promise<void> {
   await client.patch(`/api/users/${userId}`, { isFreelancer });
+}
+
+export async function updateStaffApi(
+  userId: string,
+  payload: Pick<StaffMember, "name" | "phone" | "team" | "isFreelancer"> & {
+    email?: string;
+    active: boolean;
+  },
+): Promise<StaffMember> {
+  return client.patch<StaffMember>(`/api/users/${userId}`, {
+    ...payload,
+    team: payload.team === "—" ? "" : payload.team,
+    email: payload.email?.trim() || undefined,
+  });
 }
 
 export async function resetPasswordApi(userId: string): Promise<{ temporaryPassword: string }> {

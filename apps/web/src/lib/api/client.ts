@@ -1,4 +1,5 @@
 const BASE_URL = import.meta.env.VITE_API_URL || ""; // Use production backend API base URL when defined, default to relative for dev proxy
+const REQUEST_TIMEOUT_MS = 20_000;
 
 class ApiError extends Error {
   status: number;
@@ -72,12 +73,35 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  const timeoutController = new AbortController();
+  const onCallerAbort = () => timeoutController.abort(options.signal?.reason);
+  if (options.signal) {
+    if (options.signal.aborted) {
+      timeoutController.abort(options.signal.reason);
+    } else {
+      options.signal.addEventListener("abort", onCallerAbort, { once: true });
+    }
+  }
+  const timeoutId = globalThis.setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
+
   const config: RequestInit = {
     ...options,
     headers,
+    signal: timeoutController.signal,
   };
 
-  const response = await fetch(url, config);
+  let response: Response;
+  try {
+    response = await fetch(url, config);
+  } catch (error) {
+    if (timeoutController.signal.aborted && !options.signal?.aborted) {
+      throw new ApiError("The request timed out. Please try again.", 408, null);
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeoutId);
+    options.signal?.removeEventListener("abort", onCallerAbort);
+  }
 
   let data: any;
   const contentType = response.headers.get("content-type");

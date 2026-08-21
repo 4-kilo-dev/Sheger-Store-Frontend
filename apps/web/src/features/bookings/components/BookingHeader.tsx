@@ -29,7 +29,7 @@ export function BookingHeader({ booking }: BookingHeaderProps) {
               {booking.code}
             </h1>
             <StatusBadge status={booking.status} size="lg" />
-            <PaymentBadge status={booking.payment} />
+            {showContractValue && <PaymentBadge status={booking.payment} />}
           </div>
           <div
             className="mt-2 flex items-center gap-4 text-[13px]"

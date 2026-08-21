@@ -107,7 +107,9 @@ export function InventoryDetail() {
       ? [
           {
             serial: item.serialNumber || item.assetTag || item.id,
-            state: item.itemCondition || (item.damaged ? "DAMAGED" : "AVAILABLE"),
+            state: item.availability === "ONSITE"
+              ? "CHECKED OUT"
+              : item.itemCondition || (item.damaged ? "DAMAGED" : "AVAILABLE"),
             location: item.location,
             inspected: item.lastService,
           },

@@ -1,5 +1,5 @@
-import { useMemo, useRef } from "react";
-import { Camera, Paperclip, X } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Camera, Paperclip, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import type { Booking } from "@/features/bookings/services/bookings.api";
 import type { useBookingActions } from "@/features/bookings/hooks/useBookingActions";
@@ -11,6 +11,10 @@ interface EquipmentOption {
   key: string;
   label: string;
   quantity: number;
+}
+
+interface SelectedMaterial extends EquipmentOption {
+  affectedQuantity: string;
 }
 
 interface DamageReportModalProps {
@@ -54,6 +58,7 @@ export function DamageReportModal({
   actions,
 }: DamageReportModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedMaterials, setSelectedMaterials] = useState<SelectedMaterial[]>([]);
   const {
     showDamageModal,
     setShowDamageModal,
@@ -81,6 +86,26 @@ export function DamageReportModal({
   const closeModal = () => {
     setShowDamageModal(false);
     setDamageAttachments([]);
+    setSelectedMaterials([]);
+  };
+
+  const addMaterial = () => {
+    const option = equipmentOptions.find((entry) => entry.key === damageSelectedAssetId);
+    if (!option) {
+      toast.error("Choose an equipment item to add");
+      return;
+    }
+    if (selectedMaterials.some((material) => material.key === option.key)) {
+      toast.error("This material has already been added");
+      return;
+    }
+    const affectedQuantity = Math.min(
+      Math.max(Number.parseFloat(damageQty) || 1, 1),
+      option.quantity,
+    ).toString();
+    setSelectedMaterials((materials) => [...materials, { ...option, affectedQuantity }]);
+    setDamageSelectedAssetId("");
+    setDamageQty("1");
   };
 
   const addFiles = (files: FileList | null) => {
@@ -157,39 +182,88 @@ export function DamageReportModal({
             </select>
           </label>
 
-          <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-            Equipment Item (Checked-out)
-            <select
-              value={damageSelectedAssetId}
-              onChange={(e) => setDamageSelectedAssetId(e.target.value)}
-              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
-              style={{ borderColor: "var(--border)" }}
-            >
-              <option value="">-- Choose Checked-out Equipment --</option>
-              {equipmentOptions.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label} ({option.quantity} units loaded)
-                </option>
-              ))}
-            </select>
+          <div>
+            <div className="mb-1 text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
+              Affected Materials (Checked-out)
+            </div>
+            <div className="flex gap-2">
+              <select
+                value={damageSelectedAssetId}
+                onChange={(e) => setDamageSelectedAssetId(e.target.value)}
+                className="h-9 min-w-0 flex-1 rounded border bg-[var(--surface-2)] px-2.5 text-[12px]"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <option value="">-- Choose checked-out equipment --</option>
+                {equipmentOptions.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label} ({option.quantity} units loaded)
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min="1"
+                value={damageQty}
+                onChange={(e) => setDamageQty(e.target.value)}
+                className="h-9 w-20 rounded border bg-[var(--surface-2)] px-2 text-[12px] font-mono"
+                style={{ borderColor: "var(--border)" }}
+                aria-label="Affected quantity"
+              />
+              <button
+                type="button"
+                onClick={addMaterial}
+                className="inline-flex h-9 items-center gap-1 rounded px-3 text-[11px] font-bold"
+                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                <Plus className="h-3.5 w-3.5" /> Add
+              </button>
+            </div>
+            {selectedMaterials.length > 0 && (
+              <div className="mt-2 divide-y rounded border" style={{ borderColor: "var(--border)" }}>
+                {selectedMaterials.map((material) => (
+                  <div key={material.key} className="flex items-center gap-2 px-2.5 py-2 text-[11px]">
+                    <span className="min-w-0 flex-1 truncate font-semibold">{material.label}</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={material.quantity}
+                      value={material.affectedQuantity}
+                      onChange={(event) =>
+                        setSelectedMaterials((materials) =>
+                          materials.map((entry) =>
+                            entry.key === material.key
+                              ? { ...entry, affectedQuantity: event.target.value }
+                              : entry,
+                          ),
+                        )
+                      }
+                      className="h-7 w-16 rounded border bg-[var(--surface-2)] px-1.5 text-right font-mono"
+                      style={{ borderColor: "var(--border)" }}
+                      aria-label={`Quantity affected for ${material.label}`}
+                    />
+                    <span style={{ color: "var(--text-3)" }}>/{material.quantity}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedMaterials((materials) =>
+                          materials.filter((entry) => entry.key !== material.key),
+                        )
+                      }
+                      className="p-1 hover:text-destructive"
+                      aria-label={`Remove ${material.label}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             {equipmentOptions.length === 0 && (
               <span className="mt-1 block text-[10px]" style={{ color: "var(--text-3)" }}>
                 No checked-out equipment found for this booking.
               </span>
             )}
-          </label>
-
-          <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
-            Quantity Affected
-            <input
-              type="number"
-              min="1"
-              value={damageQty}
-              onChange={(e) => setDamageQty(e.target.value)}
-              className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] font-mono"
-              style={{ borderColor: "var(--border)" }}
-            />
-          </label>
+          </div>
 
           <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
             Description of Incident
@@ -264,21 +338,34 @@ export function DamageReportModal({
         >
           <button
             onClick={() => {
-              if (!damageSelectedAssetId) {
-                toast.error("Please select an equipment item");
+              if (selectedMaterials.length === 0) {
+                toast.error("Add at least one affected material");
                 return;
               }
-              const [assetType, assetId] = damageSelectedAssetId.split(":");
+              if (
+                selectedMaterials.some((material) => {
+                  const quantity = Number.parseFloat(material.affectedQuantity);
+                  return !Number.isFinite(quantity) || quantity <= 0 || quantity > material.quantity;
+                })
+              ) {
+                toast.error("Each affected quantity must be within the checked-out amount");
+                return;
+              }
               submitDamageReport({
-                poolId: assetType === "pool" ? assetId : undefined,
-                itemId: assetType === "item" ? assetId : undefined,
                 reportType: damageType,
-                quantity: damageQty,
                 description: damageDescription,
                 attachments: damageAttachments,
+                reports: selectedMaterials.map((material) => {
+                  const [assetType, assetId] = material.key.split(":");
+                  return {
+                    poolId: assetType === "pool" ? assetId : undefined,
+                    itemId: assetType === "item" ? assetId : undefined,
+                    quantity: assetType === "pool" ? material.affectedQuantity : undefined,
+                  };
+                }),
               });
             }}
-            disabled={submittingDamage || !damageDescription.trim()}
+            disabled={submittingDamage || !damageDescription.trim() || selectedMaterials.length === 0}
             className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
             style={{ background: "var(--destructive)", color: "#fff" }}
           >

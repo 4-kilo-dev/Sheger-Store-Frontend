@@ -29,11 +29,12 @@ const _Route = createFileRoute("/inventory/")({
 
 const conditionColor: Record<InventoryCondition, string> = {
   GOOD: "var(--color-bom-returned)",
+  "CHECKED OUT": "var(--color-status-accepted)",
   "SERVICE DUE": "var(--color-pay-advance)",
   DAMAGED: "var(--destructive)",
 };
 
-const ALL_CONDITIONS: InventoryCondition[] = ["GOOD", "SERVICE DUE", "DAMAGED"];
+const ALL_CONDITIONS: InventoryCondition[] = ["GOOD", "CHECKED OUT", "SERVICE DUE", "DAMAGED"];
 
 export function InventoryPage() {
   const { formatDate } = useDateFormatter();
@@ -265,7 +266,7 @@ export function InventoryPage() {
                       <td className="w-44 px-3 py-2.5">
                         <div className="mb-1 flex justify-between font-mono text-[10px] text-text-2">
                           <span>
-                            {item.reserved} reserved · {item.onsite} onsite
+                            {item.reserved} confirmed · {item.onsite} onsite
                           </span>
                           <span>{item.total}</span>
                         </div>
@@ -279,7 +280,9 @@ export function InventoryPage() {
                           className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[10px] font-bold"
                           style={{ color: conditionColor[item.condition] }}
                         >
-                          {item.condition !== "GOOD" && <AlertTriangle className="h-2.5 w-2.5" />}
+                          {item.condition !== "GOOD" && item.condition !== "CHECKED OUT" && (
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                          )}
                           {item.condition}
                         </span>
                       </td>

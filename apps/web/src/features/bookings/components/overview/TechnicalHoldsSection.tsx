@@ -13,7 +13,7 @@ import {
   getInventoryCategoriesApi,
   getInventoryPoolsApi,
 } from "@/features/inventory/services/inventory.api";
-import { filterScreenPools, isScreenPool } from "@/features/inventory/utils/screen-pools";
+import { filterScreenPools } from "@/features/inventory/utils/screen-pools";
 import { useBookingPoolAvailability } from "@/features/bookings/hooks/useBookingPoolAvailability";
 import { getBookingRentalWindow } from "@/features/bookings/utils/bookingAvailability";
 import { Section } from "@/features/bookings/components/shared/Section";
@@ -58,12 +58,26 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
     enabled: !!b.id,
   });
 
-  const screenPoolIds = new Set(screenPools.map((sp) => sp.id));
-  const screenReservations = (reservationsRes?.reservations || []).filter((r: any) => {
-    if (r.poolId && screenPoolIds.has(r.poolId)) return true;
-    if (r.pool && isScreenPool(r.pool)) return true;
-    return false;
-  });
+  const allScreenReservations = (reservationsRes?.reservations || []).filter(
+    (reservation: any) => reservation.source === "SCREEN",
+  );
+  const activeScreenReservations = allScreenReservations.filter(
+    (reservation: any) => !reservation.releasedAt,
+  );
+  const latestReleasedAt = allScreenReservations.reduce<string | null>(
+    (latest, reservation: any) => {
+      if (!reservation.releasedAt) return latest;
+      return !latest || reservation.releasedAt > latest ? reservation.releasedAt : latest;
+    },
+    null,
+  );
+  // Completed and done bookings release their holds. Show the final release batch
+  // rather than an empty allocation section or older superseded screen selections.
+  const screenReservations = activeScreenReservations.length
+    ? activeScreenReservations
+    : allScreenReservations.filter(
+        (reservation: any) => reservation.releasedAt === latestReleasedAt,
+      );
   const unassignedTechnicians = staffList.filter((staff) => {
     const role = String(staff.role || staff.roleKey || "").toLowerCase();
     return (
@@ -100,15 +114,10 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
 
   useEffect(() => {
     if (reservationsRes) {
-      const ids = new Set(screenPools.map((sp) => sp.id));
-      const filtered = (reservationsRes.reservations || []).filter((r: any) => {
-        if (r.poolId && ids.has(r.poolId)) return true;
-        if (r.pool && isScreenPool(r.pool)) return true;
-        return false;
-      });
-      const mapped = filtered.map((r: any) => ({
+      const mapped = screenReservations.map((r: any) => ({
         poolId: r.poolId || "",
         quantity: parseFloat(r.quantity) || 0,
+        poolName: r.pool?.name || "",
       }));
       setAllocations(mapped.length > 0 ? mapped : [{ poolId: "", quantity: 0 }]);
       if (mapped.length > 0 || !!b.ctoNotes) {
@@ -197,7 +206,7 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
                     className="flex justify-between border-b py-1 text-[13px]"
                     style={{ borderColor: "var(--border)" }}
                   >
-                    <span>{p ? p.name : "LED Screen"}</span>
+                    <span>{p?.name || alloc.poolName || "LED Screen"}</span>
                     <span className="font-mono font-semibold">{alloc.quantity} sqm</span>
                   </div>
                 );
@@ -268,7 +277,7 @@ export function TechnicalHoldsSection({ b, code, caps }: OverviewSectionProps) {
                       className="flex justify-between border-b py-1 text-[13px]"
                       style={{ borderColor: "var(--border)" }}
                     >
-                      <span>{p ? p.name : "LED Screen"}</span>
+                      <span>{p?.name || alloc.poolName || "LED Screen"}</span>
                       <span className="font-mono font-semibold">{alloc.quantity} sqm</span>
                     </div>
                   );

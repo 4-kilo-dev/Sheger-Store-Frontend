@@ -288,7 +288,17 @@ export function BookingsIndex() {
 
     // Tab filter
     if (tab === "Onsite") r = r.filter((b) => b.status === "ONSITE");
-    if (tab === "Upcoming") r = r.filter((b) => new Date(b.assemblyDate) > new Date());
+    if (tab === "Upcoming") {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 7);
+      end.setHours(23, 59, 59, 999);
+      r = r.filter((b) => {
+        const assembly = parseBookingInstant(b.assemblyDate);
+        return !!assembly && assembly >= start && assembly <= end;
+      });
+    }
     if (tab === "This Week") {
       const { start, end } = getWeekBounds(0);
       r = r.filter((b) => bookingEventInWeek(b, start, end));
@@ -396,6 +406,7 @@ export function BookingsIndex() {
               <thead>
                 <tr style={{ background: "var(--surface-2)" }}>
                   <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Booking Code</th>
+                  <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Client</th>
                   <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Assembly Date</th>
                   <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Event Date</th>
                   <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Venue / Location</th>
@@ -405,7 +416,7 @@ export function BookingsIndex() {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-[13px]" style={{ color: "var(--text-3)" }}>
+                    <td colSpan={6} className="px-4 py-12 text-center text-[13px]" style={{ color: "var(--text-3)" }}>
                       All caught up — no assignments assigned to you.
                     </td>
                   </tr>
@@ -421,6 +432,9 @@ export function BookingsIndex() {
                         <Link to="/bookings/$code" params={{ code: b.code }} className="hover:underline" style={{ color: "var(--accent)" }}>
                           {b.code}
                         </Link>
+                      </td>
+                      <td className="border-b px-4 py-3 font-medium" style={{ borderColor: "var(--border)" }}>
+                        {b.client || "—"}
                       </td>
                       <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{formatDate(b.assemblyDate)}</td>
                       <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{formatDate(b.eventDate)}</td>

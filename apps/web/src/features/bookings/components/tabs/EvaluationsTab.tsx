@@ -302,15 +302,7 @@ export function EvaluationsTab({ b, evaluations }: EvaluationsTabProps) {
               <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1 scrollbar-thin">
                 <span className="label-eyebrow text-[9px]">Ingested Client Metrics & Dynamic Scales</span>
                 {clientMetrics.map((m) => {
-                  const score =
-                    clientScores[m.key] ??
-                    (m.valueType === "boolean"
-                      ? 1
-                      : m.valueType === "rating_5"
-                        ? 5
-                        : m.valueType === "percentage"
-                          ? 100
-                          : 10);
+                  const score = clientScores[m.key] ?? 2;
                   return (
                     <div
                       key={m.id}
