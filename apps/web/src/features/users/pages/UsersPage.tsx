@@ -10,8 +10,9 @@ import {
   ShieldCheck,
   UsersRound,
   Pencil,
+  Plus,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
   STAFF_ROLES,
@@ -26,6 +27,7 @@ import {
   getStaffApi,
   getPermissionsApi,
   getRolesWithPermissionsApi,
+  createRoleApi,
   addRolePermissionApi,
   removeRolePermissionApi,
   resetPasswordApi,
@@ -38,6 +40,15 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { toast } from "sonner";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 const _Route = createFileRoute("/staff")({
   head: () => ({
@@ -56,9 +67,20 @@ const statusColor: Record<string, string> = {
   "ON LEAVE": "var(--color-pay-advance)",
 };
 
+function roleKeyFromName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 export function StaffPage() {
   const [activeView, setActiveView] = useState<"staff" | "roles">("staff");
   const [pendingPermissionByRole, setPendingPermissionByRole] = useState<Record<string, string>>({});
+  const [createRoleOpen, setCreateRoleOpen] = useState(false);
+  const [roleName, setRoleName] = useState("");
+  const [roleKey, setRoleKey] = useState("");
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<(typeof STAFF_ROLES)[number]>("All");
   const [assignPerson, setAssignPerson] = useState<StaffMember | null>(null);
@@ -149,6 +171,32 @@ export function StaffPage() {
       toast.error(error.message || "Failed to update role permission");
     },
   });
+
+  const { mutate: createRole, isPending: creatingRole } = useMutation({
+    mutationFn: createRoleApi,
+    onSuccess: (role) => {
+      toast.success(`${role.displayName} role created`);
+      queryClient.invalidateQueries({ queryKey: ["roles-with-permissions"] });
+      queryClient.invalidateQueries({ queryKey: ["roles"] });
+      setCreateRoleOpen(false);
+      setRoleName("");
+      setRoleKey("");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to create role");
+    },
+  });
+
+  const handleCreateRole = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const displayName = roleName.trim();
+    const key = roleKeyFromName(roleKey || roleName);
+    if (!displayName || !key) {
+      toast.error("Enter a role name and a valid role key.");
+      return;
+    }
+    createRole({ displayName, key });
+  };
 
   const handleResetPassword = (userId: string, name: string) => {
     if (confirm(`Are you sure you want to reset the password for ${name}?`)) {
@@ -424,6 +472,25 @@ export function StaffPage() {
       </div>
       </>
       ) : (
+        <>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-[15px] font-bold">Roles and permissions</h2>
+            <p className="mt-1 text-[11px]" style={{ color: "var(--text-2)" }}>
+              Create a role, then grant or revoke its permissions below.
+            </p>
+          </div>
+          {canManageRoles && (
+            <button
+              type="button"
+              onClick={() => setCreateRoleOpen(true)}
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-[12px] font-semibold"
+              style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+            >
+              <Plus className="h-3.5 w-3.5" /> Create role
+            </button>
+          )}
+        </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {rolesLoading ? (
             <div className="col-span-full py-10 text-center text-[12px]" style={{ color: "var(--text-3)" }}>
@@ -558,9 +625,75 @@ export function StaffPage() {
             })
           )}
         </div>
+        </>
       )}
       </>
       )}
+      <Dialog
+        open={createRoleOpen}
+        onOpenChange={(open) => {
+          setCreateRoleOpen(open);
+          if (!open) {
+            setRoleName("");
+            setRoleKey("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={handleCreateRole}>
+            <DialogHeader>
+              <DialogTitle>Create role</DialogTitle>
+              <DialogDescription>
+                Roles start without permissions. Grant the required permissions from the Roles tab after creation.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-5">
+              <label className="grid gap-1.5 text-[12px] font-medium">
+                Role name
+                <Input
+                  value={roleName}
+                  onChange={(event) => {
+                    const name = event.target.value;
+                    setRoleName(name);
+                    if (!roleKey) setRoleKey(roleKeyFromName(name));
+                  }}
+                  placeholder="e.g. Client Relations Coordinator"
+                  autoFocus
+                />
+              </label>
+              <label className="grid gap-1.5 text-[12px] font-medium">
+                Role key
+                <Input
+                  value={roleKey}
+                  onChange={(event) => setRoleKey(roleKeyFromName(event.target.value))}
+                  placeholder="e.g. client_relations_coordinator"
+                />
+                <span className="text-[10px] font-normal" style={{ color: "var(--text-3)" }}>
+                  The key is used internally and cannot be changed later.
+                </span>
+              </label>
+            </div>
+            <DialogFooter>
+              <button
+                type="button"
+                onClick={() => setCreateRoleOpen(false)}
+                className="h-9 rounded-md border px-3 text-[12px] font-semibold"
+                style={{ borderColor: "var(--border)" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={creatingRole || !roleName.trim()}
+                className="h-9 rounded-md px-3 text-[12px] font-semibold disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                {creatingRole ? "Creating..." : "Create role"}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       <AssignStaffToBookingModal
         person={assignPerson}
         open={!!assignPerson}

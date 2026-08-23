@@ -11,7 +11,7 @@ import {
 } from "@/features/inventory/services/inventory.api";
 import { getInventoryReportApi } from "@/features/reports/services/reports.api";
 import { getBookingsApi, createDamageReportApi } from "@/features/bookings/services/bookings.api";
-import { uploadBookingAttachmentApi } from "@/features/bookings/services/attachments.api";
+import { uploadBookingAttachmentFileApi } from "@/features/bookings/services/attachments.api";
 import { getDamageReportsApi, resolveDamageReportApi } from "@/features/damage-reports/services/damage.api";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
@@ -209,7 +209,7 @@ export function DamageReportPage() {
       if (selectedBooking) {
         await Promise.all(
           attachments.map((file) =>
-            uploadBookingAttachmentApi(selectedBooking.id, file, {
+            uploadBookingAttachmentFileApi(selectedBooking.id, file, {
               relatedEntity: "damage_missing_report",
               relatedId: report.id,
             }),
@@ -383,8 +383,9 @@ export function DamageReportPage() {
             <section className="rounded-lg border border-border bg-surface p-5">
               <div className="mb-1 label-eyebrow">Evidence attachments</div>
               <p className="mb-3 text-[11px] text-text-2">
-                Attach photos or documents to the related booking. A booking is required for
-                evidence files.
+                {selectedBooking
+                  ? "Attach photos or documents to the related booking."
+                  : "Select a related booking before attaching evidence files."}
               </p>
               <input
                 ref={attachmentInputRef}
@@ -397,10 +398,12 @@ export function DamageReportPage() {
               <button
                 type="button"
                 onClick={() => attachmentInputRef.current?.click()}
-                disabled={attachments.length >= MAX_ATTACHMENTS || isPending}
+                disabled={!selectedBooking || attachments.length >= MAX_ATTACHMENTS || isPending}
+                title={!selectedBooking ? "Select a related booking first" : undefined}
                 className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border px-3 py-4 text-[12px] font-semibold text-text-2 hover:border-accent disabled:opacity-50"
               >
-                <Paperclip className="h-4 w-4" /> Add photos or documents
+                <Paperclip className="h-4 w-4" />
+                {selectedBooking ? "Add photos or documents" : "Select a booking to attach files"}
               </button>
               {attachments.length > 0 && (
                 <ul className="mt-3 space-y-2">

@@ -32,6 +32,10 @@ export async function getPermissionsApi(): Promise<Permission[]> {
   return client.get<Permission[]>("/api/permissions");
 }
 
+export async function createRoleApi(payload: Pick<Role, "key" | "displayName">): Promise<RoleWithPermissions> {
+  return client.post<RoleWithPermissions>("/api/roles", payload);
+}
+
 export async function addRolePermissionApi(roleId: string, permissionId: string): Promise<RoleWithPermissions> {
   return client.post<RoleWithPermissions>(`/api/roles/${roleId}/permissions`, { permissionId });
 }

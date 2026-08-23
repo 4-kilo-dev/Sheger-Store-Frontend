@@ -196,6 +196,27 @@ export async function deleteAttachmentApi(attachmentId: string): Promise<void> {
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
+/** Upload a file through the authenticated backend multipart endpoint. */
+export async function uploadBookingAttachmentFileApi(
+  bookingId: string,
+  file: File,
+  related?: { relatedEntity?: string; relatedId?: string },
+): Promise<Attachment> {
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    throw new Error("File size exceeds the 20MB limit.");
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  if (related?.relatedEntity) formData.append("relatedEntity", related.relatedEntity);
+  if (related?.relatedId) formData.append("relatedId", related.relatedId);
+
+  return client.post<Attachment>(
+    `/api/bookings/${bookingId}/attachments/file-upload`,
+    formData,
+  );
+}
+
 /** Upload a single file and link it to the booking (optionally to a sub-entity). */
 export async function uploadBookingAttachmentApi(
   bookingId: string,
