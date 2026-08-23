@@ -15,6 +15,17 @@ interface CalendarSystemContextType {
 
 const CalendarSystemContext = createContext<CalendarSystemContextType | undefined>(undefined);
 
+function parseCalendarDate(dateInput: string | Date): Date {
+  if (dateInput instanceof Date) return dateInput;
+  // Date-only ISO strings are parsed as UTC by JavaScript. Calendar fields represent
+  // a local civil day, so construct them locally to prevent a one-day shift.
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateInput);
+  if (dateOnly) {
+    return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+  }
+  return new Date(dateInput);
+}
+
 export function CalendarSystemProvider({ children }: { children: React.ReactNode }) {
   const authUser = useAuthUser();
   const [calendarSystem, setCalendarSystemState] = useState<CalendarSystem>("ethiopic");
@@ -93,7 +104,7 @@ export function useDateFormatter() {
 
   const formatDate = React.useCallback((dateInput?: string | Date | null) => {
     if (!dateInput) return "—";
-    const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
+    const date = parseCalendarDate(dateInput);
     if (isNaN(date.getTime())) return "—";
 
     if (calendarSystem === "ethiopic") {
@@ -114,7 +125,7 @@ export function useDateFormatter() {
 
   const formatDateTime = React.useCallback((dateInput?: string | Date | null) => {
     if (!dateInput) return "—";
-    const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
+    const date = parseCalendarDate(dateInput);
     if (isNaN(date.getTime())) return "—";
 
     if (calendarSystem === "ethiopic") {

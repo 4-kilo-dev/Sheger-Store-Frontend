@@ -21,6 +21,13 @@ interface DatePickerProps {
   showTime?: boolean;
 }
 
+function parseLocalCalendarDate(datePart: string): Date | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+  if (!match) return undefined;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
 export function DatePicker({
   value,
   onChange,
@@ -37,9 +44,9 @@ export function DatePicker({
     const hasTime = value.includes("T");
     const datePart = hasTime ? value.split("T")[0] : value;
     const timePart = hasTime ? value.split("T")[1]?.slice(0, 5) : "12:00";
-    const d = new Date(datePart);
+    const d = parseLocalCalendarDate(datePart);
     return {
-      parsedDate: isNaN(d.getTime()) ? undefined : d,
+      parsedDate: d,
       timeValue: timePart || "12:00",
     };
   }, [value]);

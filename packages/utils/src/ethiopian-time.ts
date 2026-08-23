@@ -4,15 +4,15 @@
  *
  * | Period              | Eth face     | Western (local)   |
  * |---------------------|--------------|-------------------|
- * | Morning  ጠዋት       | 12:00–06:00  | 06:00–12:00       |
- * | Afternoon ከሰዓት     | 06:00–12:00  | 12:00–18:00       |
- * | Evening  ማታ        | 12:00–06:00  | 18:00–24:00       |
- * | Night    ለሊት       | 06:00–12:00  | 00:00–06:00       |
+ * | ለሊት Lelit         | 06:00–12:00  | 00:00–06:00       |
+ * | ጠዋት Tewat         | 12:00–06:00  | 06:00–12:00       |
+ * | ከሰዓት Keseat       | 06:00–12:00  | 12:00–18:00       |
+ * | ማታ Mata            | 12:00–06:00  | 18:00–24:00       |
  *
  * Boundary hours belong to the later period (e.g. Western 12:00 → afternoon 06:00).
  */
 
-export type EthiopianDayPeriod = "morning" | "afternoon" | "evening" | "night";
+export type EthiopianDayPeriod = "lelit" | "tewat" | "keseat" | "mata";
 
 export const ETHIOPIAN_DAY_PERIODS: ReadonlyArray<{
   id: EthiopianDayPeriod;
@@ -22,28 +22,28 @@ export const ETHIOPIAN_DAY_PERIODS: ReadonlyArray<{
   hours: readonly number[];
 }> = [
   {
-    id: "morning",
-    labelAm: "ጠዋት",
-    labelEn: "Morning",
-    hours: [12, 1, 2, 3, 4, 5],
-  },
-  {
-    id: "afternoon",
-    labelAm: "ከሰዓት",
-    labelEn: "Afternoon",
-    hours: [6, 7, 8, 9, 10, 11],
-  },
-  {
-    id: "evening",
-    labelAm: "ማታ",
-    labelEn: "Evening",
-    hours: [12, 1, 2, 3, 4, 5],
-  },
-  {
-    id: "night",
+    id: "lelit",
     labelAm: "ለሊት",
-    labelEn: "Night",
+    labelEn: "Lelit",
     hours: [6, 7, 8, 9, 10, 11],
+  },
+  {
+    id: "tewat",
+    labelAm: "ጠዋት",
+    labelEn: "Tewat",
+    hours: [12, 1, 2, 3, 4, 5],
+  },
+  {
+    id: "keseat",
+    labelAm: "ከሰዓት",
+    labelEn: "Keseat",
+    hours: [6, 7, 8, 9, 10, 11],
+  },
+  {
+    id: "mata",
+    labelAm: "ማታ",
+    labelEn: "Mata",
+    hours: [12, 1, 2, 3, 4, 5],
   },
 ] as const;
 
@@ -59,10 +59,10 @@ export function toGeezNumerals(value: string | number): string {
 
 export function getEthiopianDayPeriod(westernHour: number): EthiopianDayPeriod {
   const h = ((Math.floor(westernHour) % 24) + 24) % 24;
-  if (h >= 6 && h < 12) return "morning";
-  if (h >= 12 && h < 18) return "afternoon";
-  if (h >= 18 && h < 24) return "evening";
-  return "night";
+  if (h < 6) return "lelit";
+  if (h < 12) return "tewat";
+  if (h < 18) return "keseat";
+  return "mata";
 }
 
 export function getEthiopianDayPeriodMeta(period: EthiopianDayPeriod) {
@@ -85,13 +85,13 @@ export function ethiopianToWesternHour(
   const h = ((ethHour % 12) + 12) % 12; // 12 → 0, 1→1, … 11→11
 
   switch (period) {
-    case "morning":
+    case "tewat":
       return 6 + h; // 12→6 … 5→11
-    case "afternoon":
+    case "keseat":
       return 6 + h; // 6→12 … 11→17
-    case "evening":
+    case "mata":
       return 18 + h; // 12→18 … 5→23
-    case "night":
+    case "lelit":
       return (h - 6 + 24) % 24; // 6→0 … 11→5
   }
 }

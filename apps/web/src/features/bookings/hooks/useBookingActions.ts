@@ -30,7 +30,7 @@ import {
   IdempotencyAttempt,
   normalizeCheckoutAssets,
 } from "@/features/checkout/services/operation-payloads";
-import { uploadBookingAttachmentApi } from "@/features/bookings/services/attachments.api";
+import { uploadBookingAttachmentFileApi } from "@/features/bookings/services/attachments.api";
 import type { BookingAction } from "@/features/bookings/constants";
 import type { UnfulfilledBomLine } from "@/features/bookings/components/BomFulfillmentConflictModal";
 
@@ -208,7 +208,7 @@ export function useBookingActions(
         await Promise.all(
           createdReports.flatMap((report) =>
             files.map((file) =>
-              uploadBookingAttachmentApi(booking.id, file, {
+              uploadBookingAttachmentFileApi(booking.id, file, {
                 relatedEntity: "damage_missing_report",
                 relatedId: report.id,
               }),
