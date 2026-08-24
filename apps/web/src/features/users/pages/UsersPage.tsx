@@ -11,6 +11,7 @@ import {
   UsersRound,
   Pencil,
   Plus,
+  Trash2,
 } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { AppShell } from "@/components/app-shell";
@@ -28,6 +29,7 @@ import {
   getPermissionsApi,
   getRolesWithPermissionsApi,
   createRoleApi,
+  deleteRoleApi,
   addRolePermissionApi,
   removeRolePermissionApi,
   resetPasswordApi,
@@ -184,6 +186,19 @@ export function StaffPage() {
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to create role");
+    },
+  });
+
+  const { mutate: deleteRole, isPending: deletingRole } = useMutation({
+    mutationFn: deleteRoleApi,
+    onSuccess: () => {
+      toast.success("Role deleted");
+      queryClient.invalidateQueries({ queryKey: ["roles-with-permissions"] });
+      queryClient.invalidateQueries({ queryKey: ["roles"] });
+      queryClient.invalidateQueries({ queryKey: ["staff"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to delete role");
     },
   });
 
@@ -523,12 +538,34 @@ export function StaffPage() {
                         {role.key}
                       </div>
                     </div>
-                    <span
-                      className="rounded border px-2 py-0.5 text-[10px] font-semibold"
-                      style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
-                    >
-                      {role.permissions.length} permissions
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="rounded border px-2 py-0.5 text-[10px] font-semibold"
+                        style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+                      >
+                        {role.permissions.length} permissions
+                      </span>
+                      {canManageRoles && !role.isSystem && (
+                        <button
+                          type="button"
+                          disabled={deletingRole}
+                          title={`Delete ${role.displayName}`}
+                          aria-label={`Delete ${role.displayName}`}
+                          onClick={() => {
+                            const staffWarning = members.length
+                              ? ` ${members.length} staff member${members.length === 1 ? "" : "s"} will lose this role.`
+                              : "";
+                            if (confirm(`Delete the ${role.displayName} role? This cannot be undone.${staffWarning}`)) {
+                              deleteRole(role.id);
+                            }
+                          }}
+                          className="rounded border p-1.5 text-destructive disabled:opacity-50"
+                          style={{ borderColor: "rgba(239, 68, 68, 0.45)" }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--border)" }}>

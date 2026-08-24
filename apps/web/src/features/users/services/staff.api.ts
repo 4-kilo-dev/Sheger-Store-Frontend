@@ -36,6 +36,10 @@ export async function createRoleApi(payload: Pick<Role, "key" | "displayName">):
   return client.post<RoleWithPermissions>("/api/roles", payload);
 }
 
+export async function deleteRoleApi(roleId: string): Promise<void> {
+  await client.delete(`/api/roles/${roleId}`);
+}
+
 export async function addRolePermissionApi(roleId: string, permissionId: string): Promise<RoleWithPermissions> {
   return client.post<RoleWithPermissions>(`/api/roles/${roleId}/permissions`, { permissionId });
 }
