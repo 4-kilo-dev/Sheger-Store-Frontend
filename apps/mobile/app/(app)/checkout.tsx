@@ -1,6 +1,14 @@
 import { router } from "expo-router";
 import { to } from "@/utils/routes";
-import { Check, CheckCircle2, Package, PackageCheck, Printer, Truck, type LucideIcon } from "lucide-react-native";
+import {
+  Check,
+  CheckCircle2,
+  Package,
+  PackageCheck,
+  Printer,
+  Truck,
+  type LucideIcon,
+} from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, Share, StyleSheet, View } from "react-native";
 import {
@@ -360,7 +368,12 @@ export default function CheckoutScreen() {
                     <AppText variant="data" color={colors.accent} style={styles.bookingCode}>
                       {booking.code}
                     </AppText>
-                    <AppText variant="data" color={colors.text3} style={styles.bookingMeta} numberOfLines={1}>
+                    <AppText
+                      variant="data"
+                      color={colors.text3}
+                      style={styles.bookingMeta}
+                      numberOfLines={1}
+                    >
                       {formatDate(booking.eventDate)}
                     </AppText>
                   </View>
@@ -479,10 +492,7 @@ export default function CheckoutScreen() {
             )}
             {operationItems.length > 0 ? (
               <>
-                <KV
-                  label="Verified"
-                  value={`${checkedItems.size} of ${operationItems.length}`}
-                />
+                <KV label="Verified" value={`${checkedItems.size} of ${operationItems.length}`} />
                 <ProgressBar
                   value={
                     operationItems.length ? (checkedItems.size / operationItems.length) * 100 : 0

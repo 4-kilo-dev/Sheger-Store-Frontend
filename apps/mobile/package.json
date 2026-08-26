@@ -10,7 +10,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build": "expo export",
+    "build": "npx expo export",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."
   },

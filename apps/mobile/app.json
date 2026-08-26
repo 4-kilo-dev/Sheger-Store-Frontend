@@ -3,7 +3,7 @@
     "name": "Vortex Visual Operations",
     "slug": "vortex-visual-operations",
     "scheme": "vortex",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -24,12 +24,16 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.nuelsha.vortexvisualoperations",
-      "usesCleartextTraffic": true,
+      "usesCleartextTraffic": false,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       }
+    },
+    "ios": {
+      "bundleIdentifier": "com.nuelsha.vortexvisualoperations",
+      "supportsTablet": true
     }
   }
 }

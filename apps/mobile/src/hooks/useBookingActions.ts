@@ -15,6 +15,7 @@ import {
   recordBookingPaymentApi,
   transitionBookingStatusApi,
   updateBookingApi,
+  forceDoneBookingApi,
 } from "@/services/bookings-api";
 import type { Booking, BookingStatus } from "@/types/domain";
 import { checkinBookingApi, checkoutBookingApi, type CheckinReturn } from "@/services/checkout-api";
@@ -226,7 +227,7 @@ export function useBookingActions(
   });
 
   const performCheckout = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (checkoutOptions?: { override?: boolean; reason?: string }) => {
       if (!booking) throw new Error("Booking is undefined");
 
       await updateBookingApi(booking.id, {
@@ -243,7 +244,12 @@ export function useBookingActions(
             : { poolId: item.poolId, quantity: String(item.qty) },
         ),
       );
-      const payload = { assets };
+      const payload = {
+        assets,
+        ...(checkoutOptions?.override
+          ? { override: true, overrideReason: checkoutOptions.reason?.trim() }
+          : {}),
+      };
       return checkoutBookingApi(booking.id, payload, checkoutAttempt.current.keyFor(payload));
     },
     onSuccess: () => {
@@ -333,6 +339,17 @@ export function useBookingActions(
       setSelectedAction(null);
     },
     onError: (err: Error) => Alert.alert("Error", err.message || "Failed to advance booking state"),
+  });
+
+  const forceDone = useMutation({
+    mutationFn: (reason: string) => forceDoneBookingApi(booking?.id || code, reason),
+    onSuccess: () => {
+      Alert.alert("Booking completed", "Booking was force-marked as DONE.");
+      invalidateBooking();
+      setShowActionModal(false);
+      setSelectedAction(null);
+    },
+    onError: (err: Error) => Alert.alert("Unable to complete booking", err.message),
   });
 
   const recordPayment = useMutation({
@@ -517,7 +534,8 @@ export function useBookingActions(
     declining: declineAssignment.isPending,
     submitDamageReport: submitDamageReport.mutate,
     submittingDamage: submitDamageReport.isPending,
-    performCheckout: () => performCheckout.mutate(),
+    performCheckout: (options?: { override?: boolean; reason?: string }) =>
+      performCheckout.mutate(options),
     isCheckingOut: performCheckout.isPending,
     performCheckin: performCheckin.mutate,
     isCheckingIn: performCheckin.isPending,
@@ -525,6 +543,8 @@ export function useBookingActions(
     isReversingCheckout: reverseCheckout.isPending,
     transitionStatus: transitionStatus.mutate,
     isTransitioning: transitionStatus.isPending,
+    forceDone: (reason: string) => forceDone.mutate(reason),
+    isForcingDone: forceDone.isPending,
     recordPayment: recordPayment.mutate,
     isRecordingPayment: recordPayment.isPending,
     confirmBookingWithPayment: confirmBookingWithPayment.mutate,

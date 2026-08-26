@@ -18,9 +18,12 @@ import {
   getBookingAssignmentsApi,
   getBookingBomLinesApi,
   getBookingDetailApi,
+  getBookingDamageReportsApi,
   getBookingReservationsApi,
   getBookingSnapshotsApi,
   getBookingsApi,
+  deleteBookingApi,
+  forceDoneBookingApi,
   recordBookingPaymentApi,
   replacePoolReservationsApi,
   transitionBookingStatusApi,
@@ -35,7 +38,11 @@ import {
   type CheckinReturn,
   type CheckoutAsset,
 } from "@/services/checkout-api";
-import { createDamageReportApi } from "@/services/damage-api";
+import {
+  createDamageReportApi,
+  getDamageReportsApi,
+  resolveDamageReportApi,
+} from "@/services/damage-api";
 import {
   createInventoryCategoryApi,
   createInventoryItemApi,
@@ -58,6 +65,13 @@ import {
   getPendingTasksApi,
   markAllNotificationsReadApi,
   markNotificationReadApi,
+  getNotificationEventTypesApi,
+  createNotificationEventTypeApi,
+  updateNotificationEventTypeApi,
+  getNotificationRoutingRulesApi,
+  createNotificationRoutingRuleApi,
+  updateNotificationRoutingRuleApi,
+  deleteNotificationRoutingRuleApi,
 } from "@/services/notifications-api";
 import {
   getPerformanceMetricsApi,
@@ -70,6 +84,7 @@ import {
   resetPasswordApi,
   setStaffFreelancerApi,
   toggleUserActiveApi,
+  updateStaffApi,
 } from "@/services/staff-api";
 import {
   approveDriverTripApi,
@@ -79,7 +94,9 @@ import {
 } from "@/services/driver-trips.api";
 import {
   addRolePermissionApi,
+  createRoleApi,
   createCustomFieldDefinitionApi,
+  deleteRoleApi,
   deleteCustomFieldDefinitionApi,
   getCustomFieldDefinitionsApi,
   getPermissionsApi,
@@ -122,10 +139,7 @@ export function useBooking(code: string) {
   const query = useQuery({
     queryKey: ["bookings", code],
     queryFn: ({ signal }) =>
-      runWithPollTimeout(
-        (pollSignal) => getBookingDetailApi(code, { signal: pollSignal }),
-        signal,
-      ),
+      runWithPollTimeout((pollSignal) => getBookingDetailApi(code, { signal: pollSignal }), signal),
     enabled: !!code,
     ...pollOptions,
   });
@@ -178,6 +192,18 @@ export function useTransitionBookingStatus() {
   });
 }
 
+export function useForceDoneBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, reason }: { bookingId: string; reason: string }) =>
+      forceDoneBookingApi(bookingId, reason),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking", variables.bookingId] });
+    },
+  });
+}
+
 export function useRecordBookingPayment() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -217,6 +243,22 @@ export function useUpdateCustomer() {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["booking"] });
     },
+  });
+}
+
+export function useBookingDamageReports(bookingId: string) {
+  return useQuery({
+    queryKey: ["booking-damage-reports", bookingId],
+    queryFn: () => getBookingDamageReportsApi(bookingId),
+    enabled: !!bookingId,
+  });
+}
+
+export function useDeleteBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteBookingApi,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bookings"] }),
   });
 }
 
@@ -323,6 +365,26 @@ export function useCreateDamageReport() {
       description?: string;
     }) => createDamageReportApi(bookingId, payload),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    },
+  });
+}
+
+export function useDamageReports() {
+  return useQuery({ queryKey: ["damage-reports"], queryFn: getDamageReportsApi });
+}
+
+export function useResolveDamageReport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...payload
+    }: { id: string } & Parameters<typeof resolveDamageReportApi>[1]) =>
+      resolveDamageReportApi(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["damage-reports"] });
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
     },
@@ -455,6 +517,15 @@ export function useSetStaffFreelancer() {
   });
 }
 
+export function useUpdateStaff() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Parameters<typeof updateStaffApi>[1] }) =>
+      updateStaffApi(id, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff"] }),
+  });
+}
+
 export function useNotifications() {
   return useQuery({ queryKey: ["notifications"], queryFn: () => getNotificationsApi() });
 }
@@ -477,6 +548,50 @@ export function useMarkAllNotificationsRead() {
     mutationFn: markAllNotificationsReadApi,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
+}
+
+export function useNotificationAdmin() {
+  const queryClient = useQueryClient();
+  const events = useQuery({
+    queryKey: ["notification-event-types"],
+    queryFn: getNotificationEventTypesApi,
+  });
+  const rules = useQuery({
+    queryKey: ["notification-routing-rules"],
+    queryFn: getNotificationRoutingRulesApi,
+  });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["notification-event-types"] });
+    queryClient.invalidateQueries({ queryKey: ["notification-routing-rules"] });
+  };
+  const createEvent = useMutation({
+    mutationFn: createNotificationEventTypeApi,
+    onSuccess: invalidate,
+  });
+  const updateEvent = useMutation({
+    mutationFn: ({
+      key,
+      payload,
+    }: {
+      key: string;
+      payload: Parameters<typeof updateNotificationEventTypeApi>[1];
+    }) => updateNotificationEventTypeApi(key, payload),
+    onSuccess: invalidate,
+  });
+  const createRule = useMutation({
+    mutationFn: createNotificationRoutingRuleApi,
+    onSuccess: invalidate,
+  });
+  const updateRule = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      updateNotificationRoutingRuleApi(id, isActive),
+    onSuccess: invalidate,
+  });
+  const deleteRule = useMutation({
+    mutationFn: deleteNotificationRoutingRuleApi,
+    onSuccess: invalidate,
+  });
+  return { events, rules, createEvent, updateEvent, createRule, updateRule, deleteRule };
 }
 
 export function usePerformanceMetrics() {
@@ -584,7 +699,6 @@ export function useUpdateCustomField() {
   });
 }
 
-
 export function useToggleRolePermission() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -601,6 +715,29 @@ export function useToggleRolePermission() {
         ? addRolePermissionApi(roleId, permissionId)
         : removeRolePermissionApi(roleId, permissionId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["roles-with-permissions"] }),
+  });
+}
+
+export function useCreateRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createRoleApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["roles"] });
+      queryClient.invalidateQueries({ queryKey: ["roles-with-permissions"] });
+    },
+  });
+}
+
+export function useDeleteRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteRoleApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["roles"] });
+      queryClient.invalidateQueries({ queryKey: ["roles-with-permissions"] });
+      queryClient.invalidateQueries({ queryKey: ["staff"] });
+    },
   });
 }
 

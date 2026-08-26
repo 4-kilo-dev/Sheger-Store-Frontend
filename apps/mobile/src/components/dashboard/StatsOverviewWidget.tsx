@@ -256,7 +256,13 @@ export function StatsOverviewWidget() {
           onPress={() => router.push(to(card.href))}
           style={({ pressed }) => [styles.statTile, pressed ? styles.statTilePressed : null]}
         >
-          <StatCard label={card.label} value={card.value} note={card.note} icon={card.icon} tone={card.tone} />
+          <StatCard
+            label={card.label}
+            value={card.value}
+            note={card.note}
+            icon={card.icon}
+            tone={card.tone}
+          />
         </Pressable>
       ))}
     </View>

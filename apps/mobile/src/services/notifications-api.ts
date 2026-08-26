@@ -1,9 +1,78 @@
 import { client } from "@/lib/api/client";
 import type { Notification, NotificationPriority, NotificationType } from "@/types/domain";
 
+export type NotificationPriorityValue = "low" | "normal" | "high" | "urgent";
+export interface NotificationEventType {
+  key: string;
+  name: string;
+  description: string | null;
+  defaultTitle: string | null;
+  defaultPriority: NotificationPriorityValue;
+  defaultIsTask: boolean;
+  isActive: boolean;
+}
+export interface NotificationRoutingRule {
+  id: string;
+  eventType: string;
+  isActive: boolean;
+  roleId: string | null;
+  roleName: string | null;
+  userId: string | null;
+  userName: string | null;
+}
+export type CreateNotificationRoutingRule =
+  { eventType: string; roleId: string } | { eventType: string; userId: string };
+
+export function getNotificationEventTypesApi() {
+  return client.get<NotificationEventType[]>("/api/notifications/notification-event-types");
+}
+export function createNotificationEventTypeApi(payload: {
+  key: string;
+  name: string;
+  description?: string;
+  defaultTitle?: string;
+  defaultPriority?: NotificationPriorityValue;
+  defaultIsTask?: boolean;
+}) {
+  return client.post<NotificationEventType>("/api/notifications/notification-event-types", payload);
+}
+export function updateNotificationEventTypeApi(
+  key: string,
+  payload: Partial<NotificationEventType>,
+) {
+  return client.patch<NotificationEventType>(
+    `/api/notifications/notification-event-types/${encodeURIComponent(key)}`,
+    payload,
+  );
+}
+export function getNotificationRoutingRulesApi() {
+  return client.get<NotificationRoutingRule[]>("/api/notifications/notification-routing-rules");
+}
+export function createNotificationRoutingRuleApi(payload: CreateNotificationRoutingRule) {
+  return client.post<NotificationRoutingRule>(
+    "/api/notifications/notification-routing-rules",
+    payload,
+  );
+}
+export function updateNotificationRoutingRuleApi(id: string, isActive: boolean) {
+  return client.patch<NotificationRoutingRule>(
+    `/api/notifications/notification-routing-rules/${id}`,
+    { isActive },
+  );
+}
+export function deleteNotificationRoutingRuleApi(id: string) {
+  return client.delete<void>(`/api/notifications/notification-routing-rules/${id}`);
+}
+
 type ApiNotification = Omit<Notification, "priority"> & { priority?: string };
-export interface NotificationFeedResponse { items: Notification[]; nextCursor: string | null; }
-export interface UnreadNotificationCounts { unread: number; tasks: number; }
+export interface NotificationFeedResponse {
+  items: Notification[];
+  nextCursor: string | null;
+}
+export interface UnreadNotificationCounts {
+  unread: number;
+  tasks: number;
+}
 
 function fromApiNotification(notification: ApiNotification): Notification {
   return {
@@ -58,7 +127,8 @@ const EVENT_DISPLAY: Record<
 
 export function getNotificationDisplay(notification: Notification) {
   const fromEvent = EVENT_DISPLAY[notification.eventType];
-  const title = notification.title || fromEvent?.title || notification.eventType.replace(/[._-]+/g, " ");
+  const title =
+    notification.title || fromEvent?.title || notification.eventType.replace(/[._-]+/g, " ");
   // The backend's own type/priority (when present) are authoritative — the
   // static event map is only a fallback for older events that predate them.
   const type = notification.type || fromEvent?.type || ("System" as NotificationType);
@@ -88,14 +158,21 @@ export function groupByRecency(createdAt: string): "Today" | "Yesterday" | "This
 }
 
 export async function getNotificationsApi(limit = 50, offset = 0): Promise<Notification[]> {
-  const notifications = await client.get<ApiNotification[]>(`/notifications?limit=${limit}&offset=${offset}`);
+  const notifications = await client.get<ApiNotification[]>(
+    `/notifications?limit=${limit}&offset=${offset}`,
+  );
   return notifications.map(fromApiNotification);
 }
 
-export async function getNotificationFeedApi(limit = 50, cursor?: string): Promise<NotificationFeedResponse> {
+export async function getNotificationFeedApi(
+  limit = 50,
+  cursor?: string,
+): Promise<NotificationFeedResponse> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set("cursor", cursor);
-  const response = await client.get<{ items: ApiNotification[]; nextCursor: string | null }>(`/notifications/feed?${params}`);
+  const response = await client.get<{ items: ApiNotification[]; nextCursor: string | null }>(
+    `/notifications/feed?${params}`,
+  );
   return { items: response.items.map(fromApiNotification), nextCursor: response.nextCursor };
 }
 
@@ -116,7 +193,10 @@ export async function markAllNotificationsReadApi(): Promise<Notification[]> {
   return notifications.map(fromApiNotification);
 }
 
-export function registerNotificationDeviceApi(platform: "ios" | "android", token: string): Promise<unknown> {
+export function registerNotificationDeviceApi(
+  platform: "ios" | "android",
+  token: string,
+): Promise<unknown> {
   return client.post("/notifications/devices", { platform, token });
 }
 

@@ -36,13 +36,22 @@ export interface UpdateCustomFieldDefinitionDto {
   required?: boolean;
 }
 
-
 export async function getRolesApi(): Promise<Role[]> {
   return client.get<Role[]>("/api/roles");
 }
 
 export async function getRolesWithPermissionsApi(): Promise<RoleWithPermissions[]> {
   return client.get<RoleWithPermissions[]>("/api/roles");
+}
+
+export async function createRoleApi(
+  payload: Pick<Role, "key" | "displayName">,
+): Promise<RoleWithPermissions> {
+  return client.post<RoleWithPermissions>("/api/roles", payload);
+}
+
+export async function deleteRoleApi(roleId: string): Promise<void> {
+  await client.delete(`/api/roles/${roleId}`);
 }
 
 export async function getPermissionsApi(): Promise<Permission[]> {
@@ -93,4 +102,3 @@ export async function updateCustomFieldDefinitionApi(
 ): Promise<CustomFieldDefinition> {
   return client.patch<CustomFieldDefinition>(`/api/custom-field-definitions/${id}`, payload);
 }
-

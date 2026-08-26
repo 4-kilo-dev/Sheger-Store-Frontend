@@ -116,6 +116,8 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     );
   const canViewEval = can(PERMISSION.EVAL_VIEW) || can(PERMISSION.EVAL_SUBMIT_INTERNAL);
   const showFinancials = can(PERMISSION.PAYMENT_MANAGE);
+  const canForceDone = can(PERMISSION.BOOKING_FORCE_DONE);
+  const canDeleteBooking = can(PERMISSION.BOOKING_DELETE);
 
   const canFetchStaff = canAny([
     PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN,
@@ -126,6 +128,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canAssignTechnician = can(PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN);
   const canAssignCrew = can(PERMISSION.ASSIGNMENT_ASSIGN_CREW);
   const canReverseCheckout = can(PERMISSION.INVENTORY_CHECKOUT_REVERSE);
+  const canOverrideAvailability = can(PERMISSION.INVENTORY_OVERRIDE_AVAILABILITY);
   const bomEditableStatus = booking?.status === "ACCEPTED" || booking?.status === "PREPARATION";
   const canEditBom =
     !!bomEditableStatus &&
@@ -264,10 +267,13 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     canSubmitEval,
     canViewEval,
     showFinancials,
+    canForceDone,
+    canDeleteBooking,
     canFetchStaff,
     canAssignTechnician,
     canAssignCrew,
     canReverseCheckout,
+    canOverrideAvailability,
     canEditBom,
     canWriteTechnicalHolds,
     showTechnicalHolds,

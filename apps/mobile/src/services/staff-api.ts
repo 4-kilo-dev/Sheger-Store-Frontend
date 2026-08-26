@@ -15,6 +15,7 @@ interface RawUser {
   id: string;
   name: string;
   phone?: string;
+  email?: string;
   active?: boolean;
   team?: string;
   jobs?: number;
@@ -39,6 +40,7 @@ function toStaffMember(u: RawUser, roleName?: string): StaffMember {
     role: roleName || u.roles?.[0]?.displayName || "Staff",
     team: u.team || "Operations",
     phone: u.phone || "",
+    email: u.email || "",
     status: u.active ? "ACTIVE" : "OFF DUTY",
     jobs: u.jobs || 0,
     capacity: u.capacity || 30,
@@ -97,4 +99,18 @@ export async function toggleUserActiveApi(userId: string, active: boolean): Prom
 
 export async function setStaffFreelancerApi(userId: string, isFreelancer: boolean): Promise<void> {
   await client.patch(`/api/users/${userId}`, { isFreelancer });
+}
+
+export async function updateStaffApi(
+  userId: string,
+  payload: Pick<StaffMember, "name" | "phone" | "team" | "isFreelancer"> & {
+    email?: string;
+    active: boolean;
+  },
+): Promise<StaffMember> {
+  return client.patch<StaffMember>(`/api/users/${userId}`, {
+    ...payload,
+    team: payload.team === "—" ? "" : payload.team,
+    email: payload.email?.trim() || undefined,
+  });
 }

@@ -47,11 +47,7 @@ function readStatuses(data: unknown): {
   return {};
 }
 
-export function useBookingPollInterval(
-  kind: BookingPollKind,
-  status?: string,
-  enabled = true,
-) {
+export function useBookingPollInterval(kind: BookingPollKind, status?: string, enabled = true) {
   const isSurfaceActive = usePollSurfaceActive();
 
   return (query: { state: { data: unknown; fetchFailureCount: number } }): number | false => {
@@ -67,11 +63,7 @@ export function useBookingPollInterval(
   };
 }
 
-export function useBookingPollQueryOptions(
-  kind: BookingPollKind,
-  status?: string,
-  enabled = true,
-) {
+export function useBookingPollQueryOptions(kind: BookingPollKind, status?: string, enabled = true) {
   const refetchInterval = useBookingPollInterval(kind, status, enabled);
   return {
     ...BOOKING_POLL_QUERY_DEFAULTS,

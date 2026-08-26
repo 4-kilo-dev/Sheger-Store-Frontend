@@ -35,14 +35,18 @@ export async function getDownloadUrlApi(attachmentId: string): Promise<{ downloa
  */
 export async function uploadBookingAttachmentApi(
   bookingId: string,
-  file: { uri: string; name: string; type: string },
+  file: { uri: string; name: string; type: string; fileSize?: number | null },
   meta?: { relatedEntity?: string; relatedId?: string },
 ): Promise<Attachment> {
+  const maxBytes = 20 * 1024 * 1024;
+  if (file.fileSize && file.fileSize > maxBytes) {
+    throw new Error("File size exceeds the 20MB limit.");
+  }
   const formData = new FormData();
   // React Native's FormData accepts { uri, name, type } objects directly
   formData.append("file", { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
   if (meta?.relatedEntity) formData.append("relatedEntity", meta.relatedEntity);
   if (meta?.relatedId) formData.append("relatedId", meta.relatedId);
 
-  return client.post<Attachment>(`/api/bookings/${bookingId}/attachments`, formData);
+  return client.post<Attachment>(`/api/bookings/${bookingId}/attachments/file-upload`, formData);
 }

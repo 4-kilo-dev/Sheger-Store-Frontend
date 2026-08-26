@@ -11,6 +11,26 @@ export interface DamageReport {
   status: "OPEN" | "UNDER_REVIEW" | "RESOLVED" | "REJECTED";
   reportedBy: string;
   createdAt: string;
+  bookingCode?: string | null;
+  poolName?: string | null;
+  itemName?: string | null;
+}
+
+export type DamageReportResolution = {
+  status: "RESOLVED" | "REJECTED";
+  itemCondition?: "AVAILABLE" | "RETIRED" | "UNDER_MAINTENANCE" | "DAMAGED";
+  resolutionAction?: "WRITE_OFF" | "REPAIRED";
+};
+
+export function getDamageReportsApi(): Promise<DamageReport[]> {
+  return client.get<DamageReport[]>("/api/damage-reports");
+}
+
+export function resolveDamageReportApi(
+  id: string,
+  payload: DamageReportResolution,
+): Promise<DamageReport> {
+  return client.patch<DamageReport>(`/api/damage-reports/${id}`, payload);
 }
 
 export async function createDamageReportApi(

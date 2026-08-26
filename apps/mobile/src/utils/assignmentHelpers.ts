@@ -23,17 +23,13 @@ export function isTechnicianAssignment(a: AssignmentLike | null | undefined): bo
 export function getDeclinedTechnicianAssignments<T extends AssignmentLike>(
   assignments: T[] | undefined,
 ): T[] {
-  return (assignments || []).filter(
-    (a) => isTechnicianAssignment(a) && isDeclinedAssignment(a),
-  );
+  return (assignments || []).filter((a) => isTechnicianAssignment(a) && isDeclinedAssignment(a));
 }
 
 export function getActiveTechnicianAssignments<T extends AssignmentLike>(
   assignments: T[] | undefined,
 ): T[] {
-  return (assignments || []).filter(
-    (a) => isTechnicianAssignment(a) && !isDeclinedAssignment(a),
-  );
+  return (assignments || []).filter((a) => isTechnicianAssignment(a) && !isDeclinedAssignment(a));
 }
 
 /** Whether the user has an active TECHNICIAN assignment on the booking. */

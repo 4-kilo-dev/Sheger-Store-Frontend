@@ -154,17 +154,16 @@ export default function DamageReportScreen() {
       });
 
       if (attachments.length > 0 && report?.id && matchedBooking?.id) {
-        const uploads = attachments.map(
-          (asset) =>
-            uploadBookingAttachmentApi(
-              matchedBooking.id,
-              {
-                uri: asset.uri,
-                name: asset.fileName || `damage_photo_${Date.now()}.jpg`,
-                type: asset.type || "image/jpeg",
-              },
-              { relatedEntity: "damage_missing_report", relatedId: report.id },
-            ).catch(() => null),
+        const uploads = attachments.map((asset) =>
+          uploadBookingAttachmentApi(
+            matchedBooking.id,
+            {
+              uri: asset.uri,
+              name: asset.fileName || `damage_photo_${Date.now()}.jpg`,
+              type: asset.type || "image/jpeg",
+            },
+            { relatedEntity: "damage_missing_report", relatedId: report.id },
+          ).catch(() => null),
         );
         await Promise.all(uploads);
       }

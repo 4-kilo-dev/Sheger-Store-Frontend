@@ -14,7 +14,9 @@ export function PendingTasksWidget() {
     <Section
       title="Needs you"
       icon={ClipboardList}
-      aside={pendingTasks.length > 0 && pendingTasks.length <= 5 ? `${pendingTasks.length}` : undefined}
+      aside={
+        pendingTasks.length > 0 && pendingTasks.length <= 5 ? `${pendingTasks.length}` : undefined
+      }
       action={
         pendingTasks.length > 5 ? (
           <Button variant="ghost" onPress={() => router.push(to("/notifications"))}>

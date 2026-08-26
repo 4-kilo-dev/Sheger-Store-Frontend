@@ -53,10 +53,12 @@ import { AccessLockOverlay } from "@/components/booking/AccessLockOverlay";
 import { BookingSyncStatus } from "@/components/booking/BookingSyncStatus";
 import { alpha, colors, radius } from "@/theme/tokens";
 import type { Booking, BookingStatus } from "@/types/domain";
+import type { BookingReservation } from "@/services/bookings-api";
 import { STATUS_LABELS } from "@/types/domain";
 import { daysUntil, formatCurrency } from "@/utils/format";
 import {
   useBooking,
+  useBookingDamageReports,
   useRecordBookingPayment,
   useBomLines,
   useBookingAssignments,
@@ -79,6 +81,7 @@ import {
   useReplacePoolReservations,
   useCustomFieldDefinitions,
   useDeleteAssignment,
+  useDeleteBooking,
 } from "@/hooks/useOperations";
 import { useBookingActions } from "@/hooks/useBookingActions";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -88,13 +91,18 @@ import { getPaymentSummary, transitionBookingStatusApi } from "@/services/bookin
 import { getInventoryCategoriesApi, getInventoryPoolsApi } from "@/services/inventory-api";
 import { filterScreenPools, isScreenPool } from "@/utils/screen-pools";
 import { uploadBookingAttachmentApi } from "@/services/attachments.api";
-import {
-  useBookingCapabilities,
-  type BookingTabName,
-} from "@/hooks/useBookingCapabilities";
+import { useBookingCapabilities, type BookingTabName } from "@/hooks/useBookingCapabilities";
 import { getBookingPollPhaseFromQuery } from "@/hooks/useBookingPoll";
 import { createAssignTechnicianAction } from "@/utils/bookingActions";
 import * as Linking from "expo-linking";
+
+type BookingReservationWithPool = BookingReservation & {
+  pool?: {
+    name?: string | null;
+    unit?: string | null;
+    category?: { key?: string | null; name?: string | null; unit?: string | null } | null;
+  };
+};
 
 export default function BookingDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
@@ -121,8 +129,10 @@ export default function BookingDetailScreen() {
   const { data: internalEval } = useInternalEvaluation(bookingId);
   const { data: clientEval } = useClientEvaluation(bookingId);
   const { data: attachments = [] } = useBookingAttachments(bookingId);
+  const { data: damageReports = [] } = useBookingDamageReports(bookingId);
   const createHandoff = useCreateHandoffSnapshot();
   const checkoutReverse = useCheckoutReverse();
+  const deleteBooking = useDeleteBooking();
   const [tab, setTab] = useState<BookingTabName>("Overview");
   const [reverseOpen, setReverseOpen] = useState(false);
   const [reverseReason, setReverseReason] = useState("");
@@ -132,7 +142,7 @@ export default function BookingDetailScreen() {
     if (!assignments.length) return booking;
     return {
       ...booking,
-      assignments: assignments.map((a: any) => ({
+      assignments: assignments.map((a) => ({
         id: a.id,
         userId: a.userId || a.user?.id,
         roleContext: a.roleContext,
@@ -149,7 +159,7 @@ export default function BookingDetailScreen() {
   const actions = useBookingActions(params.id, bookingWithAssignments, {
     canFetchStaff: caps.canFetchStaff,
     onGoToEquipmentTab: () => setTab("Equipment"),
-    canOverrideAvailability: caps.canReverseCheckout,
+    canOverrideAvailability: caps.canOverrideAvailability,
   });
 
   const { data: checkoutSnapshots = [] } = useBookingSnapshots(
@@ -198,13 +208,26 @@ export default function BookingDetailScreen() {
     if (caps.showFieldOpsBanner && a.permissionKey === "eval.submit_internal") return false;
     return true;
   });
+  const forceDoneAction =
+    caps.canForceDone && booking.status !== "DONE" && booking.status !== "CANCELED"
+      ? {
+          id: "booking.force_done",
+          label: "Force Done",
+          variant: "destructive" as const,
+          targetStatus: "DONE" as const,
+          permissionKey: PERMISSION.BOOKING_FORCE_DONE,
+          reasonRequired: true,
+          requiresReason: true,
+        }
+      : null;
+  const allActions = forceDoneAction ? [...barActions, forceDoneAction] : barActions;
   const reverseAction = barActions.find(
     (a) =>
       a.permissionKey === PERMISSION.INVENTORY_CHECKOUT_REVERSE ||
       a.id === "booking.checkout_reverse" ||
       a.id === "inventory.checkout_reverse",
   );
-  const primaryAction = barActions[0] ?? caps.assignTechnicianAction ?? null;
+  const primaryAction = allActions[0] ?? caps.assignTechnicianAction ?? null;
 
   const isSubmittingAction =
     actions.isTransitioning ||
@@ -225,12 +248,52 @@ export default function BookingDetailScreen() {
     >
       <BackLink label="Back to Bookings" href="/bookings" />
 
-      {barActions.length > 1 ? (
+      {caps.canDeleteBooking ? (
+        <Button
+          variant="danger"
+          icon={Trash2}
+          disabled={deleteBooking.isPending}
+          onPress={() =>
+            Alert.alert(
+              "Delete booking",
+              "This permanently removes the booking and associated records.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      await deleteBooking.mutateAsync(booking.id);
+                      router.replace(to("/bookings"));
+                    } catch (error) {
+                      Alert.alert(
+                        "Delete failed",
+                        error instanceof Error ? error.message : "Could not delete booking.",
+                      );
+                    }
+                  },
+                },
+              ],
+            )
+          }
+        >
+          {deleteBooking.isPending ? "Deleting..." : "Delete Booking"}
+        </Button>
+      ) : null}
+
+      {allActions.length > 1 ? (
         <View style={styles.actionBar}>
-          {barActions.slice(1).map((act) => (
+          {allActions.slice(1).map((act) => (
             <Button
               key={`${act.id}-${act.targetStatus}`}
-              variant={act.variant === "destructive" ? "danger" : act.variant === "outline" ? "outline" : "primary"}
+              variant={
+                act.variant === "destructive"
+                  ? "danger"
+                  : act.variant === "outline"
+                    ? "outline"
+                    : "primary"
+              }
               onPress={() => actions.openAction(act)}
             >
               {act.label}
@@ -376,10 +439,7 @@ export default function BookingDetailScreen() {
             {caps.declinedTechnicianAssignments.length === 1 ? "" : "s"} recorded. Re-assign a
             technician to continue.
           </AppText>
-          <Button
-            icon={Users}
-            onPress={() => actions.openAction(caps.assignTechnicianAction!)}
-          >
+          <Button icon={Users} onPress={() => actions.openAction(caps.assignTechnicianAction!)}>
             Re-assign Technician
           </Button>
         </Card>
@@ -396,7 +456,9 @@ export default function BookingDetailScreen() {
         value={safeTab}
         onChange={(next) => setTab(next as BookingTabName)}
       />
-      {safeTab === "Overview" ? <OverviewTab booking={booking} caps={caps} /> : null}
+      {safeTab === "Overview" ? (
+        <OverviewTab booking={booking} caps={caps} damageReports={damageReports} />
+      ) : null}
       {safeTab === "Schedule" ? <ScheduleTab booking={booking} /> : null}
       {safeTab === "Team" ? (
         <TeamTab
@@ -424,11 +486,7 @@ export default function BookingDetailScreen() {
       {safeTab === "Activity" ? <ActivityTab statusHistory={booking.statusHistory} /> : null}
 
       <BookingActionSheet booking={booking} actions={actions} />
-      <DamageReportSheet
-        booking={booking}
-        checkoutSnapshot={checkoutSnapshot}
-        actions={actions}
-      />
+      <DamageReportSheet booking={booking} checkoutSnapshot={checkoutSnapshot} actions={actions} />
       <BomFulfillmentConflictSheet
         open={actions.showCheckoutConflictModal}
         lines={actions.checkoutConflicts}
@@ -438,6 +496,10 @@ export default function BookingDetailScreen() {
           actions.onGoToEquipmentTab?.();
         }}
         canOverride={actions.canOverrideAvailability}
+        onOverrideCheckout={(reason) => {
+          actions.setShowCheckoutConflictModal(false);
+          actions.performCheckout({ override: true, reason });
+        }}
       />
 
       <BottomSheet
@@ -521,9 +583,11 @@ export default function BookingDetailScreen() {
 function OverviewTab({
   booking,
   caps,
+  damageReports,
 }: {
   booking: Booking;
   caps: ReturnType<typeof useBookingCapabilities>;
+  damageReports: import("@/services/damage-api").DamageReport[];
 }) {
   const { formatDate } = useDateFormatter();
   const isOnsiteSurface =
@@ -583,11 +647,22 @@ function OverviewTab({
           })),
           cats,
         );
-        setPools(screens.map((p) => ({ id: p.id!, name: p.name || "", categoryId: p.categoryId || undefined })));
+        setPools(
+          screens.map((p) => ({
+            id: p.id!,
+            name: p.name || "",
+            categoryId: p.categoryId || undefined,
+          })),
+        );
       })
       .catch((error) => {
         setPools([]);
-        if (error && typeof error === "object" && "status" in error && (error as { status: number }).status === 403) {
+        if (
+          error &&
+          typeof error === "object" &&
+          "status" in error &&
+          (error as { status: number }).status === 403
+        ) {
           setPoolsRestricted(true);
         }
       });
@@ -600,7 +675,8 @@ function OverviewTab({
     const screenPoolIds = new Set(pools.map((p) => p.id));
     const filteredReservations = reservations.filter((r) => {
       if (r.poolId && screenPoolIds.has(r.poolId)) return true;
-      if ((r as any).pool && isScreenPool((r as any).pool)) return true;
+      const pool = (r as BookingReservationWithPool).pool;
+      if (pool && isScreenPool(pool)) return true;
       return false;
     });
     const mapped = filteredReservations.map((r) => ({
@@ -816,7 +892,8 @@ function OverviewTab({
         </Section>
       ) : null}
 
-      {booking.status === "PREPARATION" && (caps.canAssignCrew || caps.canEditLogistics || caps.canEditBooking) ? (
+      {booking.status === "PREPARATION" &&
+      (caps.canAssignCrew || caps.canEditLogistics || caps.canEditBooking) ? (
         <Section title="Dispatch Logistics" icon={Truck}>
           {caps.canEditLogistics ? (
             <>
@@ -989,6 +1066,32 @@ function OverviewTab({
         <KV label="BOM Items" value={booking.bomItems.length} mono />
         <KV label="Created" value={formatDate(booking.createdAt)} mono />
       </Section>
+      {damageReports.length > 0 ? (
+        <Section
+          title="Damage report history"
+          icon={ShieldAlert}
+          aside={`${damageReports.length} report${damageReports.length === 1 ? "" : "s"}`}
+        >
+          {damageReports.map((report) => (
+            <View key={report.id} style={styles.historyRow}>
+              <View style={{ flex: 1 }}>
+                <AppText style={{ fontWeight: "800" }}>
+                  {report.reportType} · {report.poolName || report.itemName || "Equipment"}
+                </AppText>
+                <AppText variant="small" color={colors.text2}>
+                  {report.description || "No description"}
+                </AppText>
+              </View>
+              <AppText
+                variant="eyebrow"
+                color={report.status === "RESOLVED" ? colors.success : colors.accent}
+              >
+                {report.status.replace("_", " ")}
+              </AppText>
+            </View>
+          ))}
+        </Section>
+      ) : null}
       {(customFieldsQuery.data || []).length > 0 ? (
         <Section title="Booking Specifications" icon={MessageSquare}>
           {(customFieldsQuery.data || []).map((field) => {
@@ -998,19 +1101,21 @@ function OverviewTab({
               const selectedValues = Array.isArray(rawVal)
                 ? rawVal
                 : typeof rawVal === "string" && rawVal
-                ? rawVal.split(",").map((s) => s.trim()).filter(Boolean)
-                : [];
+                  ? rawVal
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean)
+                  : [];
               displayVal = selectedValues.length > 0 ? selectedValues.join(", ") : "—";
             } else if (field.type === "boolean") {
-              displayVal = rawVal === true || rawVal === "true" ? "Yes" : rawVal === false || rawVal === "false" ? "No" : "—";
+              displayVal =
+                rawVal === true || rawVal === "true"
+                  ? "Yes"
+                  : rawVal === false || rawVal === "false"
+                    ? "No"
+                    : "—";
             }
-            return (
-              <KV
-                key={field.id}
-                label={field.name}
-                value={String(displayVal ?? "—")}
-              />
-            );
+            return <KV key={field.id} label={field.name} value={String(displayVal ?? "—")} />;
           })}
         </Section>
       ) : null}
@@ -1153,10 +1258,10 @@ function TeamTab({
 
   // Build roster from live assignments, mirroring web TeamTab buildTeamRoster
   const activeTech = assignments.filter(
-    (a) => (a.roleContext === "TECHNICIAN") && !a.declineReason && a.status !== "DECLINED",
+    (a) => a.roleContext === "TECHNICIAN" && !a.declineReason && a.status !== "DECLINED",
   );
   const declinedTech = assignments.filter(
-    (a) => (a.roleContext === "TECHNICIAN") && (a.declineReason || a.status === "DECLINED"),
+    (a) => a.roleContext === "TECHNICIAN" && (a.declineReason || a.status === "DECLINED"),
   );
   const chief = activeTech.find((a) => a.isTeamLead);
   const technicians = activeTech.filter((a) => !a.isTeamLead);
@@ -1172,14 +1277,18 @@ function TeamTab({
   const roster: RosterRow[] = [
     {
       role: "Chief Technician",
-      name: chief?.user?.name || (isEmptyName(booking.teamLeader) ? "Unassigned" : booking.teamLeader),
+      name:
+        chief?.user?.name || (isEmptyName(booking.teamLeader) ? "Unassigned" : booking.teamLeader),
       statusKey: chief ? getAssignmentStatus(chief) : "UNASSIGNED",
       assignmentId: chief?.id,
     },
     {
       role: "Technician",
       name:
-        technicians.map((a) => a.user?.name).filter(Boolean).join(", ") || "Unassigned",
+        technicians
+          .map((a) => a.user?.name)
+          .filter(Boolean)
+          .join(", ") || "Unassigned",
       statusKey:
         technicians.length === 0
           ? "UNASSIGNED"
@@ -1209,7 +1318,10 @@ function TeamTab({
       role: "Stage Hand Team",
       name:
         crew.length > 0
-          ? crew.map((a) => a.user?.name).filter(Boolean).join(", ")
+          ? crew
+              .map((a) => a.user?.name)
+              .filter(Boolean)
+              .join(", ")
           : isEmptyName(booking.stageHand)
             ? "Unassigned"
             : booking.stageHand.replace(/^TEAM · /, ""),
@@ -1224,7 +1336,12 @@ function TeamTab({
 
   function initialsFor(name: string) {
     if (isEmptyName(name)) return "—";
-    return name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+    return name
+      .split(" ")
+      .map((p) => p[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
   }
 
   const handleUnassign = (assignmentId: string, name: string) => {
@@ -1575,7 +1692,9 @@ function PaymentsTab({ booking }: { booking: Booking }) {
   const isExceedingRemaining =
     remainingAmount != null && remainingAmount > 0 && parsedAmount > remainingAmount;
   const isSettlingFully =
-    remainingAmount != null && remainingAmount > 0 ? parsedAmount >= remainingAmount : toStatus === "fully_paid";
+    remainingAmount != null && remainingAmount > 0
+      ? parsedAmount >= remainingAmount
+      : toStatus === "fully_paid";
 
   const targetToStatus: "advance" | "fully_paid" = isSettlingFully ? "fully_paid" : "advance";
 
@@ -1590,13 +1709,19 @@ function PaymentsTab({ booking }: { booking: Booking }) {
       return;
     }
     if (remainingAmount != null && remainingAmount > 0 && parsed > remainingAmount) {
-      setPaymentError(`Payment amount cannot exceed remaining balance of ${formatCurrency(remainingAmount)}.`);
+      setPaymentError(
+        `Payment amount cannot exceed remaining balance of ${formatCurrency(remainingAmount)}.`,
+      );
       return;
     }
     setPaymentError(null);
     try {
       const apiAmount = targetToStatus === "advance" ? alreadyPaid + parsed : parsed;
-      await paymentMutation.mutateAsync({ bookingId: booking.id, toStatus: targetToStatus, amount: apiAmount });
+      await paymentMutation.mutateAsync({
+        bookingId: booking.id,
+        toStatus: targetToStatus,
+        amount: apiAmount,
+      });
       setRecordOpen(false);
       setAmount("");
     } catch (e) {
@@ -1639,9 +1764,7 @@ function PaymentsTab({ booking }: { booking: Booking }) {
             </Button>
           }
         >
-          {screenSize > 0 ? (
-            <KV label="Screen Size" value={`${screenSize} sqm`} mono />
-          ) : null}
+          {screenSize > 0 ? <KV label="Screen Size" value={`${screenSize} sqm`} mono /> : null}
           {booking.dailyRate != null && booking.dailyRate > 0 ? (
             <KV label="Daily Rate" value={formatCurrency(booking.dailyRate)} mono />
           ) : null}
@@ -1650,7 +1773,13 @@ function PaymentsTab({ booking }: { booking: Booking }) {
           ) : null}
           <KV
             label="Computed Total"
-            value={computedTotal != null ? formatCurrency(computedTotal) : (summary.total != null ? formatCurrency(summary.total) : "Not set")}
+            value={
+              computedTotal != null
+                ? formatCurrency(computedTotal)
+                : summary.total != null
+                  ? formatCurrency(summary.total)
+                  : "Not set"
+            }
             mono
           />
         </Section>
@@ -1669,7 +1798,7 @@ function PaymentsTab({ booking }: { booking: Booking }) {
                 setAmount(
                   booking.payment === "ADVANCE" && summary.remaining != null
                     ? String(summary.remaining)
-                    : ""
+                    : "",
                 );
                 setRecordOpen(true);
               }}
@@ -1855,7 +1984,9 @@ function FilesTab({
           <View key={file.id} style={styles.fileCard}>
             <FileText size={20} color={colors.accent} />
             <View style={{ flex: 1 }}>
-              <AppText style={{ fontWeight: "800" }} numberOfLines={1}>{file.n}</AppText>
+              <AppText style={{ fontWeight: "800" }} numberOfLines={1}>
+                {file.n}
+              </AppText>
               <AppText variant="small" color={colors.text3}>
                 {file.s} · {file.d}
               </AppText>
@@ -1905,13 +2036,25 @@ function EvaluationsTab({
     createdAt?: string;
     clientNameVenue?: string;
     teamSize?: number;
-    scores: Array<{ metricId?: string; label?: string; score: number; valueType?: string; description?: string }>;
+    scores: Array<{
+      metricId?: string;
+      label?: string;
+      score: number;
+      valueType?: string;
+      description?: string;
+    }>;
     notes?: string;
   };
   clientEval?: {
     respondentName: string;
     submittedAt?: string;
-    scores: Array<{ metricId?: string; label?: string; score: number; valueType?: string; description?: string }>;
+    scores: Array<{
+      metricId?: string;
+      label?: string;
+      score: number;
+      valueType?: string;
+      description?: string;
+    }>;
   };
 }) {
   const canSubmit = canSubmitEval;
@@ -1989,7 +2132,10 @@ function EvaluationsTab({
           <View style={{ gap: 10 }}>
             <View style={styles.evalMeta}>
               <AppText variant="small" color={colors.text3}>
-                Evaluated by: <AppText variant="small" style={{ fontWeight: "800" }}>{internalEval.evaluatorId || "Staff"}</AppText>
+                Evaluated by:{" "}
+                <AppText variant="small" style={{ fontWeight: "800" }}>
+                  {internalEval.evaluatorId || "Staff"}
+                </AppText>
               </AppText>
               {internalEval.createdAt ? (
                 <AppText variant="data" color={colors.text3}>
@@ -2002,7 +2148,9 @@ function EvaluationsTab({
                 <View style={{ flex: 1 }}>
                   <AppText style={{ fontWeight: "700" }}>{s.label || "Metric"}</AppText>
                   {s.description ? (
-                    <AppText variant="small" color={colors.text3}>{s.description}</AppText>
+                    <AppText variant="small" color={colors.text3}>
+                      {s.description}
+                    </AppText>
                   ) : null}
                 </View>
                 <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
@@ -2013,7 +2161,9 @@ function EvaluationsTab({
             {internalEval.notes ? (
               <View style={styles.evalNoteBox}>
                 <AppText variant="eyebrow">Evaluator Notes</AppText>
-                <AppText variant="small" color={colors.text2}>{internalEval.notes}</AppText>
+                <AppText variant="small" color={colors.text2}>
+                  {internalEval.notes}
+                </AppText>
               </View>
             ) : null}
           </View>
@@ -2031,7 +2181,10 @@ function EvaluationsTab({
           <View style={{ gap: 10 }}>
             <View style={styles.evalMeta}>
               <AppText variant="small" color={colors.text3}>
-                Respondent: <AppText variant="small" style={{ fontWeight: "800" }}>{clientEval.respondentName}</AppText>
+                Respondent:{" "}
+                <AppText variant="small" style={{ fontWeight: "800" }}>
+                  {clientEval.respondentName}
+                </AppText>
               </AppText>
               {clientEval.submittedAt ? (
                 <AppText variant="data" color={colors.text3}>
@@ -2044,10 +2197,16 @@ function EvaluationsTab({
                 <View style={{ flex: 1 }}>
                   <AppText style={{ fontWeight: "700" }}>{s.label || "Metric"}</AppText>
                   {s.description ? (
-                    <AppText variant="small" color={colors.text3}>{s.description}</AppText>
+                    <AppText variant="small" color={colors.text3}>
+                      {s.description}
+                    </AppText>
                   ) : null}
                 </View>
-                <AppText variant="data" color={colors.status.ACCEPTED} style={{ fontWeight: "900" }}>
+                <AppText
+                  variant="data"
+                  color={colors.status.ACCEPTED}
+                  style={{ fontWeight: "900" }}
+                >
                   {renderScore(s.score, s.valueType)}
                 </AppText>
               </View>
@@ -2097,7 +2256,9 @@ function EvaluationsTab({
               />
             )}
             {metric.description ? (
-              <AppText variant="small" color={colors.text3}>{metric.description}</AppText>
+              <AppText variant="small" color={colors.text3}>
+                {metric.description}
+              </AppText>
             ) : null}
           </Field>
         ))}
@@ -2109,12 +2270,16 @@ function EvaluationsTab({
           />
         </Field>
         {evalError ? (
-          <AppText variant="small" color={colors.destructive}>{evalError}</AppText>
+          <AppText variant="small" color={colors.destructive}>
+            {evalError}
+          </AppText>
         ) : null}
         <Button disabled={submitEval.isPending} onPress={handleSubmit}>
           {submitEval.isPending ? "Submitting..." : "Submit Review"}
         </Button>
-        <Button variant="outline" onPress={() => setSubmitOpen(false)}>Cancel</Button>
+        <Button variant="outline" onPress={() => setSubmitOpen(false)}>
+          Cancel
+        </Button>
       </BottomSheet>
     </View>
   );
@@ -2222,6 +2387,14 @@ function Choice({
 }
 
 const styles = StyleSheet.create({
+  historyRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
   actionBar: {
     flexDirection: "row",
     flexWrap: "wrap",

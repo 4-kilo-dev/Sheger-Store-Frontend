@@ -54,7 +54,9 @@ export interface BomLineCodeInput {
 }
 
 /** Assign display codes like SC-001, CB-002 per material type within one booking. */
-export function assignBomLineCodes<T extends BomLineCodeInput>(lines: T[]): (T & { code: string })[] {
+export function assignBomLineCodes<T extends BomLineCodeInput>(
+  lines: T[],
+): (T & { code: string })[] {
   const counters: Record<string, number> = {};
 
   return lines.map((line) => {

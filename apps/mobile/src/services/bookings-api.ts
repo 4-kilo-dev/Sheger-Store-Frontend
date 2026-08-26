@@ -9,6 +9,7 @@ import type {
   ScreenType,
   StatusHistoryItem,
 } from "@/types/domain";
+import type { DamageReport } from "@/services/damage-api";
 
 interface RawPerson {
   id?: string;
@@ -124,9 +125,7 @@ function formatMountStyleLabel(value?: string | string[] | null): string {
   return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
-function normalizeCustomFieldPayload(
-  raw: Record<string, unknown>,
-): Record<string, unknown> {
+function normalizeCustomFieldPayload(raw: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(raw)) {
     if (value === "true") {
@@ -189,9 +188,7 @@ function parseBookingScreenFields(b: {
           ? hangingOrSitting
           : null,
     ) ||
-    formatMountStyleLabel(
-      typeof custom.arrangement === "string" ? custom.arrangement : null,
-    ) ||
+    formatMountStyleLabel(typeof custom.arrangement === "string" ? custom.arrangement : null) ||
     formatMountStyleLabel(specParts[specParts.length - 1]);
 
   const specLooksLikeLayout = /\d/.test(spec) && !isMountStyle(spec);
@@ -383,9 +380,7 @@ export async function createBookingApi(form: {
 
   const screenSize = form.size !== "" && form.size != null ? Number(form.size) : undefined;
   const hasValidSize = screenSize !== undefined && Number.isFinite(screenSize) && screenSize >= 0;
-  const arrangementText = String(
-    form.arrangement ?? form.itemServiceSpec ?? "",
-  ).trim();
+  const arrangementText = String(form.arrangement ?? form.itemServiceSpec ?? "").trim();
 
   const bookingPayload: Record<string, unknown> = {
     customerId: customer.id,
@@ -455,6 +450,10 @@ export async function transitionBookingStatusApi(
     reason: reason || `Transitioning to ${toStatus}`,
     override,
   });
+}
+
+export async function forceDoneBookingApi(bookingId: string, reason: string): Promise<unknown> {
+  return client.post(`/api/bookings/${bookingId}/force-done`, { reason });
 }
 
 export async function recordBookingPaymentApi(
@@ -673,3 +672,6 @@ export async function deleteBookingApi(id: string): Promise<{ message: string; i
   return client.delete<{ message: string; id: string }>(`/api/bookings/${id}`);
 }
 
+export async function getBookingDamageReportsApi(bookingId: string): Promise<DamageReport[]> {
+  return client.get<DamageReport[]>(`/api/bookings/${bookingId}/damage-reports`);
+}

@@ -17,18 +17,45 @@ export function QuickActionsWidget() {
   const actions = (
     role === "CCR"
       ? [
-          { label: "New booking", icon: Plus, href: "/bookings/new", accent: true, show: can(PERMISSION.BOOKING_CREATE) },
+          {
+            label: "New booking",
+            icon: Plus,
+            href: "/bookings/new",
+            accent: true,
+            show: can(PERMISSION.BOOKING_CREATE),
+          },
           { label: "Bookings", icon: FileText, href: "/bookings", show: true },
-          { label: "Report damage", icon: ShieldAlert, href: "/damage-report", show: can(PERMISSION.DAMAGE_REPORT) },
+          {
+            label: "Report damage",
+            icon: ShieldAlert,
+            href: "/damage-report",
+            show: can(PERMISSION.DAMAGE_REPORT),
+          },
         ]
       : role === "SK"
         ? [
-            { label: "Report damage", icon: ShieldAlert, href: "/damage-report", show: can(PERMISSION.DAMAGE_REPORT) },
+            {
+              label: "Report damage",
+              icon: ShieldAlert,
+              href: "/damage-report",
+              show: can(PERMISSION.DAMAGE_REPORT),
+            },
             { label: "Bookings", icon: FileText, href: "/bookings", show: true },
           ]
         : [
-            { label: "New booking", icon: Plus, href: "/bookings/new", accent: true, show: can(PERMISSION.BOOKING_CREATE) },
-            { label: "Report damage", icon: ShieldAlert, href: "/damage-report", show: can(PERMISSION.DAMAGE_REPORT) },
+            {
+              label: "New booking",
+              icon: Plus,
+              href: "/bookings/new",
+              accent: true,
+              show: can(PERMISSION.BOOKING_CREATE),
+            },
+            {
+              label: "Report damage",
+              icon: ShieldAlert,
+              href: "/damage-report",
+              show: can(PERMISSION.DAMAGE_REPORT),
+            },
             { label: "Reports", icon: BarChart3, href: "/reports", show: true },
           ]
   ).filter((action) => action.show);

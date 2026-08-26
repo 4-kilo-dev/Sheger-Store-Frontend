@@ -2,7 +2,8 @@ import * as SecureStore from "expo-secure-store";
 import { router } from "expo-router";
 import { to } from "@/utils/routes";
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL?.trim() || "";
+const REQUEST_TIMEOUT_MS = 20_000;
 
 class ApiError extends Error {
   status: number;
@@ -46,6 +47,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   // file can use "/api/..." paths for parity with the web client, which does
   // the same normalization before hitting the real backend.
   const targetPath = path.startsWith("/api") ? path.replace(/^\/api/, "") : path;
+  if (!targetPath.startsWith("http") && !BASE_URL) {
+    throw new ApiError(
+      "Vortex is not configured. Set EXPO_PUBLIC_API_URL to the HTTPS backend URL before building the app.",
+      0,
+      null,
+    );
+  }
   const url = targetPath.startsWith("http") ? targetPath : `${BASE_URL}${targetPath}`;
 
   const headers = new Headers(options.headers);
@@ -58,7 +66,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(url, { ...options, headers });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+      signal: options.signal ?? controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApiError("The request timed out. Check your connection and try again.", 408, null);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   let data: unknown;
   const contentType = response.headers.get("content-type");

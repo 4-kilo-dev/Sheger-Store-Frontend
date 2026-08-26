@@ -42,7 +42,9 @@ export function CalendarSystemProvider({ children }: { children: React.ReactNode
             setNumeralsSystemState(settings.numeralsSystem);
           }
         } else {
-          const savedSystem = (await SecureStore.getItemAsync(CALENDAR_KEY)) as CalendarSystem | null;
+          const savedSystem = (await SecureStore.getItemAsync(
+            CALENDAR_KEY,
+          )) as CalendarSystem | null;
           const savedNumerals = (await SecureStore.getItemAsync(
             NUMERALS_KEY,
           )) as NumeralsSystem | null;

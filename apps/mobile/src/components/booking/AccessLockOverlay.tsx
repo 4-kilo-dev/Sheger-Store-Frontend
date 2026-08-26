@@ -24,7 +24,10 @@ export function AccessLockOverlay({ sectionName, permissionKey }: AccessLockOver
       setRequested(true);
       Alert.alert("Request sent", `Access request for "${permissionKey}" sent to administrators.`);
     } catch (err) {
-      Alert.alert("Request failed", err instanceof Error ? err.message : "Failed to submit request.");
+      Alert.alert(
+        "Request failed",
+        err instanceof Error ? err.message : "Failed to submit request.",
+      );
     } finally {
       setIsSubmitting(false);
     }

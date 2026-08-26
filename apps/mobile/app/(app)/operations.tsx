@@ -1,6 +1,14 @@
 import { router } from "expo-router";
 import { to } from "@/utils/routes";
-import { AlertCircle, ChevronDown, ChevronRight, RotateCcw, Truck, User, Users } from "lucide-react-native";
+import {
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  RotateCcw,
+  Truck,
+  User,
+  Users,
+} from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { StatusBadge } from "@/components/status";
@@ -27,12 +35,7 @@ function isActiveOrUpcoming(booking: Booking, now = new Date()): boolean {
   return day.getTime() >= today.getTime();
 }
 
-const DISPATCH_STATUSES: BookingStatus[] = [
-  "CONFIRMED",
-  "ASSIGNED",
-  "ACCEPTED",
-  "PREPARATION",
-];
+const DISPATCH_STATUSES: BookingStatus[] = ["CONFIRMED", "ASSIGNED", "ACCEPTED", "PREPARATION"];
 
 const COLUMNS: {
   title: string;
@@ -184,7 +187,10 @@ function BookingCard({ booking, accentColor }: { booking: Booking; accentColor: 
       accessibilityRole="button"
       accessibilityLabel={`View booking ${booking.code}`}
       onPress={() => router.push(to(`/bookings/${booking.code}`))}
-      style={({ pressed }) => [styles.card, { borderLeftColor: accentColor, opacity: pressed ? 0.8 : 1 }]}
+      style={({ pressed }) => [
+        styles.card,
+        { borderLeftColor: accentColor, opacity: pressed ? 0.8 : 1 },
+      ]}
     >
       {/* Header */}
       <View style={styles.cardHeader}>

@@ -13,6 +13,7 @@ export const BOOKING_ACTION_LABELS: Record<string, string> = {
   "booking.cancel_override": "Force Cancel",
   "booking.partial_return": "Partial Check-in",
   "booking.done": "Check-in Gear",
+  "booking.force_done": "Force Done",
 };
 
 export interface BookingAction {
@@ -54,6 +55,7 @@ export function resolveBookingAction(
     id === "booking.checkout" ||
     permissionKey === "inventory.checkout";
   const isConfirm = id === "booking.confirm" || permissionKey === "booking.confirm";
+  const isForceDone = id === "booking.force_done" || permissionKey === "booking.force_done";
 
   let requiresForm: string | undefined;
   if (isAssign) requiresForm = "assign";
@@ -75,8 +77,8 @@ export function resolveBookingAction(
     requiresForm,
     targetStatus: toStatus,
     permissionKey,
-    reasonRequired: !!(reasonRequired || isCancel),
-    requiresReason: !!(reasonRequired || isCancel),
+    reasonRequired: !!(reasonRequired || isCancel || isForceDone),
+    requiresReason: !!(reasonRequired || isCancel || isForceDone),
     viaBypass,
     actionId,
   };

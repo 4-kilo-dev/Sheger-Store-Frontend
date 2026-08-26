@@ -48,7 +48,12 @@ export function BookingCard({
             {booking.code}
           </AppText>
           {meta ? (
-            <AppText variant="data" color={colors.text3} style={styles.bookingMeta} numberOfLines={1}>
+            <AppText
+              variant="data"
+              color={colors.text3}
+              style={styles.bookingMeta}
+              numberOfLines={1}
+            >
               {meta}
             </AppText>
           ) : null}

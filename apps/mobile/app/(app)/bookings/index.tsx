@@ -33,7 +33,11 @@ const PAYMENT_STATUSES: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
 function matchesQuery(haystack: Array<string | number | null | undefined>, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  return haystack.some((part) => String(part ?? "").toLowerCase().includes(needle));
+  return haystack.some((part) =>
+    String(part ?? "")
+      .toLowerCase()
+      .includes(needle),
+  );
 }
 
 async function runBulkTransitions(
@@ -239,12 +243,7 @@ export default function BookingsScreen() {
 
     setBulkBusy(true);
     try {
-      const { ok, failed } = await runBulkTransitions(
-        selectedBookings,
-        toStatus,
-        reason,
-        override,
-      );
+      const { ok, failed } = await runBulkTransitions(selectedBookings, toStatus, reason, override);
       await refetch();
 
       if (ok.length > 0) {

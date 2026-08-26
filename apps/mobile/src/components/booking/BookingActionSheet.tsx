@@ -67,6 +67,8 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
     isRecordingPayment,
     confirmBookingWithPayment,
     isConfirmingWithPayment,
+    forceDone,
+    isForcingDone,
   } = actions;
 
   const isCheckinAction =
@@ -74,9 +76,7 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
       ? isInventoryCheckinAction(selectedAction)
       : false;
   const isReverseAction =
-    typeof isCheckoutReverseAction === "function"
-      ? isCheckoutReverseAction(selectedAction)
-      : false;
+    typeof isCheckoutReverseAction === "function" ? isCheckoutReverseAction(selectedAction) : false;
 
   const [checkedCheckinItems, setCheckedCheckinItems] = useState<Set<string>>(new Set());
   const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
@@ -177,7 +177,8 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
     isCheckingOut ||
     isCheckingIn ||
     isReversingCheckout ||
-    isAssigningTechnicians;
+    isAssigningTechnicians ||
+    isForcingDone;
 
   const confirmDisabled =
     isBusy ||
@@ -192,6 +193,10 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
     (isReverseAction && cancellationReason.trim().length < 10);
 
   const handleConfirm = () => {
+    if (selectedAction.id === "booking.force_done") {
+      forceDone(cancellationReason.trim());
+      return;
+    }
     if (
       selectedAction.id === "inventory.checkout" ||
       selectedAction.permissionKey === "inventory.checkout" ||

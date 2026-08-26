@@ -1,5 +1,14 @@
-import { AlertTriangle, KeyRound, UserCheck, UserPlus, Users } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  KeyRound,
+  Plus,
+  ShieldCheck,
+  Trash2,
+  UserCheck,
+  UserPlus,
+  Users,
+} from "lucide-react-native";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { StaffCard } from "@/components/cards";
 import {
@@ -12,6 +21,7 @@ import {
   LoadingState,
   NativeList,
   Screen,
+  Section,
   SegmentedTabs,
   StatCard,
 } from "@/components/ui";
@@ -24,6 +34,12 @@ import {
   useSetStaffFreelancer,
   useStaff,
   useToggleUserActive,
+  useUpdateStaff,
+  useCreateRole,
+  useDeleteRole,
+  usePermissionsCatalog,
+  useRolesWithPermissions,
+  useToggleRolePermission,
 } from "@/hooks/useOperations";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
@@ -37,14 +53,15 @@ type RoleContext = "TECHNICIAN" | "CREW" | "OO";
 function resolveRoleContext(person: StaffMember): RoleContext | null {
   const role = (person.role || "").toLowerCase();
   if (role.includes("technician") || role.includes("chief")) return "TECHNICIAN";
-  if (role.includes("operation") || role.includes("ops") || role === "oo" || role.includes("driver")) {
+  if (
+    role.includes("operation") ||
+    role.includes("ops") ||
+    role === "oo" ||
+    role.includes("driver")
+  ) {
     return "OO";
   }
-  if (
-    role.includes("stagehand") ||
-    role.includes("freelancer") ||
-    person.isFreelancer
-  ) {
+  if (role.includes("stagehand") || role.includes("freelancer") || person.isFreelancer) {
     return "CREW";
   }
   return null;
@@ -64,8 +81,11 @@ export default function StaffScreen() {
   const [role, setRole] = useState<string>("All");
   const [addOpen, setAddOpen] = useState(false);
   const [assignPerson, setAssignPerson] = useState<StaffMember | null>(null);
+  const [editPerson, setEditPerson] = useState<StaffMember | null>(null);
+  const [activeView, setActiveView] = useState<"staff" | "roles">("staff");
   const resetPassword = useResetPassword();
-  const canAssignFromStaff = can(PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN) || can(PERMISSION.ASSIGNMENT_ASSIGN_CREW);
+  const canAssignFromStaff =
+    can(PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN) || can(PERMISSION.ASSIGNMENT_ASSIGN_CREW);
   const toggleActive = useToggleUserActive();
   const toggleFreelancer = useSetStaffFreelancer();
   // Derived from the real staff list rather than the hardcoded STAFF_ROLES mock,
@@ -123,6 +143,23 @@ export default function StaffScreen() {
     );
   }
 
+  if (activeView === "roles") {
+    return (
+      <Screen>
+        <View style={styles.header}>
+          <AppText variant="eyebrow">People Operations</AppText>
+          <AppText variant="title">Staff management</AppText>
+          <SegmentedTabs
+            tabs={["staff", "roles"] as const}
+            value={activeView}
+            onChange={setActiveView}
+          />
+        </View>
+        <RolesPanel canManage={can(PERMISSION.ROLE_MANAGE)} />
+      </Screen>
+    );
+  }
+
   if (isLoading) {
     return (
       <Screen>
@@ -155,6 +192,11 @@ export default function StaffScreen() {
           </Field>
         </View>
         {canManageStaff ? <Button onPress={() => setAddOpen(true)}>Add Staff Member</Button> : null}
+        {can(PERMISSION.ROLE_VIEW) ? (
+          <Button variant="outline" icon={ShieldCheck} onPress={() => setActiveView("roles")}>
+            Roles & permissions
+          </Button>
+        ) : null}
       </View>
 
       <View style={styles.stats}>
@@ -199,6 +241,9 @@ export default function StaffScreen() {
               ) : null}
               {canManageStaff ? (
                 <>
+                  <Button variant="ghost" onPress={() => setEditPerson(item)}>
+                    Edit
+                  </Button>
                   <Button
                     variant="ghost"
                     icon={KeyRound}
@@ -248,11 +293,212 @@ export default function StaffScreen() {
       {canManageStaff ? (
         <AddStaffSheet visible={addOpen} onClose={() => setAddOpen(false)} />
       ) : null}
-      <AssignStaffToBookingSheet
-        person={assignPerson}
-        onClose={() => setAssignPerson(null)}
-      />
+      <AssignStaffToBookingSheet person={assignPerson} onClose={() => setAssignPerson(null)} />
+      <EditStaffSheet person={editPerson} onClose={() => setEditPerson(null)} />
     </Screen>
+  );
+}
+
+function RolesPanel({ canManage }: { canManage: boolean }) {
+  const rolesQuery = useRolesWithPermissions();
+  const permissionsQuery = usePermissionsCatalog();
+  const createRole = useCreateRole();
+  const deleteRole = useDeleteRole();
+  const togglePermission = useToggleRolePermission();
+  const [displayName, setDisplayName] = useState("");
+  const [key, setKey] = useState("");
+  const roles = rolesQuery.data ?? [];
+  const permissions = permissionsQuery.data ?? [];
+
+  if (rolesQuery.isLoading || permissionsQuery.isLoading)
+    return <LoadingState label="Loading roles..." />;
+  if (rolesQuery.isError || permissionsQuery.isError)
+    return <ErrorState detail="Could not load roles and permissions." />;
+
+  const addRole = async () => {
+    const name = displayName.trim();
+    const roleKey = (key.trim() || name)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    if (!name || !roleKey) return Alert.alert("Role details required", "Enter a role name.");
+    try {
+      await createRole.mutateAsync({ displayName: name, key: roleKey });
+      setDisplayName("");
+      setKey("");
+    } catch (error) {
+      Alert.alert(
+        "Create failed",
+        error instanceof Error ? error.message : "Could not create role.",
+      );
+    }
+  };
+
+  return (
+    <>
+      <Section title="Roles and permissions" icon={ShieldCheck}>
+        {!canManage ? (
+          <AppText variant="small" color={colors.text2}>
+            You can view roles but need role.manage to change them.
+          </AppText>
+        ) : null}
+        {roles.map((role) => {
+          const granted = new Set(role.permissions.map((permission) => permission.key));
+          return (
+            <View key={role.id} style={styles.roleBlock}>
+              <View style={styles.rowBetween}>
+                <View style={{ flex: 1 }}>
+                  <AppText style={{ fontWeight: "800" }}>{role.displayName}</AppText>
+                  <AppText variant="small" color={colors.text2}>
+                    {role.key}
+                  </AppText>
+                </View>
+                {canManage && !role.isSystem ? (
+                  <Button
+                    variant="danger"
+                    icon={Trash2}
+                    onPress={() =>
+                      Alert.alert("Delete role", `Delete ${role.displayName}?`, [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Delete",
+                          style: "destructive",
+                          onPress: () => deleteRole.mutate(role.id),
+                        },
+                      ])
+                    }
+                  >
+                    Delete
+                  </Button>
+                ) : null}
+              </View>
+              <View style={styles.chipWrap}>
+                {permissions.map((permission) => (
+                  <Button
+                    key={permission.id}
+                    variant={granted.has(permission.key) ? "success" : "outline"}
+                    disabled={!canManage || togglePermission.isPending}
+                    onPress={() =>
+                      togglePermission.mutate({
+                        roleId: role.id,
+                        permissionId: permission.id,
+                        active: !granted.has(permission.key),
+                      })
+                    }
+                  >
+                    {permission.key}
+                  </Button>
+                ))}
+              </View>
+            </View>
+          );
+        })}
+      </Section>
+      {canManage ? (
+        <Section title="Create role" icon={Plus}>
+          <Field label="Display name">
+            <Input value={displayName} onChangeText={setDisplayName} placeholder="Warehouse Lead" />
+          </Field>
+          <Field label="Role key">
+            <Input
+              value={key}
+              onChangeText={setKey}
+              placeholder="warehouse_lead"
+              autoCapitalize="none"
+            />
+          </Field>
+          <Button disabled={createRole.isPending} onPress={addRole}>
+            {createRole.isPending ? "Creating..." : "Create role"}
+          </Button>
+        </Section>
+      ) : null}
+    </>
+  );
+}
+
+function EditStaffSheet({ person, onClose }: { person: StaffMember | null; onClose: () => void }) {
+  const updateStaff = useUpdateStaff();
+  const [form, setForm] = useState({ name: "", phone: "", email: "", team: "" });
+  const [active, setActive] = useState(true);
+  const [isFreelancer, setIsFreelancer] = useState(false);
+
+  useEffect(() => {
+    if (!person) return;
+    setForm({
+      name: person.name,
+      phone: person.phone,
+      email: person.email || "",
+      team: person.team === "—" ? "" : person.team,
+    });
+    setActive(person.status !== "OFF DUTY");
+    setIsFreelancer(person.isFreelancer);
+  }, [person]);
+
+  const save = async () => {
+    if (!person) return;
+    if (!form.name.trim() || !form.phone.trim()) {
+      Alert.alert("Details required", "Name and phone number are required.");
+      return;
+    }
+    try {
+      await updateStaff.mutateAsync({
+        id: person.id,
+        payload: { ...form, name: form.name.trim(), active, isFreelancer },
+      });
+      onClose();
+    } catch (error) {
+      Alert.alert(
+        "Update failed",
+        error instanceof Error ? error.message : "Could not update staff details.",
+      );
+    }
+  };
+
+  return (
+    <BottomSheet visible={!!person} title="Edit staff member" onClose={onClose}>
+      <Field label="Full name">
+        <Input
+          value={form.name}
+          onChangeText={(name) => setForm((current) => ({ ...current, name }))}
+        />
+      </Field>
+      <Field label="Phone">
+        <Input
+          value={form.phone}
+          onChangeText={(phone) => setForm((current) => ({ ...current, phone }))}
+          keyboardType="phone-pad"
+        />
+      </Field>
+      <Field label="Email">
+        <Input
+          value={form.email}
+          onChangeText={(email) => setForm((current) => ({ ...current, email }))}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+      </Field>
+      <Field label="Team">
+        <Input
+          value={form.team}
+          onChangeText={(team) => setForm((current) => ({ ...current, team }))}
+        />
+      </Field>
+      <Field label="Account status">
+        <View style={styles.chipWrap}>
+          <Chip label="Active" active={active} onPress={() => setActive(true)} />
+          <Chip label="Inactive" active={!active} onPress={() => setActive(false)} />
+        </View>
+      </Field>
+      <Field label="Classification">
+        <View style={styles.chipWrap}>
+          <Chip label="Staff" active={!isFreelancer} onPress={() => setIsFreelancer(false)} />
+          <Chip label="Freelancer" active={isFreelancer} onPress={() => setIsFreelancer(true)} />
+        </View>
+      </Field>
+      <Button disabled={updateStaff.isPending} onPress={save}>
+        {updateStaff.isPending ? "Saving..." : "Save Changes"}
+      </Button>
+    </BottomSheet>
   );
 }
 
@@ -279,10 +525,7 @@ function AssignStaffToBookingSheet({
       .filter((b) => allowed.has(b.status))
       .filter((b) => {
         const already = (b.assignments || []).some(
-          (a) =>
-            a.userId === person.id &&
-            a.roleContext === roleContext &&
-            !a.declineReason,
+          (a) => a.userId === person.id && a.roleContext === roleContext && !a.declineReason,
         );
         return !already;
       })
@@ -378,10 +621,7 @@ function AssignStaffToBookingSheet({
               {error}
             </AppText>
           ) : null}
-          <Button
-            disabled={!bookingId || createAssignment.isPending}
-            onPress={handleAssign}
-          >
+          <Button disabled={!bookingId || createAssignment.isPending} onPress={handleAssign}>
             {createAssignment.isPending ? "Assigning..." : "Assign"}
           </Button>
         </>
@@ -530,6 +770,18 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     gap: 8,
     paddingHorizontal: 4,
+  },
+  rowBetween: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  roleBlock: {
+    gap: 8,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   chipWrap: {
     flexDirection: "row",

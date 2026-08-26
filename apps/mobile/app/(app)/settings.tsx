@@ -668,7 +668,7 @@ function CustomFieldSheet({
     if (field) {
       setName(field.name || "");
       setKey(field.key || "");
-      setType((field.type as any) || "string");
+      setType(FIELD_TYPES.includes(field.type) ? field.type : "string");
       setOptionsText(field.options ? field.options.join(", ") : "");
       setRequired(field.required ?? false);
     } else {

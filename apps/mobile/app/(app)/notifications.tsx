@@ -27,6 +27,8 @@ import {
   StatCard,
 } from "@/components/ui";
 import { useNotificationsContext } from "@/context/NotificationsContext";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PERMISSION } from "@/lib/auth/permission-keys";
 import { getNotificationDisplay, groupByRecency } from "@/services/notifications-api";
 import { colors } from "@/theme/tokens";
 import type { NotificationType } from "@/types/domain";
@@ -51,6 +53,8 @@ export default function NotificationsScreen() {
   } = useNotificationsContext();
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
   const [search, setSearch] = useState("");
+  const { can } = usePermissions();
+  const canManageNotifications = can(PERMISSION.NOTIFICATION_MANAGE);
 
   const displayItems = useMemo(
     () => NOTIFICATIONS.map((item) => ({ item, display: getNotificationDisplay(item) })),
@@ -186,7 +190,12 @@ export default function NotificationsScreen() {
           Critical stock, damage, and onsite alerts are pinned. Payment and assignment updates
           follow your selected role.
         </AppText>
-        <Button variant="outline" onPress={() => router.push(to("/settings"))}>
+        <Button
+          variant="outline"
+          onPress={() =>
+            router.push(to(canManageNotifications ? "/notification-settings" : "/settings"))
+          }
+        >
           Notification Settings
         </Button>
       </Section>

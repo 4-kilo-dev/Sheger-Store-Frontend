@@ -38,11 +38,12 @@ const PRIMARY_NAV = [
 ] as const;
 
 const SECONDARY_NAV = [
-  { href: "/damage-report", label: "Damage reports", icon: ShieldAlert },
+  { href: "/damage-reports", label: "Damage reports", icon: ShieldAlert },
   { href: "/staff", label: "Staff", icon: Users },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/driver-trips", label: "Driver trips", icon: Truck },
   { href: "/notifications", label: "Notifications", icon: Bell },
+  { href: "/notification-settings", label: "Notification admin", icon: Settings },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -61,9 +62,10 @@ const NAV_PERMISSIONS: Record<string, string[]> = {
   ],
   "/inventory": [PERMISSION.INVENTORY_VIEW, PERMISSION.INVENTORY_MANAGE],
   "/checkout": [PERMISSION.INVENTORY_CHECKOUT, PERMISSION.INVENTORY_CHECKIN],
-  "/damage-report": [PERMISSION.DAMAGE_REPORT],
+  "/damage-reports": [PERMISSION.DAMAGE_REPORT],
   "/staff": [PERMISSION.USER_VIEW],
   "/reports": ["report.view", PERMISSION.EVAL_VIEW],
+  "/notification-settings": [PERMISSION.NOTIFICATION_MANAGE],
 };
 
 function titleFromPath(pathname: string) {
@@ -74,10 +76,11 @@ function titleFromPath(pathname: string) {
   if (pathname.startsWith("/inventory/")) return "Inventory Detail";
   if (pathname === "/inventory") return "Inventory";
   if (pathname === "/checkout") return "Check-in / out";
-  if (pathname === "/damage-report") return "Damage reports";
+  if (pathname === "/damage-report" || pathname === "/damage-reports") return "Damage reports";
   if (pathname === "/staff") return "Staff";
   if (pathname === "/reports") return "Reports";
   if (pathname === "/notifications") return "Notifications";
+  if (pathname === "/notification-settings") return "Notification settings";
   if (pathname === "/settings") return "Settings";
   if (pathname.startsWith("/dashboards")) return "Role Workspaces";
   return "Vortex Visual";

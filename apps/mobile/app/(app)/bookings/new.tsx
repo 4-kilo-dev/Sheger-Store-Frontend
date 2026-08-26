@@ -320,7 +320,10 @@ export default function NewBookingScreen() {
                         const selected = Array.isArray(raw)
                           ? raw.map((v) => String(v))
                           : typeof raw === "string" && raw
-                            ? raw.split(",").map((s) => s.trim()).filter(Boolean)
+                            ? raw
+                                .split(",")
+                                .map((s) => s.trim())
+                                .filter(Boolean)
                             : [];
                         const active = selected.includes(opt);
                         return (

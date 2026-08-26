@@ -2,14 +2,7 @@ import { useMemo } from "react";
 import * as ImagePicker from "expo-image-picker";
 import { Camera, Paperclip, X } from "lucide-react-native";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import {
-  AppText,
-  BottomSheet,
-  Button,
-  Field,
-  Input,
-  TextArea,
-} from "@/components/ui";
+import { AppText, BottomSheet, Button, Field, Input, TextArea } from "@/components/ui";
 import type { BookingActions } from "@/hooks/useBookingActions";
 import type { Booking } from "@/types/domain";
 import { colors, radius } from "@/theme/tokens";
@@ -45,7 +38,10 @@ function buildEquipmentOptions(
     return checkoutSnapshot.lines.map((line) => {
       const key = line.poolId ? `pool:${line.poolId}` : `item:${line.itemId}`;
       const name =
-        line.item?.name || line.pool?.name || line.name || `Gear (id: ${line.poolId || line.itemId})`;
+        line.item?.name ||
+        line.pool?.name ||
+        line.name ||
+        `Gear (id: ${line.poolId || line.itemId})`;
       return {
         key,
         label: name,
@@ -66,11 +62,7 @@ function buildEquipmentOptions(
 /**
  * Booking-scoped damage/missing report sheet — mirrors web DamageReportModal.
  */
-export function DamageReportSheet({
-  booking,
-  checkoutSnapshot,
-  actions,
-}: DamageReportSheetProps) {
+export function DamageReportSheet({ booking, checkoutSnapshot, actions }: DamageReportSheetProps) {
   const {
     showDamageModal,
     setShowDamageModal,
@@ -198,9 +190,7 @@ export function DamageReportSheet({
                   onPress={() => setDamageSelectedAssetId(opt.key)}
                   style={[
                     styles.chip,
-                    damageSelectedAssetId === opt.key
-                      ? { borderColor: colors.accent }
-                      : null,
+                    damageSelectedAssetId === opt.key ? { borderColor: colors.accent } : null,
                   ]}
                 >
                   <AppText style={{ fontWeight: "700" }}>{opt.label}</AppText>
@@ -214,11 +204,7 @@ export function DamageReportSheet({
         </Field>
 
         <Field label="Quantity">
-          <Input
-            keyboardType="numeric"
-            value={damageQty}
-            onChangeText={setDamageQty}
-          />
+          <Input keyboardType="numeric" value={damageQty} onChangeText={setDamageQty} />
         </Field>
 
         <Field label="Description">
@@ -244,9 +230,7 @@ export function DamageReportSheet({
                 <Image source={{ uri: file.uri }} style={styles.thumb} />
                 <Pressable
                   style={styles.remove}
-                  onPress={() =>
-                    setDamageAttachments((prev) => prev.filter((_, i) => i !== index))
-                  }
+                  onPress={() => setDamageAttachments((prev) => prev.filter((_, i) => i !== index))}
                 >
                   <X size={12} color="#fff" />
                 </Pressable>

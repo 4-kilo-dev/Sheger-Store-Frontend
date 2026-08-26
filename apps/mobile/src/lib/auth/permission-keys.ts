@@ -10,6 +10,7 @@ export const PERMISSION = {
   BOOKING_CONFIRM: "booking.confirm",
   BOOKING_CANCEL: "booking.cancel",
   BOOKING_CANCEL_OVERRIDE: "booking.cancel_override",
+  BOOKING_FORCE_DONE: "booking.force_done",
   BOOKING_DELETE: "booking.delete",
   BOOKING_VIEW_ALL: "booking.view_all",
   BOOKING_VIEW_ASSIGNED: "booking.view_assigned",
@@ -24,9 +25,14 @@ export const PERMISSION = {
   INVENTORY_CHECKOUT: "inventory.checkout",
   INVENTORY_CHECKIN: "inventory.checkin",
   INVENTORY_CHECKOUT_REVERSE: "inventory.checkout_reverse",
+  INVENTORY_OVERRIDE_AVAILABILITY: "inventory.override_availability",
+  INVENTORY_FORCE_CHECKIN: "inventory.force_checkin",
+  INVENTORY_FORCE_CHECKOUT: "inventory.force_checkout",
   DAMAGE_REPORT: "damage.report",
+  DAMAGE_RESOLVE: "damage.resolve",
   EVAL_SUBMIT_INTERNAL: "eval.submit_internal",
   EVAL_VIEW: "eval.view",
+  REPORT_BUSINESS_VIEW: "report.business.view",
   PAYMENT_MANAGE: "payment.manage",
   USER_VIEW: "user.view",
   USER_MANAGE: "user.manage",
@@ -38,6 +44,7 @@ export const PERMISSION = {
   DRIVER_TRIP_APPROVE: "driver_trip.approve",
   CUSTOMER_VIEW: "customer.view",
   CUSTOMER_MANAGE: "customer.manage",
+  NOTIFICATION_MANAGE: "notification.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSION)[keyof typeof PERMISSION];

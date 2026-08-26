@@ -161,21 +161,13 @@ export default function ReportsScreen() {
             <AppText variant="small" color={colors.text2}>
               Status
             </AppText>
-            <Input
-              value={status}
-              onChangeText={setStatus}
-              placeholder="e.g. CONFIRMED"
-            />
+            <Input value={status} onChangeText={setStatus} placeholder="e.g. CONFIRMED" />
           </View>
           <View style={{ flex: 1 }}>
             <AppText variant="small" color={colors.text2}>
               Location
             </AppText>
-            <Input
-              value={location}
-              onChangeText={setLocation}
-              placeholder="Search location..."
-            />
+            <Input value={location} onChangeText={setLocation} placeholder="Search location..." />
           </View>
         </View>
       </Section>
@@ -187,10 +179,7 @@ export default function ReportsScreen() {
       />
 
       {safeTab === "Revenue & Bookings" ? (
-        <RevenueBookingsTab
-          bookingsQuery={bookingsQuery}
-          revenueQuery={revenueQuery}
-        />
+        <RevenueBookingsTab bookingsQuery={bookingsQuery} revenueQuery={revenueQuery} />
       ) : null}
       {safeTab === "Inventory Health" ? <InventoryHealthTab query={inventoryQuery} /> : null}
       {safeTab === "Client Directory" ? <ClientDirectoryTab query={customersQuery} /> : null}
@@ -247,7 +236,9 @@ function RevenueBookingsTab({
       <View style={{ gap: 12 }}>
         <StatCard
           label="Booked Revenue"
-          value={formatCompactCurrency(revenueReport.totalRevenue || bookingsReport.totalBookingAmountValue || 0)}
+          value={formatCompactCurrency(
+            revenueReport.totalRevenue || bookingsReport.totalBookingAmountValue || 0,
+          )}
           note={`${bookingsReport.totalCount} bookings`}
           icon={Banknote}
         />
@@ -380,7 +371,12 @@ function InventoryHealthTab({
           const onsitePct = pct(onsite, total);
           const damagedPct = pct(damaged, total);
           return (
-            <Section key={category.categoryId} title={category.name} icon={Gauge} aside={`${total} total`}>
+            <Section
+              key={category.categoryId}
+              title={category.name}
+              icon={Gauge}
+              aside={`${total} total`}
+            >
               <View style={styles.healthBar}>
                 <View
                   style={[
@@ -409,7 +405,9 @@ function InventoryHealthTab({
               {category.pools.map((pool) => (
                 <View key={pool.poolId} style={styles.lineTop}>
                   <AppText variant="small">{pool.name}</AppText>
-                  <AppText variant="data">{pool.availableQuantity}/{pool.totalQuantity}</AppText>
+                  <AppText variant="data">
+                    {pool.availableQuantity}/{pool.totalQuantity}
+                  </AppText>
                 </View>
               ))}
             </Section>
@@ -433,10 +431,7 @@ function InventoryHealthTab({
                 })),
               ),
             );
-            void shareCsv(
-              `vortex-inventory-${new Date().toISOString().slice(0, 10)}.csv`,
-              csv,
-            );
+            void shareCsv(`vortex-inventory-${new Date().toISOString().slice(0, 10)}.csv`, csv);
           }}
         >
           Export Inventory CSV
@@ -574,10 +569,7 @@ function QualityCrewTab({
                 crew: e.teamSize,
               })),
             );
-            void shareCsv(
-              `vortex-evaluations-${new Date().toISOString().slice(0, 10)}.csv`,
-              csv,
-            );
+            void shareCsv(`vortex-evaluations-${new Date().toISOString().slice(0, 10)}.csv`, csv);
           }}
         >
           Export Evaluations CSV
@@ -618,7 +610,11 @@ function AuditLogsTab({
 
   return (
     <>
-      <Section title="Canceled Bookings Audit Log" icon={AlertTriangle} aside={`${canceled.length}`}>
+      <Section
+        title="Canceled Bookings Audit Log"
+        icon={AlertTriangle}
+        aside={`${canceled.length}`}
+      >
         {canceled.length === 0 ? (
           <AppText variant="subtitle">No cancellations recorded in the current period.</AppText>
         ) : (
@@ -752,11 +748,7 @@ function StaffWorkSheetsTab({
         </View>
       </Section>
 
-      <Section
-        title="Staff & Freelancer Workload"
-        icon={Users}
-        aside={`${freelancers.length}`}
-      >
+      <Section title="Staff & Freelancer Workload" icon={Users} aside={`${freelancers.length}`}>
         <AppText variant="small" color={colors.text2}>
           Bookings worked and total screen square meters per crew member · {rangeLabel}
         </AppText>

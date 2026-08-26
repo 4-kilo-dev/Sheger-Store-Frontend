@@ -33,7 +33,11 @@ const AVAILABILITIES: InventoryAvailability[] = ["AVAILABLE", "RESERVED", "ONSIT
 function matchesQuery(haystack: Array<string | number | null | undefined>, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  return haystack.some((part) => String(part ?? "").toLowerCase().includes(needle));
+  return haystack.some((part) =>
+    String(part ?? "")
+      .toLowerCase()
+      .includes(needle),
+  );
 }
 
 function matchesCategory(item: InventoryItem, category: string): boolean {

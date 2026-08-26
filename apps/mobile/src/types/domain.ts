@@ -149,6 +149,7 @@ export interface StaffMember {
   role: string;
   team: string;
   phone: string;
+  email?: string;
   status: "ACTIVE" | "ONSITE" | "OFF DUTY" | "ON LEAVE";
   jobs: number;
   capacity: number;

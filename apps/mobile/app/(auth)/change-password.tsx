@@ -72,70 +72,70 @@ export default function ChangePasswordScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Card style={styles.card}>
-        <ShieldCheck size={28} color={colors.accent} />
-        <AppText variant="eyebrow" color={colors.accent}>
-          Secure your account
-        </AppText>
-        <AppText variant="title" style={{ fontSize: 24 }}>
-          Change Password
-        </AppText>
-        <AppText variant="subtitle">
-          Please change the temporary password provided by your administrator to something only you
-          know.
-        </AppText>
-        <Controller
-          control={control}
-          name="password"
-          render={({ field, fieldState }) => (
-            <Field label="New Password">
-              <Input
-                value={field.value}
-                onChangeText={field.onChange}
-                onFocus={revealFields}
-                secureTextEntry
-                autoComplete="new-password"
-                textContentType="newPassword"
-              />
-              {fieldState.error ? (
-                <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
-                  {fieldState.error.message}
-                </AppText>
-              ) : null}
-            </Field>
-          )}
-        />
-        <Controller
-          control={control}
-          name="confirmPassword"
-          render={({ field, fieldState }) => (
-            <Field label="Confirm New Password">
-              <Input
-                value={field.value}
-                onChangeText={field.onChange}
-                onFocus={revealFields}
-                secureTextEntry
-                autoComplete="new-password"
-                textContentType="newPassword"
-                returnKeyType="done"
-                onSubmitEditing={handleSubmit(onSubmit)}
-              />
-              {fieldState.error ? (
-                <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
-                  {fieldState.error.message}
-                </AppText>
-              ) : null}
-            </Field>
-          )}
-        />
-        {formError ? (
-          <AppText variant="small" color={colors.destructive}>
-            {formError}
+          <ShieldCheck size={28} color={colors.accent} />
+          <AppText variant="eyebrow" color={colors.accent}>
+            Secure your account
           </AppText>
-        ) : null}
-        <Button icon={ArrowRight} disabled={submitting} onPress={handleSubmit(onSubmit)}>
-          {submitting ? "Saving..." : "Save & Continue"}
-        </Button>
-      </Card>
+          <AppText variant="title" style={{ fontSize: 24 }}>
+            Change Password
+          </AppText>
+          <AppText variant="subtitle">
+            Please change the temporary password provided by your administrator to something only
+            you know.
+          </AppText>
+          <Controller
+            control={control}
+            name="password"
+            render={({ field, fieldState }) => (
+              <Field label="New Password">
+                <Input
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  onFocus={revealFields}
+                  secureTextEntry
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                />
+                {fieldState.error ? (
+                  <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
+                    {fieldState.error.message}
+                  </AppText>
+                ) : null}
+              </Field>
+            )}
+          />
+          <Controller
+            control={control}
+            name="confirmPassword"
+            render={({ field, fieldState }) => (
+              <Field label="Confirm New Password">
+                <Input
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  onFocus={revealFields}
+                  secureTextEntry
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  returnKeyType="done"
+                  onSubmitEditing={handleSubmit(onSubmit)}
+                />
+                {fieldState.error ? (
+                  <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
+                    {fieldState.error.message}
+                  </AppText>
+                ) : null}
+              </Field>
+            )}
+          />
+          {formError ? (
+            <AppText variant="small" color={colors.destructive}>
+              {formError}
+            </AppText>
+          ) : null}
+          <Button icon={ArrowRight} disabled={submitting} onPress={handleSubmit(onSubmit)}>
+            {submitting ? "Saving..." : "Save & Continue"}
+          </Button>
+        </Card>
       </ScrollView>
     </KeyboardAvoidingView>
   );

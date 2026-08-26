@@ -1,6 +1,7 @@
 import { AlertTriangle, Package } from "lucide-react-native";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { AppText, Button } from "@/components/ui";
+import { AppText, Button, Field, TextArea } from "@/components/ui";
+import { useState } from "react";
 import type { UnfulfilledBomLine } from "@/hooks/useBookingActions";
 import { colors, radius } from "@/theme/tokens";
 
@@ -10,6 +11,7 @@ interface BomFulfillmentConflictSheetProps {
   onClose: () => void;
   onGoToEquipment: () => void;
   canOverride?: boolean;
+  onOverrideCheckout?: (reason: string) => void;
 }
 
 /**
@@ -21,7 +23,9 @@ export function BomFulfillmentConflictSheet({
   onClose,
   onGoToEquipment,
   canOverride = false,
+  onOverrideCheckout,
 }: BomFulfillmentConflictSheetProps) {
+  const [overrideReason, setOverrideReason] = useState("");
   if (!open || lines.length === 0) return null;
 
   return (
@@ -61,10 +65,28 @@ export function BomFulfillmentConflictSheet({
           </ScrollView>
 
           {canOverride ? (
-            <AppText variant="small" color={colors.text3} style={{ marginTop: 12 }}>
-              Users with inventory override permission may still force checkout with a documented
-              reason.
-            </AppText>
+            <View style={{ marginTop: 12, gap: 8 }}>
+              <AppText variant="small" color={colors.text2}>
+                Inventory override is available to authorized users. A documented reason is
+                required.
+              </AppText>
+              <Field label="Override reason (minimum 10 characters)">
+                <TextArea
+                  value={overrideReason}
+                  onChangeText={setOverrideReason}
+                  placeholder="Explain why this checkout must proceed..."
+                />
+              </Field>
+              <Button
+                disabled={overrideReason.trim().length < 10}
+                onPress={() => {
+                  onOverrideCheckout?.(overrideReason.trim());
+                  setOverrideReason("");
+                }}
+              >
+                Force checkout
+              </Button>
+            </View>
           ) : null}
 
           <View style={styles.actions}>

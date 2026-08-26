@@ -70,9 +70,7 @@ export function filterScreenPools<T extends ScreenPoolLike>(
   categories: ScreenCategoryLike[] = [],
 ): T[] {
   const screenCats = categories.filter(isScreenCategory);
-  const screenCatIds = new Set(
-    screenCats.map((c) => c.id).filter((id): id is string => !!id),
-  );
+  const screenCatIds = new Set(screenCats.map((c) => c.id).filter((id): id is string => !!id));
 
   let filtered: T[];
   if (screenCatIds.size > 0) {
@@ -83,7 +81,5 @@ export function filterScreenPools<T extends ScreenPoolLike>(
     filtered = pools.filter(isScreenPool);
   }
 
-  return [...filtered].sort((a, b) =>
-    String(a.name || "").localeCompare(String(b.name || "")),
-  );
+  return [...filtered].sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
 }

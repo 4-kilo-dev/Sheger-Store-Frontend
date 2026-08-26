@@ -388,10 +388,18 @@ export function DatePickerInput({
           accessibilityRole="button"
           accessibilityLabel={placeholder || "Select date"}
           onPress={() => setShowDatePicker(true)}
-          style={({ pressed }) => [styles.dateInput, styles.dateInputGrow, pressed ? styles.pressed : null]}
+          style={({ pressed }) => [
+            styles.dateInput,
+            styles.dateInputGrow,
+            pressed ? styles.pressed : null,
+          ]}
         >
           <Calendar size={16} color={value ? colors.accent : colors.text3} />
-          <AppText variant="data" color={value ? colors.foreground : colors.text3} style={{ flex: 1 }}>
+          <AppText
+            variant="data"
+            color={value ? colors.foreground : colors.text3}
+            style={{ flex: 1 }}
+          >
             {displayText}
           </AppText>
         </Pressable>

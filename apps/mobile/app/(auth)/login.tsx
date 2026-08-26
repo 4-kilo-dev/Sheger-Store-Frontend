@@ -109,86 +109,86 @@ export default function LoginScreen() {
         </View>
 
         <Animated.View entering={FadeInDown.duration(500).delay(180)} style={styles.formPanel}>
-        <LockKeyhole size={26} color={colors.accent} strokeWidth={1.75} />
-        <AppText variant="title" style={{ fontSize: 22 }}>
-          Sign in to operations
-        </AppText>
-        <AppText variant="subtitle">Sign in with your email and password.</AppText>
-        <Controller
-          control={control}
-          name="email"
-          render={({ field, fieldState }) => (
-            <Field label="Email Address">
-              <Input
-                value={field.value}
-                onChangeText={field.onChange}
-                onFocus={revealFields}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                textContentType="emailAddress"
-                placeholder="your-email@example.com"
-                returnKeyType="next"
-              />
-              {fieldState.error ? (
-                <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
-                  {fieldState.error.message}
-                </AppText>
-              ) : null}
-            </Field>
-          )}
-        />
-        <Controller
-          control={control}
-          name="password"
-          render={({ field, fieldState }) => (
-            <Field label="Password">
-              <View style={styles.passwordRow}>
+          <LockKeyhole size={26} color={colors.accent} strokeWidth={1.75} />
+          <AppText variant="title" style={{ fontSize: 22 }}>
+            Sign in to operations
+          </AppText>
+          <AppText variant="subtitle">Sign in with your email and password.</AppText>
+          <Controller
+            control={control}
+            name="email"
+            render={({ field, fieldState }) => (
+              <Field label="Email Address">
                 <Input
                   value={field.value}
                   onChangeText={field.onChange}
                   onFocus={revealFields}
-                  secureTextEntry={!showPassword}
+                  keyboardType="email-address"
                   autoCapitalize="none"
-                  autoComplete="password"
-                  textContentType="password"
-                  style={styles.passwordInput}
-                  returnKeyType="done"
-                  onSubmitEditing={handleSubmit(onSubmit)}
+                  autoComplete="email"
+                  textContentType="emailAddress"
+                  placeholder="your-email@example.com"
+                  returnKeyType="next"
                 />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-                  onPress={() => setShowPassword((current) => !current)}
-                  hitSlop={10}
-                  style={styles.passwordToggle}
-                >
-                  {showPassword ? (
-                    <EyeOff size={16} color={colors.accent} />
-                  ) : (
-                    <Eye size={16} color={colors.text3} />
-                  )}
-                </Pressable>
-              </View>
-              {fieldState.error ? (
-                <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
-                  {fieldState.error.message}
-                </AppText>
-              ) : null}
-            </Field>
-          )}
-        />
-        {formError ? (
-          <AppText variant="small" color={colors.destructive}>
-            {formError}
+                {fieldState.error ? (
+                  <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
+                    {fieldState.error.message}
+                  </AppText>
+                ) : null}
+              </Field>
+            )}
+          />
+          <Controller
+            control={control}
+            name="password"
+            render={({ field, fieldState }) => (
+              <Field label="Password">
+                <View style={styles.passwordRow}>
+                  <Input
+                    value={field.value}
+                    onChangeText={field.onChange}
+                    onFocus={revealFields}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoComplete="password"
+                    textContentType="password"
+                    style={styles.passwordInput}
+                    returnKeyType="done"
+                    onSubmitEditing={handleSubmit(onSubmit)}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                    onPress={() => setShowPassword((current) => !current)}
+                    hitSlop={10}
+                    style={styles.passwordToggle}
+                  >
+                    {showPassword ? (
+                      <EyeOff size={16} color={colors.accent} />
+                    ) : (
+                      <Eye size={16} color={colors.text3} />
+                    )}
+                  </Pressable>
+                </View>
+                {fieldState.error ? (
+                  <AppText variant="small" color={colors.destructive} style={{ marginTop: 6 }}>
+                    {fieldState.error.message}
+                  </AppText>
+                ) : null}
+              </Field>
+            )}
+          />
+          {formError ? (
+            <AppText variant="small" color={colors.destructive}>
+              {formError}
+            </AppText>
+          ) : null}
+          <Button icon={ArrowRight} disabled={submitting} onPress={handleSubmit(onSubmit)}>
+            {submitting ? "Signing in..." : "Sign In"}
+          </Button>
+          <AppText variant="small" color={colors.text3} style={{ textAlign: "center" }}>
+            Access is restricted to authorized Vortex Visual staff.
           </AppText>
-        ) : null}
-        <Button icon={ArrowRight} disabled={submitting} onPress={handleSubmit(onSubmit)}>
-          {submitting ? "Signing in..." : "Sign In"}
-        </Button>
-        <AppText variant="small" color={colors.text3} style={{ textAlign: "center" }}>
-          Access is restricted to authorized Vortex Visual staff.
-        </AppText>
         </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
