@@ -39,7 +39,19 @@ function Calendar({
       )}
       captionLayout={captionLayout}
       formatters={{
-        formatMonthDropdown: (date: Date) => date.toLocaleString("default", { month: "short" }),
+        // Keep month names consistent with the Ethiopian date formatter even when
+        // Latin numerals are selected (the picker otherwise transliterates them).
+        formatCaption: (date: Date) =>
+          calendarSystem === "ethiopic"
+            ? new Intl.DateTimeFormat("am-ET-u-ca-ethiopic-nu-latn", {
+                month: "long",
+                year: "numeric",
+              }).format(date)
+            : new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(date),
+        formatMonthDropdown: (date: Date) =>
+          calendarSystem === "ethiopic"
+            ? new Intl.DateTimeFormat("am-ET-u-ca-ethiopic-nu-latn", { month: "long" }).format(date)
+            : date.toLocaleString("default", { month: "short" }),
         ...formatters,
       }}
       classNames={{
