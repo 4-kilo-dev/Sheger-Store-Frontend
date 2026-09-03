@@ -137,7 +137,7 @@ export function EquipmentTab({
                 type="number"
                 min="1"
                 value={bom.addQty}
-                onChange={(e) => bom.setAddQty(Math.max(1, parseInt(e.target.value) || 1))}
+                onChange={(e) => bom.setAddQty(e.target.value)}
                 aria-label="Quantity to stage"
                 className="h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 text-[12px] text-right font-mono"
                 style={{ borderColor: "var(--border)" }}
@@ -155,7 +155,7 @@ export function EquipmentTab({
                       bom.getPoolAvailabilityLabel(bom.selectedPoolId)
                     }
                     loading={!!bom.selectedAvailability?.loading}
-                    requested={bom.addQty}
+                    requested={Number.parseFloat(bom.addQty) || undefined}
                     unit={
                       bom.pools.find((p: any) => p.id === bom.selectedPoolId)?.unit ||
                       bom.pools.find((p: any) => p.id === bom.selectedPoolId)?.category?.unit ||

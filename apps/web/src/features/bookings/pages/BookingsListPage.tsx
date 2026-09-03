@@ -135,6 +135,13 @@ function getEthiopianMonth(date: Date): number {
   return Number(parts.find((part) => part.type === "month")?.value);
 }
 
+function getEthiopianYear(date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US-u-ca-ethiopic", {
+    year: "numeric",
+  }).formatToParts(date);
+  return Number(parts.find((part) => part.type === "year")?.value);
+}
+
 /** This/Last Week = event date falls on a day inside the week (not rental-window overlap). */
 function bookingEventInWeek(b: Booking, start: Date, end: Date): boolean {
   const event = parseBookingInstant(b.eventDate);
@@ -298,7 +305,13 @@ export function BookingsIndex() {
   const [screenFilter, setScreenFilter] = useState<Set<string>>(new Set());
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [paymentFilter, setPaymentFilter] = useState<Set<string>>(new Set());
+  const [ethiopianYearFilter, setEthiopianYearFilter] = useState<Set<string>>(new Set());
   const [ethiopianMonthFilter, setEthiopianMonthFilter] = useState<Set<string>>(new Set());
+
+  const ethiopianYears = useMemo(() => {
+    const currentYear = getEthiopianYear(new Date());
+    return [String(currentYear), String(currentYear + 1)];
+  }, []);
 
   // Sort — newest created first by default
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -384,11 +397,13 @@ export function BookingsIndex() {
     if (paymentFilter.size > 0) r = r.filter((b) => paymentFilter.has(b.payment));
 
     // Ethiopian month filter follows the selected calendar and uses the event date.
-    if (calendarSystem === "ethiopic" && ethiopianMonthFilter.size > 0) {
+    if (calendarSystem === "ethiopic" && ethiopianYearFilter.size > 0) {
+      const selectedYear = Number([...ethiopianYearFilter][0]);
       const selectedMonth = ETHIOPIAN_MONTHS.indexOf([...ethiopianMonthFilter][0] as (typeof ETHIOPIAN_MONTHS)[number]) + 1;
       r = r.filter((b) => {
         const event = parseBookingInstant(b.eventDate);
-        return !!event && getEthiopianMonth(event) === selectedMonth;
+        if (!event || getEthiopianYear(event) !== selectedYear) return false;
+        return ethiopianMonthFilter.size === 0 || getEthiopianMonth(event) === selectedMonth;
       });
     }
 
@@ -399,7 +414,7 @@ export function BookingsIndex() {
     });
 
     return r;
-  }, [tab, query, statusFilter, screenFilter, assigneeFilter, paymentFilter, ethiopianMonthFilter, sortDir, bookingsList, authUser?.name, calendarSystem]);
+  }, [tab, query, statusFilter, screenFilter, assigneeFilter, paymentFilter, ethiopianYearFilter, ethiopianMonthFilter, sortDir, bookingsList, authUser?.name, calendarSystem]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -417,7 +432,7 @@ export function BookingsIndex() {
   const allChecked = selected.size > 0 && selected.size === rows.length;
 
   // Reset page when filters change
-  const activeFilterCount = statusFilter.size + screenFilter.size + assigneeFilter.size + paymentFilter.size + ethiopianMonthFilter.size;
+  const activeFilterCount = statusFilter.size + screenFilter.size + assigneeFilter.size + paymentFilter.size + ethiopianYearFilter.size + ethiopianMonthFilter.size;
 
   if (isAssignedScopeOnly) {
     return (
@@ -527,6 +542,7 @@ export function BookingsIndex() {
                 setScreenFilter(new Set());
                 setAssigneeFilter(new Set());
                 setPaymentFilter(new Set());
+                setEthiopianYearFilter(new Set());
                 setEthiopianMonthFilter(new Set());
               }}
               className="rounded-md px-2 py-0.5 text-[11px] font-semibold transition hover:bg-[var(--surface-2)]"
@@ -604,6 +620,20 @@ export function BookingsIndex() {
           onChange={(s) => { setPaymentFilter(s); setPage(1); }}
         />
         {calendarSystem === "ethiopic" && (
+          <>
+            <FilterDropdown
+              icon={<Filter className="h-3.5 w-3.5" />}
+              label="Ethiopian Year"
+              options={ethiopianYears}
+              selected={ethiopianYearFilter}
+              multi={false}
+              onChange={(s) => {
+                setEthiopianYearFilter(s);
+                setEthiopianMonthFilter(new Set());
+                setPage(1);
+              }}
+            />
+            {ethiopianYearFilter.size > 0 && (
           <FilterDropdown
             icon={<Filter className="h-3.5 w-3.5" />}
             label="Ethiopian Month"
@@ -612,6 +642,8 @@ export function BookingsIndex() {
             multi={false}
             onChange={(s) => { setEthiopianMonthFilter(s); setPage(1); }}
           />
+            )}
+          </>
         )}
         <div className="ml-auto">
           <SortButton

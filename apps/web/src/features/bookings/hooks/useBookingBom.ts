@@ -39,7 +39,8 @@ function warnIfOverAllocated(
 export function useBookingBom(booking: Booking, enabled: boolean) {
   const queryClient = useQueryClient();
   const [selectedPoolId, setSelectedPoolId] = useState("");
-  const [addQty, setAddQty] = useState(1);
+  // Keep the add quantity blank until the user explicitly enters a value.
+  const [addQty, setAddQty] = useState<string>("");
   const [staged, setStaged] = useState<StagedBomItem[]>([]);
   const [onsiteReason, setOnsiteReason] = useState("");
 
@@ -70,7 +71,8 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
   const selectedOverAllocated =
     selectedAvailability &&
     !selectedAvailability.loading &&
-    getAvailabilityStatus(addQty, selectedAvailability.available) === "warn";
+    addQty !== "" &&
+    getAvailabilityStatus(Number.parseFloat(addQty), selectedAvailability.available) === "warn";
 
   const { mutate: updateBomLine, isPending: updatingLine } = useMutation({
     mutationFn: ({ lineId, quantity }: { lineId: string; quantity: number }) =>
@@ -157,7 +159,8 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
       toast.error("Please select an item pool");
       return;
     }
-    if (addQty <= 0) {
+    const quantity = Number.parseFloat(addQty);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
       toast.error("Quantity must be at least 1");
       return;
     }
@@ -169,12 +172,12 @@ export function useBookingBom(booking: Booking, enabled: boolean) {
     const nextItem = {
       poolId: selectedPoolId,
       name: pool?.name || "Equipment",
-      quantity: addQty,
+      quantity,
     };
     warnIfOverAllocated([nextItem], availabilityByPoolId);
     setStaged((prev) => [...prev, nextItem]);
     setSelectedPoolId("");
-    setAddQty(1);
+    setAddQty("");
   };
 
   const handleAddItem = (e: React.FormEvent) => {
