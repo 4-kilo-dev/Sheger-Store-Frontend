@@ -29,7 +29,7 @@ import { getStaffApi } from "@/features/users/services/staff.api";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
-import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { useCalendarSystem, useDateFormatter } from "@/context/CalendarSystemContext";
 import { useBookingsList } from "@/features/bookings/hooks/useBookingsList";
 
 const BULK_STATUS_TARGETS: BookingStatus[] = [
@@ -92,6 +92,21 @@ const TABS = ["All", "This Week", "Upcoming", "Onsite", "Last Week", "Assigned t
 const ALL_STATUSES = STATUS_ORDER.map((s) => STATUS_LABELS[s]);
 const ALL_SCREEN_TYPES: ScreenType[] = ["P2.97", "P2.97-New", "P3.91 INDOOR", "P3.91 OUTDOOR", "P4", "P5"];
 const ALL_PAYMENTS: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
+const ETHIOPIAN_MONTHS = [
+  "መስከረም",
+  "ጥቅምት",
+  "ኅዳር",
+  "ታኅሣሥ",
+  "ጥር",
+  "የካቲት",
+  "መጋቢት",
+  "ሚያዝያ",
+  "ግንቦት",
+  "ሰኔ",
+  "ሐምሌ",
+  "ነሐሴ",
+  "ጳጉሜን",
+] as const;
 
 /** Calendar-day bounds for week tabs (Mon–Sun, local timezone). */
 function getWeekBounds(weeksAgo = 0): { start: Date; end: Date } {
@@ -113,6 +128,13 @@ function parseBookingInstant(value?: string | null): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function getEthiopianMonth(date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US-u-ca-ethiopic", {
+    month: "numeric",
+  }).formatToParts(date);
+  return Number(parts.find((part) => part.type === "month")?.value);
+}
+
 /** This/Last Week = event date falls on a day inside the week (not rental-window overlap). */
 function bookingEventInWeek(b: Booking, start: Date, end: Date): boolean {
   const event = parseBookingInstant(b.eventDate);
@@ -121,6 +143,7 @@ function bookingEventInWeek(b: Booking, start: Date, end: Date): boolean {
 }
 
 export function BookingsIndex() {
+  const { calendarSystem } = useCalendarSystem();
   const { formatDate } = useDateFormatter();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -275,6 +298,7 @@ export function BookingsIndex() {
   const [screenFilter, setScreenFilter] = useState<Set<string>>(new Set());
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [paymentFilter, setPaymentFilter] = useState<Set<string>>(new Set());
+  const [ethiopianMonthFilter, setEthiopianMonthFilter] = useState<Set<string>>(new Set());
 
   // Sort — newest created first by default
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -359,6 +383,15 @@ export function BookingsIndex() {
     // Payment filter
     if (paymentFilter.size > 0) r = r.filter((b) => paymentFilter.has(b.payment));
 
+    // Ethiopian month filter follows the selected calendar and uses the event date.
+    if (calendarSystem === "ethiopic" && ethiopianMonthFilter.size > 0) {
+      const selectedMonth = ETHIOPIAN_MONTHS.indexOf([...ethiopianMonthFilter][0] as (typeof ETHIOPIAN_MONTHS)[number]) + 1;
+      r = r.filter((b) => {
+        const event = parseBookingInstant(b.eventDate);
+        return !!event && getEthiopianMonth(event) === selectedMonth;
+      });
+    }
+
     // Newest created first by default
     r.sort((a, b) => {
       const cmp = (a.createdAt || "").localeCompare(b.createdAt || "");
@@ -366,7 +399,7 @@ export function BookingsIndex() {
     });
 
     return r;
-  }, [tab, query, statusFilter, screenFilter, assigneeFilter, paymentFilter, sortDir, bookingsList, authUser?.name]);
+  }, [tab, query, statusFilter, screenFilter, assigneeFilter, paymentFilter, ethiopianMonthFilter, sortDir, bookingsList, authUser?.name, calendarSystem]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -384,7 +417,7 @@ export function BookingsIndex() {
   const allChecked = selected.size > 0 && selected.size === rows.length;
 
   // Reset page when filters change
-  const activeFilterCount = statusFilter.size + screenFilter.size + assigneeFilter.size + paymentFilter.size;
+  const activeFilterCount = statusFilter.size + screenFilter.size + assigneeFilter.size + paymentFilter.size + ethiopianMonthFilter.size;
 
   if (isAssignedScopeOnly) {
     return (
@@ -494,6 +527,7 @@ export function BookingsIndex() {
                 setScreenFilter(new Set());
                 setAssigneeFilter(new Set());
                 setPaymentFilter(new Set());
+                setEthiopianMonthFilter(new Set());
               }}
               className="rounded-md px-2 py-0.5 text-[11px] font-semibold transition hover:bg-[var(--surface-2)]"
               style={{ color: "var(--accent)" }}
@@ -569,6 +603,16 @@ export function BookingsIndex() {
           selected={paymentFilter}
           onChange={(s) => { setPaymentFilter(s); setPage(1); }}
         />
+        {calendarSystem === "ethiopic" && (
+          <FilterDropdown
+            icon={<Filter className="h-3.5 w-3.5" />}
+            label="Ethiopian Month"
+            options={[...ETHIOPIAN_MONTHS]}
+            selected={ethiopianMonthFilter}
+            multi={false}
+            onChange={(s) => { setEthiopianMonthFilter(s); setPage(1); }}
+          />
+        )}
         <div className="ml-auto">
           <SortButton
             icon={<ArrowUpDown className="h-3.5 w-3.5" />}

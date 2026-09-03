@@ -12,6 +12,29 @@ import { getBookingsApi } from "@/features/bookings/services/bookings.api";
 import { getCombinedInventoryApi } from "@/features/inventory/services/inventory.api";
 import { StatCard } from "../components/StatCard";
 import { useSystemCurrency } from "@/hooks/use-system-currency";
+import { useCalendarSystem, type CalendarSystem } from "@/context/CalendarSystemContext";
+
+function calendarYearMonth(date: Date, calendarSystem: CalendarSystem) {
+  if (calendarSystem === "ethiopic") {
+    const parts = new Intl.DateTimeFormat("en-US-u-ca-ethiopic", {
+      year: "numeric",
+      month: "numeric",
+    }).formatToParts(date);
+    return {
+      year: Number(parts.find((part) => part.type === "year")?.value),
+      month: Number(parts.find((part) => part.type === "month")?.value),
+    };
+  }
+  return { year: date.getFullYear(), month: date.getMonth() + 1 };
+}
+
+function previousCalendarMonth(year: number, month: number, calendarSystem: CalendarSystem) {
+  const firstMonth = 1;
+  const monthCount = calendarSystem === "ethiopic" ? 13 : 12;
+  return month === firstMonth
+    ? { year: year - 1, month: monthCount }
+    : { year, month: month - 1 };
+}
 
 export function StatsOverviewWidget() {
   const authUser = useAuthUser();
@@ -19,6 +42,7 @@ export function StatsOverviewWidget() {
   const { can } = usePermissions();
   const canViewFinancials = can(PERMISSION.PAYMENT_MANAGE);
   const { formatMoneyCompact } = useSystemCurrency();
+  const { calendarSystem } = useCalendarSystem();
 
   const { data: bookingsList = [] } = useQuery({
     queryKey: ["bookings"],
@@ -34,29 +58,26 @@ export function StatsOverviewWidget() {
   // 1. Calculations for Admin/Supervisor
   const adminStats = useMemo(() => {
     const now = new Date();
-    const thisMonthIdx = now.getMonth();
-    const thisYear = now.getFullYear();
+    const currentMonth = calendarYearMonth(now, calendarSystem);
+    const lastMonth = previousCalendarMonth(currentMonth.year, currentMonth.month, calendarSystem);
 
     // This month's bookings
     const thisMonth = bookingsList.filter((b) => {
       if (!b.eventDate) return false;
-      const d = new Date(b.eventDate);
-      return d.getMonth() === thisMonthIdx && d.getFullYear() === thisYear;
+      const d = calendarYearMonth(new Date(b.eventDate), calendarSystem);
+      return d.year === currentMonth.year && d.month === currentMonth.month;
     });
 
     // Last month's bookings (for trend comparison)
-    const lastMonthDate = new Date(thisYear, thisMonthIdx - 1, 1);
-    const lastMonthIdx = lastMonthDate.getMonth();
-    const lastMonthYear = lastMonthDate.getFullYear();
-    const lastMonth = bookingsList.filter((b) => {
+    const previousMonthBookings = bookingsList.filter((b) => {
       if (!b.eventDate) return false;
-      const d = new Date(b.eventDate);
-      return d.getMonth() === lastMonthIdx && d.getFullYear() === lastMonthYear;
+      const d = calendarYearMonth(new Date(b.eventDate), calendarSystem);
+      return d.year === lastMonth.year && d.month === lastMonth.month;
     });
 
     // Revenue = sum of paymentAmount for this month's bookings
     const revenue = thisMonth.reduce((s, b) => s + (b.amount || 0), 0);
-    const lastMonthRevenue = lastMonth.reduce((s, b) => s + (b.amount || 0), 0);
+    const lastMonthRevenue = previousMonthBookings.reduce((s, b) => s + (b.amount || 0), 0);
 
     // Compute % change
     let revenueTrend: string;
@@ -85,7 +106,7 @@ export function StatsOverviewWidget() {
     const paid = thisMonth.filter((b) => b.payment === "PAID").length;
 
     return { thisMonth: thisMonth.length, revenue, revenueTrend, onsite, upcoming, paid };
-  }, [bookingsList]);
+  }, [bookingsList, calendarSystem]);
 
   // 2. Calculations for CCR
   const ccrStats = useMemo(() => {

@@ -22,6 +22,7 @@ import {
   listPerformanceMetricsApi,
   createPerformanceMetricApi,
   updatePerformanceMetricApi,
+  deletePerformanceMetricApi,
   type PerformanceMetric,
 } from "@/features/bookings/services/evaluations.api";
 import {
@@ -619,6 +620,28 @@ function PerformanceMetricsPanel() {
     },
   });
 
+  const { mutate: deleteMetric, isPending: deleting } = useMutation({
+    mutationFn: deletePerformanceMetricApi,
+    onSuccess: () => {
+      toast.success("Performance metric deleted.");
+      queryClient.invalidateQueries({ queryKey: ["all-settings-metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["active-metrics"] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to delete metric");
+    },
+  });
+
+  const handleDeleteMetric = (metric: PerformanceMetric) => {
+    if (!isAdmin) {
+      toast.error("Only administrators can manage performance metrics!");
+      return;
+    }
+    if (window.confirm(`Delete the "${metric.label}" metric? Historical evaluations will be preserved.`)) {
+      deleteMetric(metric.id);
+    }
+  };
+
   const handleToggleActive = (metric: PerformanceMetric) => {
     if (!isAdmin) {
       toast.error("Only administrators can manage performance metrics!");
@@ -797,13 +820,25 @@ function PerformanceMetricsPanel() {
                     </td>
                     {isAdmin && (
                       <td className="px-3 py-3 text-right">
-                        <button
-                          onClick={() => openEditModal(m)}
-                          className="text-[11px] font-semibold hover:opacity-80 animate-in fade-in duration-200"
-                          style={{ color: "var(--accent)" }}
-                        >
-                          Edit
-                        </button>
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            onClick={() => openEditModal(m)}
+                            disabled={updating || deleting}
+                            className="text-[11px] font-semibold hover:opacity-80 animate-in fade-in duration-200 disabled:opacity-50"
+                            style={{ color: "var(--accent)" }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteMetric(m)}
+                            disabled={updating || deleting}
+                            title="Delete metric"
+                            aria-label={`Delete ${m.label}`}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-400 hover:text-red-300 disabled:opacity-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Delete
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
