@@ -8,6 +8,26 @@ import { useAppContext } from "@/context/AppContext";
 import { useSystemCurrency } from "@/hooks/use-system-currency";
 import { useBookings, useInventory } from "@/hooks/useOperations";
 import { colors } from "@/theme/tokens";
+import { useCalendarSystem, type CalendarSystem } from "@/context/CalendarSystemContext";
+
+function calendarYearMonth(date: Date, calendarSystem: CalendarSystem) {
+  if (calendarSystem === "ethiopic") {
+    const parts = new Intl.DateTimeFormat("en-US-u-ca-ethiopic", {
+      year: "numeric",
+      month: "numeric",
+    }).formatToParts(date);
+    return {
+      year: Number(parts.find((part) => part.type === "year")?.value),
+      month: Number(parts.find((part) => part.type === "month")?.value),
+    };
+  }
+  return { year: date.getFullYear(), month: date.getMonth() + 1 };
+}
+
+function previousCalendarMonth(year: number, month: number, calendarSystem: CalendarSystem) {
+  const monthCount = calendarSystem === "ethiopic" ? 13 : 12;
+  return month === 1 ? { year: year - 1, month: monthCount } : { year, month: month - 1 };
+}
 
 function namesMatch(assignee: string, profileName: string) {
   const a = assignee.trim().toLowerCase();
@@ -19,22 +39,21 @@ export function StatsOverviewWidget() {
   const { activeProfile } = useAppContext();
   const role = activeProfile.role;
   const { formatMoneyCompact } = useSystemCurrency();
+  const { calendarSystem } = useCalendarSystem();
   const { data: BOOKINGS = [] } = useBookings();
   const { data: INVENTORY = [] } = useInventory();
 
   const stats = useMemo(() => {
     const now = new Date();
+    const currentMonth = calendarYearMonth(now, calendarSystem);
+    const previousMonth = previousCalendarMonth(currentMonth.year, currentMonth.month, calendarSystem);
     const thisMonth = BOOKINGS.filter((booking) => {
-      const date = new Date(booking.eventDate);
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+      const date = calendarYearMonth(new Date(booking.eventDate), calendarSystem);
+      return date.year === currentMonth.year && date.month === currentMonth.month;
     });
-    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonth = BOOKINGS.filter((booking) => {
-      const date = new Date(booking.eventDate);
-      return (
-        date.getMonth() === lastMonthDate.getMonth() &&
-        date.getFullYear() === lastMonthDate.getFullYear()
-      );
+      const date = calendarYearMonth(new Date(booking.eventDate), calendarSystem);
+      return date.year === previousMonth.year && date.month === previousMonth.month;
     });
     const revenue = thisMonth.reduce((sum, booking) => sum + booking.amount, 0);
     const lastMonthRevenue = lastMonth.reduce((sum, booking) => sum + booking.amount, 0);
@@ -81,7 +100,7 @@ export function StatsOverviewWidget() {
       mealBudgetsActive,
       inventoryDamaged,
     };
-  }, [activeProfile.name, BOOKINGS, INVENTORY]);
+  }, [activeProfile.name, BOOKINGS, INVENTORY, calendarSystem]);
 
   const cards = useMemo(() => {
     if (role === "CCR") {

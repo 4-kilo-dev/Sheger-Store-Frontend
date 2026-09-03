@@ -250,6 +250,11 @@ export async function updatePerformanceMetricApi(
   return client.patch<PerformanceMetric>(`/api/performance-metrics/${id}`, payload);
 }
 
+/** Deactivates a metric while preserving historical evaluation scores. */
+export async function deletePerformanceMetricApi(id: string): Promise<PerformanceMetric> {
+  return client.delete<PerformanceMetric>(`/api/performance-metrics/${id}`);
+}
+
 // ----------------------------------------------------
 // 2. Internal Evaluations APIs
 // ----------------------------------------------------
