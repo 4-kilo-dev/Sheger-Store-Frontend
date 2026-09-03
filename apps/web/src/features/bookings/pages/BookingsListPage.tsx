@@ -87,7 +87,7 @@ const _Route = createFileRoute("/bookings/")({
   component: BookingsIndex,
 });
 
-const TABS = ["All", "This Week", "Upcoming", "Onsite", "Last Week", "Assigned to Me"] as const;
+const TABS = ["All", "This Week", "This Month", "Upcoming", "Onsite", "Last Week", "Assigned to Me"] as const;
 
 const ALL_STATUSES = STATUS_ORDER.map((s) => STATUS_LABELS[s]);
 const ALL_SCREEN_TYPES: ScreenType[] = ["P2.97", "P2.97-New", "P3.91 INDOOR", "P3.91 OUTDOOR", "P4", "P5"];
@@ -339,6 +339,18 @@ export function BookingsIndex() {
     if (tab === "This Week") {
       const { start, end } = getWeekBounds(0);
       r = r.filter((b) => bookingEventInWeek(b, start, end));
+    }
+    if (tab === "This Month") {
+      const now = new Date();
+      const currentYear = calendarSystem === "ethiopic" ? getEthiopianYear(now) : now.getFullYear();
+      const currentMonth = calendarSystem === "ethiopic" ? getEthiopianMonth(now) : now.getMonth();
+      r = r.filter((b) => {
+        const event = parseBookingInstant(b.eventDate);
+        if (!event) return false;
+        return calendarSystem === "ethiopic"
+          ? getEthiopianYear(event) === currentYear && getEthiopianMonth(event) === currentMonth
+          : event.getFullYear() === currentYear && event.getMonth() === currentMonth;
+      });
     }
     if (tab === "Last Week") {
       const { start, end } = getWeekBounds(1);
