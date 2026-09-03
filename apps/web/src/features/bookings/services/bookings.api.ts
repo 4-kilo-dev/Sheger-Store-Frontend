@@ -31,20 +31,29 @@ function parseSqm(value: string): number {
 
 const MOUNT_STYLE_RE = /^(hanging|sitting)$/i;
 const DIMENSION_RE = /(\d+(?:\.\d+)?)\s*[wW]\s*[x×]\s*(\d+(?:\.\d+)?)\s*[hH]?/i;
+const DIMENSION_TOKEN_RE = /(\d+(?:\.\d+)?)\s*[wW]\s*[x×]\s*(\d+(?:\.\d+)?)\s*[hH]?/gi;
 
 function isMountStyle(value?: string | null): boolean {
   return MOUNT_STYLE_RE.test(String(value ?? "").trim());
 }
 
-/** Normalize layout to `(4wx3h)`. Returns "" for empty / mount-style enums. */
-function formatArrangementLabel(value?: string | null): string {
+/** Normalize layout dimensions while preserving multi-layout arrangements. */
+export function formatArrangementLabel(value?: string | null): string {
   const raw = String(value ?? "").trim();
   if (!raw || isMountStyle(raw)) return "";
 
   const dim = raw.match(/^\(?\s*(\d+(?:\.\d+)?)\s*[wW]\s*[x×]\s*(\d+(?:\.\d+)?)\s*[hH]?\s*\)?$/);
   if (dim) return `(${dim[1]}wx${dim[2]}h)`;
 
-  const loose = raw.match(DIMENSION_RE);
+  const dimensions = [...raw.matchAll(DIMENSION_TOKEN_RE)];
+  if (dimensions.length > 1) {
+    return raw.replace(
+      DIMENSION_TOKEN_RE,
+      (_match, width: string, height: string) => `${width}wx${height}h`,
+    );
+  }
+
+  const loose = dimensions[0];
   if (loose) return `(${loose[1]}wx${loose[2]}h)`;
 
   return raw;
