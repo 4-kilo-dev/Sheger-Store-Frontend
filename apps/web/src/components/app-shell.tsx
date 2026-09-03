@@ -70,10 +70,7 @@ function formatRoleLabel(roleKey?: string): string {
 function SidebarLogo({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="flex h-14 items-center gap-2 border-b px-4" style={{ borderColor: "var(--border)" }}>
-      <div className="relative h-8 w-8 shrink-0">
-        <div className="absolute inset-0 rotate-45 rounded-[3px] border-2" style={{ borderColor: "var(--accent)" }} />
-        <div className="absolute inset-1 rotate-45 rounded-[2px] border-2" style={{ borderColor: "var(--foreground)" }} />
-      </div>
+      <img src="/favicon.svg" alt="Vortex Visual" className="h-8 w-8 shrink-0 rounded" />
       {!collapsed && (
         <div className="flex flex-col leading-none">
           <span className="text-[13px] font-bold tracking-[0.18em] text-foreground">VORTEX</span>

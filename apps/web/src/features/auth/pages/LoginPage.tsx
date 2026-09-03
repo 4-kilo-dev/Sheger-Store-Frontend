@@ -14,8 +14,7 @@ import { loginApi } from "@/features/auth/services/auth.api";
 
 function Brand() { 
     return <div className="flex items-center gap-3">
-        <div className="h-9 w-9 rotate-45 border-2 border-accent">
-            <div className="m-1 h-5 w-5 border border-foreground"/></div>
+        <img src="/favicon.svg" alt="Vortex Visual" className="h-10 w-10 rounded" />
             <div>
                 <div className="text-sm font-bold tracking-[.22em]">VORTEX</div>
                 <div className="text-[9px] font-bold tracking-[.32em] text-accent">VISUAL</div>

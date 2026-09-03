@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Vortex Visual">
+  <rect width="100" height="100" fill="#1D1E22"/>
+  <defs>
+    <clipPath id="vortex-yellow-sector">
+      <polygon points="50,50 50,-20 130,-20 130,42"/>
+    </clipPath>
+  </defs>
+  <g fill="none" stroke="#F5F5F0" stroke-width="3.4" stroke-linecap="butt">
+    <circle cx="50" cy="50" r="15" pathLength="100" stroke-dasharray="14 8 22 10 16 30" transform="rotate(10 50 50)"/>
+    <circle cx="50" cy="50" r="21" pathLength="100" stroke-dasharray="18 7 12 9 24 8 14 8" transform="rotate(-24 50 50)"/>
+    <circle cx="50" cy="50" r="27" pathLength="100" stroke-dasharray="22 8 16 10 20 7 12 5" transform="rotate(42 50 50)"/>
+    <circle cx="50" cy="50" r="33" pathLength="100" stroke-dasharray="16 9 26 8 14 10 18 -1" transform="rotate(-70 50 50)"/>
+    <circle cx="50" cy="50" r="39" pathLength="100" stroke-dasharray="24 7 14 9 20 8 16 16" transform="rotate(96 50 50)"/>
+    <circle cx="50" cy="50" r="45" pathLength="100" stroke-dasharray="18 10 22 8 12 9 24 -3" transform="rotate(-132 50 50)"/>
+    <g clip-path="url(#vortex-yellow-sector)" stroke="#FFC72C">
+      <circle cx="50" cy="50" r="15" pathLength="100" stroke-dasharray="14 8 22 10 16 30" transform="rotate(10 50 50)"/>
+      <circle cx="50" cy="50" r="21" pathLength="100" stroke-dasharray="18 7 12 9 24 8 14 8" transform="rotate(-24 50 50)"/>
+      <circle cx="50" cy="50" r="27" pathLength="100" stroke-dasharray="22 8 16 10 20 7 12 5" transform="rotate(42 50 50)"/>
+      <circle cx="50" cy="50" r="33" pathLength="100" stroke-dasharray="16 9 26 8 14 10 18 -1" transform="rotate(-70 50 50)"/>
+      <circle cx="50" cy="50" r="39" pathLength="100" stroke-dasharray="24 7 14 9 20 8 16 16" transform="rotate(96 50 50)"/>
+      <circle cx="50" cy="50" r="45" pathLength="100" stroke-dasharray="18 10 22 8 12 9 24 -3" transform="rotate(-132 50 50)"/>
+    </g>
+  </g>
+</svg>
