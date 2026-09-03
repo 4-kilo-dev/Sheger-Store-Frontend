@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { AppState, Platform } from "react-native";
+import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { useQuery } from "@tanstack/react-query";
 import { useAppContext } from "@/context/AppContext";
@@ -116,7 +117,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [isAuthenticated, refetch]);
 
   useEffect(() => {
-    if (!isAuthenticated || Platform.OS === "web") return;
+    if (!isAuthenticated || Platform.OS === "web" || Constants.appOwnership === "expo") return;
     let cancelled = false;
     const registerDeviceToken = (deviceToken: { data: string }) => {
       if (
