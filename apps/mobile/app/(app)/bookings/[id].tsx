@@ -136,6 +136,7 @@ export default function BookingDetailScreen() {
   const [tab, setTab] = useState<BookingTabName>("Overview");
   const [reverseOpen, setReverseOpen] = useState(false);
   const [reverseReason, setReverseReason] = useState("");
+  const [criticalActionsOpen, setCriticalActionsOpen] = useState(false);
 
   const bookingWithAssignments = useMemo(() => {
     if (!booking) return undefined;
@@ -227,7 +228,13 @@ export default function BookingDetailScreen() {
       a.id === "booking.checkout_reverse" ||
       a.id === "inventory.checkout_reverse",
   );
-  const primaryAction = allActions[0] ?? caps.assignTechnicianAction ?? null;
+  const primaryCandidate = allActions[0] ?? caps.assignTechnicianAction ?? null;
+  const primaryAction = primaryCandidate?.variant === "destructive" ? null : primaryCandidate;
+  const secondaryActions = allActions.filter(
+    (action) => action !== primaryAction && action.variant !== "destructive",
+  );
+  const criticalActions = allActions.filter((action) => action.variant === "destructive");
+  const hasCriticalActions = caps.canDeleteBooking || criticalActions.length > 0;
 
   const isSubmittingAction =
     actions.isTransitioning ||
@@ -235,6 +242,31 @@ export default function BookingDetailScreen() {
     actions.isCheckingOut ||
     actions.isAssigningTechnicians ||
     createHandoff.isPending;
+
+  const confirmDeleteBooking = () => {
+    Alert.alert(
+      "Delete booking",
+      `Permanently delete ${booking.code} and its associated records? This cannot be undone.`,
+      [
+        { text: "Keep booking", style: "cancel" },
+        {
+          text: "Delete permanently",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteBooking.mutateAsync(booking.id);
+              router.replace(to("/bookings"));
+            } catch (error) {
+              Alert.alert(
+                "Delete failed",
+                error instanceof Error ? error.message : "Could not delete booking.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <Screen
@@ -248,43 +280,9 @@ export default function BookingDetailScreen() {
     >
       <BackLink label="Back to Bookings" href="/bookings" />
 
-      {caps.canDeleteBooking ? (
-        <Button
-          variant="danger"
-          icon={Trash2}
-          disabled={deleteBooking.isPending}
-          onPress={() =>
-            Alert.alert(
-              "Delete booking",
-              "This permanently removes the booking and associated records.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Delete",
-                  style: "destructive",
-                  onPress: async () => {
-                    try {
-                      await deleteBooking.mutateAsync(booking.id);
-                      router.replace(to("/bookings"));
-                    } catch (error) {
-                      Alert.alert(
-                        "Delete failed",
-                        error instanceof Error ? error.message : "Could not delete booking.",
-                      );
-                    }
-                  },
-                },
-              ],
-            )
-          }
-        >
-          {deleteBooking.isPending ? "Deleting..." : "Delete Booking"}
-        </Button>
-      ) : null}
-
-      {allActions.length > 1 ? (
+      {secondaryActions.length > 0 ? (
         <View style={styles.actionBar}>
-          {allActions.slice(1).map((act) => (
+          {secondaryActions.map((act) => (
             <Button
               key={`${act.id}-${act.targetStatus}`}
               variant={
@@ -300,6 +298,17 @@ export default function BookingDetailScreen() {
             </Button>
           ))}
         </View>
+      ) : null}
+
+      {hasCriticalActions ? (
+        <Button
+          variant="outline"
+          icon={ShieldAlert}
+          onPress={() => setCriticalActionsOpen(true)}
+          style={styles.criticalActionsTrigger}
+        >
+          Critical actions
+        </Button>
       ) : null}
 
       <Card style={styles.hero}>
@@ -486,6 +495,49 @@ export default function BookingDetailScreen() {
       {safeTab === "Activity" ? <ActivityTab statusHistory={booking.statusHistory} /> : null}
 
       <BookingActionSheet booking={booking} actions={actions} />
+      <BottomSheet
+        visible={criticalActionsOpen}
+        title="Critical actions"
+        onClose={() => setCriticalActionsOpen(false)}
+      >
+        <AppText variant="subtitle">
+          These actions force a booking change or permanently delete its records. Review the booking
+          before continuing.
+        </AppText>
+        <Card style={styles.criticalActionContext}>
+          <AppText variant="eyebrow">Booking</AppText>
+          <AppText style={{ fontWeight: "800" }}>{booking.code}</AppText>
+          <AppText variant="small" color={colors.text2}>
+            {booking.client} · {STATUS_LABELS[booking.status]}
+          </AppText>
+        </Card>
+        {criticalActions.map((action) => (
+          <Button
+            key={`${action.id}-${action.targetStatus}`}
+            variant="danger"
+            disabled={isSubmittingAction}
+            onPress={() => {
+              setCriticalActionsOpen(false);
+              actions.openAction(action);
+            }}
+          >
+            {action.label}
+          </Button>
+        ))}
+        {caps.canDeleteBooking ? (
+          <Button
+            variant="danger"
+            icon={Trash2}
+            disabled={deleteBooking.isPending}
+            onPress={confirmDeleteBooking}
+          >
+            {deleteBooking.isPending ? "Deleting..." : "Delete Booking"}
+          </Button>
+        ) : null}
+        <Button variant="outline" onPress={() => setCriticalActionsOpen(false)}>
+          Close
+        </Button>
+      </BottomSheet>
       <DamageReportSheet booking={booking} checkoutSnapshot={checkoutSnapshot} actions={actions} />
       <BomFulfillmentConflictSheet
         open={actions.showCheckoutConflictModal}
@@ -2400,6 +2452,14 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
     marginBottom: 8,
+  },
+  criticalActionsTrigger: {
+    alignSelf: "flex-start",
+  },
+  criticalActionContext: {
+    padding: 12,
+    gap: 4,
+    backgroundColor: colors.surface2,
   },
   rowIconButton: {
     minWidth: 44,
