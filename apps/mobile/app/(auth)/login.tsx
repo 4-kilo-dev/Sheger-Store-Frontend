@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { z } from "zod";
 import { AppText, BrandMark, Button, Field, Input } from "@/components/ui";
 import { useAppContext } from "@/context/AppContext";
-import { colors, typography } from "@/theme/tokens";
+import { alpha, colors, typography } from "@/theme/tokens";
 
 const loginSchema = z.object({
   email: z.string().email("Enter a valid email address"),
@@ -29,7 +29,7 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginScreen() {
-  const { login } = useAppContext();
+  const { login, theme } = useAppContext();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -63,7 +63,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={0}
     >
-      <StatusBar style="light" />
+      <StatusBar style={theme === "dark" ? "light" : "dark"} />
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
@@ -78,7 +78,7 @@ export default function LoginScreen() {
       >
         <View style={[styles.hero, { paddingTop: Math.max(insets.top, 24) + 16 }]}>
           <LinearGradient
-            colors={[colors.accentDim + "3d", "transparent"]}
+            colors={[alpha(colors.accent, 0.24), "transparent"]}
             start={{ x: 0.1, y: 0 }}
             end={{ x: 0.9, y: 0.85 }}
             style={StyleSheet.absoluteFill}

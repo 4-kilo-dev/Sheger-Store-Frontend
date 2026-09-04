@@ -8,19 +8,22 @@ import React, {
   useState,
 } from "react";
 import { AppState, Platform } from "react-native";
-import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
+import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useAppContext } from "@/context/AppContext";
 import { authStorage } from "@/lib/api/client";
 import {
   connectNotificationsStream,
   getNotificationFeedApi,
+  getPushNotificationLinkTo,
   getUnreadNotificationCountsApi,
   markAllNotificationsReadApi,
   markNotificationReadApi,
   registerNotificationDeviceApi,
 } from "@/services/notifications-api";
 import type { Notification } from "@/types/domain";
+import { to } from "@/utils/routes";
 
 interface NotificationsContextType {
   notifications: Notification[];
@@ -45,6 +48,12 @@ function upsert(current: Map<string, Notification>, items: Notification[]) {
   return next;
 }
 
+function getExpoProjectId(): string | undefined {
+  const extra = Constants.expoConfig?.extra as
+    { eas?: { projectId?: string }; expoProjectId?: string } | undefined;
+  return Constants.easConfig?.projectId || extra?.eas?.projectId || extra?.expoProjectId;
+}
+
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, authUser } = useAppContext();
   const [byId, setById] = useState<Map<string, Notification>>(new Map());
@@ -52,6 +61,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [isLive, setIsLive] = useState(false);
   const cursorRef = useRef<string | null>(null);
+  const handledPushResponseIds = useRef(new Set<string>());
   cursorRef.current = nextCursor;
 
   const feedQuery = useQuery({
@@ -116,8 +126,13 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [isAuthenticated, refetch]);
 
   useEffect(() => {
-    if (!isAuthenticated || Platform.OS === "web") return;
+    // Importing expo-notifications eagerly is unsafe in Android Expo Go. Its
+    // auto-registration module installs a push-token listener at import time,
+    // and remote push notifications are intentionally unavailable there.
+    if (!isAuthenticated || Platform.OS === "web" || Constants.appOwnership === "expo") return;
     let cancelled = false;
+    let subscription: { remove: () => void } | undefined;
+    let responseSubscription: { remove: () => void } | undefined;
     const registerDeviceToken = (deviceToken: { data: string }) => {
       if (
         cancelled ||
@@ -127,17 +142,50 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         return;
       void registerNotificationDeviceApi(Platform.OS, deviceToken.data).catch(() => undefined);
     };
-    const subscription = Notifications.addPushTokenListener(registerDeviceToken);
-    (async () => {
-      const current = await Notifications.getPermissionsAsync();
-      const permission = current.granted ? current : await Notifications.requestPermissionsAsync();
-      if (!permission.granted || cancelled) return;
-      const token = await Notifications.getDevicePushTokenAsync();
-      registerDeviceToken(token);
-    })().catch(() => undefined);
+    void import("expo-notifications")
+      .then(async (Notifications) => {
+        if (cancelled) return;
+        const openNotification = (response: {
+          notification: { request: { content: { data?: unknown } } };
+        }) => {
+          const data = response.notification.request.content.data;
+          const notificationId =
+            data && typeof data === "object"
+              ? (data as Record<string, unknown>).notificationId
+              : undefined;
+          if (
+            typeof notificationId === "string" &&
+            handledPushResponseIds.current.has(notificationId)
+          )
+            return;
+          const path = getPushNotificationLinkTo(data);
+          if (!path) return;
+          if (typeof notificationId === "string") {
+            handledPushResponseIds.current.add(notificationId);
+          }
+          router.push(to(path));
+        };
+        subscription = Notifications.addPushTokenListener(registerDeviceToken);
+        responseSubscription =
+          Notifications.addNotificationResponseReceivedListener(openNotification);
+        const lastResponse = await Notifications.getLastNotificationResponseAsync();
+        if (!cancelled && lastResponse) openNotification(lastResponse);
+        const current = await Notifications.getPermissionsAsync();
+        const permission = current.granted
+          ? current
+          : await Notifications.requestPermissionsAsync();
+        if (!permission.granted || cancelled) return;
+        const projectId = getExpoProjectId();
+        const token = projectId
+          ? await Notifications.getExpoPushTokenAsync({ projectId })
+          : await Notifications.getExpoPushTokenAsync();
+        registerDeviceToken(token);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
-      subscription.remove();
+      subscription?.remove();
+      responseSubscription?.remove();
     };
   }, [authUser?.id, isAuthenticated]);
 

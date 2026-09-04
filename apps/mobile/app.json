@@ -24,16 +24,27 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.nuelsha.vortexvisualoperations",
+      "googleServicesFile": "./android/app/google-services.json",
       "usesCleartextTraffic": false,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "ios": {
       "bundleIdentifier": "com.nuelsha.vortexvisualoperations",
       "supportsTablet": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3dc8b87c-fff9-4f51-a01c-4ab490ca1db0"
+      }
+    },
+    "owner": "mhri"
   }
 }

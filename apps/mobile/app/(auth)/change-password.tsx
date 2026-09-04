@@ -25,7 +25,7 @@ const changePasswordSchema = z
 type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
 
 export default function ChangePasswordScreen() {
-  const { changePassword } = useAppContext();
+  const { changePassword, theme } = useAppContext();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -59,7 +59,7 @@ export default function ChangePasswordScreen() {
       style={styles.screen}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <StatusBar style="light" />
+      <StatusBar style={theme === "dark" ? "light" : "dark"} />
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[

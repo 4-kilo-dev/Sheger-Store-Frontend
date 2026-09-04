@@ -1,4 +1,12 @@
-import { CalendarRange, Clock, DollarSign, Package, TrendingUp, Users } from "lucide-react-native";
+import {
+  CalendarRange,
+  Clock,
+  DollarSign,
+  Package,
+  TrendingUp,
+  Users,
+  type LucideIcon,
+} from "lucide-react-native";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Pressable, View, StyleSheet } from "react-native";
@@ -25,6 +33,18 @@ function namesMatch(assignee: string, profileName: string) {
   const p = profileName.trim().toLowerCase();
   return a === p || a.startsWith(p) || p.startsWith(a);
 }
+
+type DashboardBookingTab = "This Month" | "This Week" | "Onsite";
+
+type DashboardCard = {
+  label: string;
+  value: string | number;
+  note: string;
+  icon: LucideIcon;
+  tone?: string;
+  href: string;
+  bookingTab?: DashboardBookingTab;
+};
 
 export function StatsOverviewWidget() {
   const { activeProfile } = useAppContext();
@@ -104,7 +124,7 @@ export function StatsOverviewWidget() {
     };
   }, [activeProfile.name, BOOKINGS, INVENTORY, calendarSystem, backendNow]);
 
-  const cards = useMemo(() => {
+  const cards = useMemo<DashboardCard[]>(() => {
     if (role === "CCR") {
       return [
         {
@@ -233,6 +253,7 @@ export function StatsOverviewWidget() {
         note: `${stats.paid} paid`,
         icon: CalendarRange,
         href: "/bookings",
+        bookingTab: "This Month",
       },
       {
         label: "Revenue",
@@ -255,6 +276,7 @@ export function StatsOverviewWidget() {
         icon: Package,
         tone: colors.status.ACCEPTED,
         href: "/bookings",
+        bookingTab: "Onsite",
       },
       {
         label: "This week",
@@ -263,6 +285,7 @@ export function StatsOverviewWidget() {
         icon: Clock,
         tone: colors.payment.ADVANCE,
         href: "/bookings",
+        bookingTab: "This Week",
       },
     ];
   }, [formatMoneyCompact, role, stats]);
@@ -274,7 +297,15 @@ export function StatsOverviewWidget() {
           key={card.label}
           accessibilityRole="button"
           accessibilityLabel={`${card.label}: ${card.value}`}
-          onPress={() => router.push(to(card.href))}
+          onPress={() =>
+            router.push(
+              to(
+                card.bookingTab
+                  ? `${card.href}?tab=${encodeURIComponent(card.bookingTab)}`
+                  : card.href,
+              ),
+            )
+          }
           style={({ pressed }) => [styles.statTile, pressed ? styles.statTilePressed : null]}
         >
           <StatCard

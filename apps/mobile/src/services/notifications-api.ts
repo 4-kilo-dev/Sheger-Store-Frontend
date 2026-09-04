@@ -74,6 +74,38 @@ export interface UnreadNotificationCounts {
   tasks: number;
 }
 
+type NotificationTarget = Pick<Notification, "eventType" | "relatedEntity" | "relatedId">;
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+export function getNotificationLinkTo(target: NotificationTarget): string | undefined {
+  const relatedId = asString(target.relatedId);
+  if (
+    (target.relatedEntity === "booking" ||
+      target.relatedEntity === "assignment" ||
+      target.eventType === "booking.technical_allocated") &&
+    relatedId
+  ) {
+    return `/bookings/${encodeURIComponent(relatedId)}`;
+  }
+  if (target.relatedEntity === "damage_missing_report") return "/damage-report";
+  return undefined;
+}
+
+export function getPushNotificationLinkTo(data: unknown): string | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const target = data as Record<string, unknown>;
+  const eventType = asString(target.eventType);
+  if (!eventType) return undefined;
+  return getNotificationLinkTo({
+    eventType,
+    relatedEntity: asString(target.relatedEntity),
+    relatedId: asString(target.relatedId),
+  });
+}
+
 function fromApiNotification(notification: ApiNotification): Notification {
   return {
     ...notification,
@@ -134,16 +166,7 @@ export function getNotificationDisplay(notification: Notification) {
   const type = notification.type || fromEvent?.type || ("System" as NotificationType);
   const priority =
     notification.priority || fromEvent?.priority || ("NORMAL" as NotificationPriority);
-  const linkTo =
-    (notification.relatedEntity === "booking" ||
-      notification.eventType === "booking.technical_allocated") &&
-    notification.relatedId
-      ? `/bookings/${notification.relatedId}`
-      : notification.relatedEntity === "assignment" && notification.relatedId
-        ? `/bookings/${notification.relatedId}`
-        : notification.relatedEntity === "damage_missing_report"
-          ? "/damage-report"
-          : undefined;
+  const linkTo = getNotificationLinkTo(notification);
 
   return { title, type, priority, linkTo, unread: !notification.readAt };
 }

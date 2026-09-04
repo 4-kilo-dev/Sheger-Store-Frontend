@@ -1,7 +1,7 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { to } from "@/utils/routes";
 import { Filter, Plus } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, Share, StyleSheet, View } from "react-native";
 import { BookingCard } from "@/components/cards";
 import {
@@ -25,10 +25,37 @@ import { useBookings, useStaff } from "@/hooks/useOperations";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { useAppContext } from "@/context/AppContext";
+import { useCalendarSystem, type CalendarSystem } from "@/context/CalendarSystemContext";
 import { transitionBookingStatusApi } from "@/services/bookings-api";
 
-const TABS = ["All", "This Week", "Upcoming", "Onsite", "Last Week", "Assigned to Me"] as const;
+const TABS = [
+  "All",
+  "This Month",
+  "This Week",
+  "Upcoming",
+  "Onsite",
+  "Last Week",
+  "Assigned to Me",
+] as const;
 const PAYMENT_STATUSES: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
+
+function isBookingTab(value: string | undefined): value is (typeof TABS)[number] {
+  return Boolean(value && TABS.includes(value as (typeof TABS)[number]));
+}
+
+function calendarYearMonth(date: Date, calendarSystem: CalendarSystem) {
+  if (calendarSystem === "ethiopic") {
+    const parts = new Intl.DateTimeFormat("en-US-u-ca-ethiopic", {
+      year: "numeric",
+      month: "numeric",
+    }).formatToParts(date);
+    return {
+      year: Number(parts.find((part) => part.type === "year")?.value),
+      month: Number(parts.find((part) => part.type === "month")?.value),
+    };
+  }
+  return { year: date.getFullYear(), month: date.getMonth() + 1 };
+}
 
 function matchesQuery(haystack: Array<string | number | null | undefined>, query: string): boolean {
   const needle = query.trim().toLowerCase();
@@ -63,10 +90,12 @@ async function runBulkTransitions(
 }
 
 export default function BookingsScreen() {
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
   const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings({ poll: true });
   const { data: staff = [] } = useStaff();
   const { canAny, can } = usePermissions();
   const { activeProfile } = useAppContext();
+  const { calendarSystem } = useCalendarSystem();
   const canCreateBooking = can(PERMISSION.BOOKING_CREATE);
   const canCancelOverride = can(PERMISSION.BOOKING_CANCEL_OVERRIDE);
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
@@ -81,6 +110,10 @@ export default function BookingsScreen() {
   const [bulkReason, setBulkReason] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
 
+  useEffect(() => {
+    if (isBookingTab(tabParam)) setTab(tabParam);
+  }, [tabParam]);
+
   const isAssignedScopeOnly =
     !canAny([PERMISSION.BOOKING_VIEW_ALL]) && canAny([PERMISSION.BOOKING_VIEW_ASSIGNED]);
 
@@ -89,7 +122,15 @@ export default function BookingsScreen() {
     if (isAssignedScopeOnly) {
       result = result.filter((booking) => booking.assignees.includes(activeProfile.name));
     }
-    if (tab === "Onsite") {
+    if (tab === "This Month") {
+      const currentMonth = calendarYearMonth(new Date(), calendarSystem);
+      result = result.filter((booking) => {
+        const date = new Date(booking.eventDate);
+        if (Number.isNaN(date.getTime())) return false;
+        const bookingMonth = calendarYearMonth(date, calendarSystem);
+        return bookingMonth.year === currentMonth.year && bookingMonth.month === currentMonth.month;
+      });
+    } else if (tab === "Onsite") {
       result = result.filter((booking) => booking.status === "ONSITE");
     } else if (tab === "Upcoming") {
       const now = new Date();
@@ -100,15 +141,10 @@ export default function BookingsScreen() {
       });
     } else if (tab === "This Week") {
       const now = new Date();
-      const startOfWeek = new Date(now);
-      startOfWeek.setHours(0, 0, 0, 0);
-      startOfWeek.setDate(now.getDate() - now.getDay());
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
-      endOfWeek.setHours(23, 59, 59, 999);
       result = result.filter((booking) => {
-        const d = new Date(booking.eventDate);
-        return !isNaN(d.getTime()) && d >= startOfWeek && d <= endOfWeek;
+        const date = new Date(booking.assemblyDate);
+        const daysAway = (date.getTime() - now.getTime()) / 86400000;
+        return !Number.isNaN(date.getTime()) && daysAway >= 0 && daysAway <= 7;
       });
     } else if (tab === "Last Week") {
       const now = new Date();
@@ -165,6 +201,7 @@ export default function BookingsScreen() {
     paymentFilter,
     isAssignedScopeOnly,
     activeProfile.name,
+    calendarSystem,
   ]);
 
   const selectedBookings = useMemo(
