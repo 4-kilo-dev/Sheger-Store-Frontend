@@ -9,18 +9,21 @@ import React, {
 } from "react";
 import { AppState, Platform } from "react-native";
 import Constants from "expo-constants";
+import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useAppContext } from "@/context/AppContext";
 import { authStorage } from "@/lib/api/client";
 import {
   connectNotificationsStream,
   getNotificationFeedApi,
+  getPushNotificationLinkTo,
   getUnreadNotificationCountsApi,
   markAllNotificationsReadApi,
   markNotificationReadApi,
   registerNotificationDeviceApi,
 } from "@/services/notifications-api";
 import type { Notification } from "@/types/domain";
+import { to } from "@/utils/routes";
 
 interface NotificationsContextType {
   notifications: Notification[];
@@ -58,6 +61,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [isLive, setIsLive] = useState(false);
   const cursorRef = useRef<string | null>(null);
+  const handledPushResponseIds = useRef(new Set<string>());
   cursorRef.current = nextCursor;
 
   const feedQuery = useQuery({
@@ -128,6 +132,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     if (!isAuthenticated || Platform.OS === "web" || Constants.appOwnership === "expo") return;
     let cancelled = false;
     let subscription: { remove: () => void } | undefined;
+    let responseSubscription: { remove: () => void } | undefined;
     const registerDeviceToken = (deviceToken: { data: string }) => {
       if (
         cancelled ||
@@ -140,7 +145,31 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     void import("expo-notifications")
       .then(async (Notifications) => {
         if (cancelled) return;
+        const openNotification = (response: {
+          notification: { request: { content: { data?: unknown } } };
+        }) => {
+          const data = response.notification.request.content.data;
+          const notificationId =
+            data && typeof data === "object"
+              ? (data as Record<string, unknown>).notificationId
+              : undefined;
+          if (
+            typeof notificationId === "string" &&
+            handledPushResponseIds.current.has(notificationId)
+          )
+            return;
+          const path = getPushNotificationLinkTo(data);
+          if (!path) return;
+          if (typeof notificationId === "string") {
+            handledPushResponseIds.current.add(notificationId);
+          }
+          router.push(to(path));
+        };
         subscription = Notifications.addPushTokenListener(registerDeviceToken);
+        responseSubscription =
+          Notifications.addNotificationResponseReceivedListener(openNotification);
+        const lastResponse = await Notifications.getLastNotificationResponseAsync();
+        if (!cancelled && lastResponse) openNotification(lastResponse);
         const current = await Notifications.getPermissionsAsync();
         const permission = current.granted
           ? current
@@ -156,6 +185,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     return () => {
       cancelled = true;
       subscription?.remove();
+      responseSubscription?.remove();
     };
   }, [authUser?.id, isAuthenticated]);
 
