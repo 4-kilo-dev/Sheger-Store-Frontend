@@ -7,15 +7,19 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState, Platform } from "react-native";
+import { AppState, Platform, Pressable, StyleSheet, View } from "react-native";
 import Constants from "expo-constants";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
+import { Bell, X } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AppText } from "@/components/ui";
 import { useAppContext } from "@/context/AppContext";
 import { authStorage } from "@/lib/api/client";
 import {
   connectNotificationsStream,
   getNotificationFeedApi,
+  getNotificationDisplay,
   getPushNotificationLinkTo,
   getUnreadNotificationCountsApi,
   markAllNotificationsReadApi,
@@ -23,6 +27,7 @@ import {
   registerNotificationDeviceApi,
 } from "@/services/notifications-api";
 import type { Notification } from "@/types/domain";
+import { colors, radius } from "@/theme/tokens";
 import { to } from "@/utils/routes";
 
 interface NotificationsContextType {
@@ -42,6 +47,13 @@ interface NotificationsContextType {
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
 
+interface ForegroundNotification {
+  id?: string;
+  title: string;
+  message: string;
+  linkTo?: string;
+}
+
 function upsert(current: Map<string, Notification>, items: Notification[]) {
   const next = new Map(current);
   items.forEach((item) => next.set(item.id, item));
@@ -54,14 +66,23 @@ function getExpoProjectId(): string | undefined {
   return Constants.easConfig?.projectId || extra?.eas?.projectId || extra?.expoProjectId;
 }
 
+function getPushNotificationId(data: unknown): string | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const notificationId = (data as Record<string, unknown>).notificationId;
+  return typeof notificationId === "string" ? notificationId : undefined;
+}
+
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, authUser } = useAppContext();
   const [byId, setById] = useState<Map<string, Notification>>(new Map());
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [isLive, setIsLive] = useState(false);
+  const [foregroundNotification, setForegroundNotification] =
+    useState<ForegroundNotification | null>(null);
   const cursorRef = useRef<string | null>(null);
   const handledPushResponseIds = useRef(new Set<string>());
+  const lastForegroundNotificationId = useRef<string | undefined>(undefined);
   cursorRef.current = nextCursor;
 
   const feedQuery = useQuery({
@@ -102,6 +123,30 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     void refreshCounts();
   }, [refreshCounts, refreshFeed]);
 
+  const showForegroundNotification = useCallback((notification: ForegroundNotification) => {
+    if (AppState.currentState !== "active") return;
+    if (notification.id && lastForegroundNotificationId.current === notification.id) return;
+    lastForegroundNotificationId.current = notification.id;
+    setForegroundNotification(notification);
+  }, []);
+
+  const dismissForegroundNotification = useCallback(() => {
+    setForegroundNotification(null);
+  }, []);
+
+  const openForegroundNotification = useCallback(() => {
+    if (!foregroundNotification) return;
+    const { linkTo } = foregroundNotification;
+    dismissForegroundNotification();
+    if (linkTo) router.push(to(linkTo));
+  }, [dismissForegroundNotification, foregroundNotification]);
+
+  useEffect(() => {
+    if (!foregroundNotification) return;
+    const timeout = setTimeout(dismissForegroundNotification, 6_000);
+    return () => clearTimeout(timeout);
+  }, [dismissForegroundNotification, foregroundNotification]);
+
   const loadOlder = useCallback(async () => {
     const cursor = cursorRef.current;
     if (!cursor || isLoadingOlder) return;
@@ -133,6 +178,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     let cancelled = false;
     let subscription: { remove: () => void } | undefined;
     let responseSubscription: { remove: () => void } | undefined;
+    let receivedSubscription: { remove: () => void } | undefined;
     const registerDeviceToken = (deviceToken: { data: string }) => {
       if (
         cancelled ||
@@ -149,10 +195,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
           notification: { request: { content: { data?: unknown } } };
         }) => {
           const data = response.notification.request.content.data;
-          const notificationId =
-            data && typeof data === "object"
-              ? (data as Record<string, unknown>).notificationId
-              : undefined;
+          const notificationId = getPushNotificationId(data);
           if (
             typeof notificationId === "string" &&
             handledPushResponseIds.current.has(notificationId)
@@ -168,6 +211,16 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         subscription = Notifications.addPushTokenListener(registerDeviceToken);
         responseSubscription =
           Notifications.addNotificationResponseReceivedListener(openNotification);
+        receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
+          const content = notification.request.content;
+          const data = content.data;
+          showForegroundNotification({
+            id: getPushNotificationId(data),
+            title: content.title || "New notification",
+            message: content.body || "",
+            linkTo: getPushNotificationLinkTo(data),
+          });
+        });
         const lastResponse = await Notifications.getLastNotificationResponseAsync();
         if (!cancelled && lastResponse) openNotification(lastResponse);
         const current = await Notifications.getPermissionsAsync();
@@ -186,8 +239,9 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       cancelled = true;
       subscription?.remove();
       responseSubscription?.remove();
+      receivedSubscription?.remove();
     };
-  }, [authUser?.id, isAuthenticated]);
+  }, [authUser?.id, isAuthenticated, showForegroundNotification]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -201,6 +255,13 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         onMessage: (notification) => {
           setById((current) => upsert(current, [notification]));
           setIsLive(true);
+          const display = getNotificationDisplay(notification);
+          showForegroundNotification({
+            id: notification.id,
+            title: display.title,
+            message: notification.message,
+            linkTo: display.linkTo,
+          });
           void refreshCounts();
         },
         onOpen: () => {
@@ -215,7 +276,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       disconnect?.();
       setIsLive(false);
     };
-  }, [authUser?.id, isAuthenticated, refetch, refreshCounts]);
+  }, [authUser?.id, isAuthenticated, refetch, refreshCounts, showForegroundNotification]);
 
   const markAsRead = useCallback(
     async (id: string) => {
@@ -309,7 +370,68 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     ],
   );
 
-  return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
+  return (
+    <NotificationsContext.Provider value={value}>
+      {children}
+      <ForegroundNotificationBanner
+        notification={foregroundNotification}
+        onDismiss={dismissForegroundNotification}
+        onPress={openForegroundNotification}
+      />
+    </NotificationsContext.Provider>
+  );
+}
+
+function ForegroundNotificationBanner({
+  notification,
+  onDismiss,
+  onPress,
+}: {
+  notification: ForegroundNotification | null;
+  onDismiss: () => void;
+  onPress: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  if (!notification) return null;
+
+  return (
+    <View pointerEvents="box-none" style={[styles.bannerLayer, { top: insets.top + 12 }]}>
+      <View style={styles.banner}>
+        <View style={styles.accentRail} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            notification.linkTo ? "Open notification details" : "Dismiss notification"
+          }
+          onPress={onPress}
+          style={styles.bannerContent}
+        >
+          <View style={styles.iconWrap}>
+            <Bell size={17} color={colors.accentForeground} strokeWidth={2.5} />
+          </View>
+          <View style={styles.bannerCopy}>
+            <AppText numberOfLines={1} style={styles.bannerTitle}>
+              {notification.title}
+            </AppText>
+            {notification.message ? (
+              <AppText numberOfLines={2} variant="small" color={colors.text2}>
+                {notification.message}
+              </AppText>
+            ) : null}
+          </View>
+        </Pressable>
+        <Pressable
+          accessibilityLabel="Dismiss notification"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={onDismiss}
+          style={styles.dismissButton}
+        >
+          <X size={17} color={colors.text2} />
+        </Pressable>
+      </View>
+    </View>
+  );
 }
 
 export function useNotificationsContext() {
@@ -318,3 +440,58 @@ export function useNotificationsContext() {
     throw new Error("useNotificationsContext must be used within a NotificationsProvider");
   return context;
 }
+
+const styles = StyleSheet.create({
+  bannerLayer: {
+    left: 12,
+    position: "absolute",
+    right: 12,
+    zIndex: 100,
+  },
+  banner: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    elevation: 12,
+    flexDirection: "row",
+    minHeight: 70,
+    overflow: "hidden",
+  },
+  accentRail: {
+    alignSelf: "stretch",
+    backgroundColor: colors.accent,
+    width: 4,
+  },
+  bannerContent: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 10,
+    minWidth: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  iconWrap: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
+  bannerCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  bannerTitle: {
+    fontWeight: "800",
+  },
+  dismissButton: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+});
