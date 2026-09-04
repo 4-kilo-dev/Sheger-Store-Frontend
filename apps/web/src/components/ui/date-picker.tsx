@@ -1,13 +1,14 @@
 import * as React from "react";
-import { format } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
 import { Calendar as CalendarIcon, Clock } from "lucide-react";
-import { formatEthiopianTimeOfDay } from "@vortex/utils";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { EthiopianCalendar } from "@/components/ui/ethiopian-calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useCalendarSystem, useDateFormatter } from "@/context/CalendarSystemContext";
+import { useCalendarSystem } from "@/context/CalendarSystemContext";
 import { EthTimeSelect } from "@/components/ui/eth-time-select";
+import { formatCalendarValuesApi, getEthiopianTimeApi } from "@/lib/calendar/calendar.api";
 
 interface DatePickerProps {
   /** Value in "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm" format */
@@ -37,7 +38,6 @@ export function DatePicker({
   showTime = false,
 }: DatePickerProps) {
   const { calendarSystem, numeralsSystem } = useCalendarSystem();
-  const { formatDate } = useDateFormatter();
 
   const { parsedDate, timeValue } = React.useMemo(() => {
     if (!value) return { parsedDate: undefined, timeValue: "12:00" };
@@ -50,6 +50,18 @@ export function DatePicker({
       timeValue: timePart || "12:00",
     };
   }, [value]);
+
+  const dateValue = value?.split("T")[0] || "";
+  const { data: formattedDate } = useQuery({
+    queryKey: ["calendar", "format", dateValue, calendarSystem, numeralsSystem],
+    queryFn: () => formatCalendarValuesApi([dateValue], calendarSystem, numeralsSystem).then((entries) => entries[0]),
+    enabled: Boolean(dateValue),
+  });
+  const { data: ethiopianTime } = useQuery({
+    queryKey: ["calendar", "ethiopian-time", timeValue],
+    queryFn: () => getEthiopianTimeApi(timeValue),
+    enabled: showTime && calendarSystem === "ethiopic",
+  });
 
   const handleSelectDate = (date?: Date) => {
     if (!date) {
@@ -64,6 +76,10 @@ export function DatePicker({
     } else {
       onChange?.(`${yyyy}-${mm}-${dd}`);
     }
+  };
+
+  const handleSelectEthiopianDate = (date: string) => {
+    onChange?.(showTime ? `${date}T${timeValue}` : date);
   };
 
   const applyTime = (newTime: string) => {
@@ -86,30 +102,25 @@ export function DatePicker({
   }, [minDate]);
 
   const displayText = React.useMemo(() => {
-    if (!parsedDate) return placeholder;
-    let dateStr: string;
-    if (calendarSystem === "ethiopic") {
-      dateStr = formatDate(parsedDate);
-    } else {
-      dateStr = format(parsedDate, "PPP");
-    }
+    if (!dateValue) return placeholder;
+    let dateStr = formattedDate?.displayDate || "Loading date…";
     if (showTime && value?.includes("T")) {
       if (calendarSystem === "ethiopic") {
-        dateStr += ` · ${formatEthiopianTimeOfDay(timeValue, numeralsSystem === "geez" ? "geez" : "latn")}`;
+        dateStr += ` · ${ethiopianTime?.display || "Loading time…"}`;
       } else {
         dateStr += ` · ${timeValue}`;
       }
     }
     return dateStr;
   }, [
-    parsedDate,
+    dateValue,
     calendarSystem,
-    numeralsSystem,
     placeholder,
-    formatDate,
     showTime,
     timeValue,
     value,
+    formattedDate,
+    ethiopianTime,
   ]);
 
   return (
@@ -129,13 +140,17 @@ export function DatePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={parsedDate}
-          onSelect={handleSelectDate}
-          disabled={disabledDays}
-          initialFocus
-        />
+        {calendarSystem === "ethiopic" ? (
+          <EthiopianCalendar value={dateValue} onSelect={handleSelectEthiopianDate} minDate={minDate} />
+        ) : (
+          <Calendar
+            mode="single"
+            selected={parsedDate}
+            onSelect={handleSelectDate}
+            disabled={disabledDays}
+            initialFocus
+          />
+        )}
         {showTime && (
           <div
             className="flex flex-col gap-2 border-t px-3 py-2.5"

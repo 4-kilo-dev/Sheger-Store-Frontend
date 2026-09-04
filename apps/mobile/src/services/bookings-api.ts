@@ -83,6 +83,18 @@ interface RawBooking {
     createdAt: string;
   }>;
   customFields?: Record<string, unknown>;
+  ethiopianDates?: Record<string, {
+    iso: string;
+    ethiopian: {
+      year: number; month: number; day: number; monthName: string; display: string;
+      time: {
+        hour24: number; minute: number; isoTime: string; ethiopianHour: number;
+        clockPeriod: "day" | "night";
+        dayPeriod: "LELIT" | "TEWAT" | "KESEAT" | "MATA";
+        dayPeriodLabel: string; display: string;
+      };
+    };
+  }>;
 }
 
 function parseNumericField(value: string | number | null | undefined): number | undefined {
@@ -305,6 +317,7 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
     itemServiceSpec: b.itemServiceSpec || "",
     assignments,
     customFields: b.customFields || {},
+    ethiopianDates: b.ethiopianDates,
   };
 }
 

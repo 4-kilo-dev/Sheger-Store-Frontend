@@ -31,6 +31,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { useCalendarSystem, useDateFormatter } from "@/context/CalendarSystemContext";
 import { useBookingsList } from "@/features/bookings/hooks/useBookingsList";
+import { getCalendarNowApi } from "@/lib/calendar/calendar.api";
 
 const BULK_STATUS_TARGETS: BookingStatus[] = [
   ...STATUS_ORDER,
@@ -42,6 +43,11 @@ function csvEscape(value: string | number | null | undefined): string {
   const raw = value == null ? "" : String(value);
   if (/[",\n]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`;
   return raw;
+}
+
+function bookingEthiopianDate(booking: Booking, field: "assembly" | "event"): string | null {
+  const serverField = field === "assembly" ? "assemblyStart" : "eventDate";
+  return booking.ethiopianDates?.[serverField]?.ethiopian.display ?? null;
 }
 
 function downloadCsv(filename: string, headers: string[], rows: string[][]) {
@@ -128,20 +134,6 @@ function parseBookingInstant(value?: string | null): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function getEthiopianMonth(date: Date): number {
-  const parts = new Intl.DateTimeFormat("en-US-u-ca-ethiopic", {
-    month: "numeric",
-  }).formatToParts(date);
-  return Number(parts.find((part) => part.type === "month")?.value);
-}
-
-function getEthiopianYear(date: Date): number {
-  const parts = new Intl.DateTimeFormat("en-US-u-ca-ethiopic", {
-    year: "numeric",
-  }).formatToParts(date);
-  return Number(parts.find((part) => part.type === "year")?.value);
-}
-
 /** This/Last Week = event date falls on a day inside the week (not rental-window overlap). */
 function bookingEventInWeek(b: Booking, start: Date, end: Date): boolean {
   const event = parseBookingInstant(b.eventDate);
@@ -193,6 +185,11 @@ export function BookingsIndex() {
   });
 
   const { data: bookingsList = [] } = useBookingsList();
+  const { data: backendNow } = useQuery({
+    queryKey: ["calendar", "now"],
+    queryFn: getCalendarNowApi,
+    enabled: calendarSystem === "ethiopic",
+  });
 
   const selectedBookings = useMemo(
     () => bookingsList.filter((b) => selected.has(b.code)),
@@ -342,13 +339,13 @@ export function BookingsIndex() {
     }
     if (tab === "This Month") {
       const now = new Date();
-      const currentYear = calendarSystem === "ethiopic" ? getEthiopianYear(now) : now.getFullYear();
-      const currentMonth = calendarSystem === "ethiopic" ? getEthiopianMonth(now) : now.getMonth();
+      const currentYear = calendarSystem === "ethiopic" ? backendNow?.ethiopian.year : now.getFullYear();
+      const currentMonth = calendarSystem === "ethiopic" ? backendNow?.ethiopian.month : now.getMonth();
       r = r.filter((b) => {
         const event = parseBookingInstant(b.eventDate);
         if (!event) return false;
         return calendarSystem === "ethiopic"
-          ? getEthiopianYear(event) === currentYear && getEthiopianMonth(event) === currentMonth
+          ? b.ethiopianDates?.eventDate?.ethiopian.year === currentYear && b.ethiopianDates?.eventDate?.ethiopian.month === currentMonth
           : event.getFullYear() === currentYear && event.getMonth() === currentMonth;
       });
     }
@@ -413,9 +410,9 @@ export function BookingsIndex() {
       const selectedYear = Number([...ethiopianYearFilter][0]);
       const selectedMonth = ETHIOPIAN_MONTHS.indexOf([...ethiopianMonthFilter][0] as (typeof ETHIOPIAN_MONTHS)[number]) + 1;
       r = r.filter((b) => {
-        const event = parseBookingInstant(b.eventDate);
-        if (!event || getEthiopianYear(event) !== selectedYear) return false;
-        return ethiopianMonthFilter.size === 0 || getEthiopianMonth(event) === selectedMonth;
+        const event = b.ethiopianDates?.eventDate?.ethiopian;
+        if (!event || event.year !== selectedYear) return false;
+        return ethiopianMonthFilter.size === 0 || event.month === selectedMonth;
       });
     }
 
@@ -426,7 +423,7 @@ export function BookingsIndex() {
     });
 
     return r;
-  }, [tab, query, statusFilter, screenFilter, assigneeFilter, paymentFilter, ethiopianYearFilter, ethiopianMonthFilter, sortDir, bookingsList, authUser?.name, calendarSystem]);
+  }, [tab, query, statusFilter, screenFilter, assigneeFilter, paymentFilter, ethiopianYearFilter, ethiopianMonthFilter, sortDir, bookingsList, authUser?.name, calendarSystem, backendNow]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -496,8 +493,8 @@ export function BookingsIndex() {
                       <td className="border-b px-4 py-3 font-medium" style={{ borderColor: "var(--border)" }}>
                         {b.client || "—"}
                       </td>
-                      <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{formatDate(b.assemblyDate)}</td>
-                      <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{formatDate(b.eventDate)}</td>
+                      <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{bookingEthiopianDate(b, "assembly") ?? formatDate(b.assemblyDate)}</td>
+                      <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{bookingEthiopianDate(b, "event") ?? formatDate(b.eventDate)}</td>
                       <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>{b.venue}</td>
                       <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
                         <StatusBadge status={b.status} />
@@ -874,8 +871,8 @@ export function BookingsIndex() {
                     <td className="border-b px-3 py-3 font-medium" style={{ borderColor: "var(--border)" }}>
                       <Link to="/bookings/$code" params={{ code: b.code }}>{b.client}</Link>
                     </td>
-                    <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{formatDate(b.assemblyDate)}</td>
-                    <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{formatDate(b.eventDate)}</td>
+                    <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{bookingEthiopianDate(b, "assembly") ?? formatDate(b.assemblyDate)}</td>
+                    <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{bookingEthiopianDate(b, "event") ?? formatDate(b.eventDate)}</td>
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}>{b.venue}</td>
                     <td className="border-b px-3 py-3 font-mono text-[11px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.screenType || "—"}</td>
                     <td className="border-b px-3 py-3 font-mono font-semibold" style={{ borderColor: "var(--border)" }}>{b.size}</td>

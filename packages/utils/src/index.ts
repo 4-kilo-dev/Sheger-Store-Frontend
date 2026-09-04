@@ -35,8 +35,6 @@ export function getPaymentBalance(amount: number, status: PaymentStatus) {
   return amount;
 }
 
-export * from "./ethiopian-time";
 export * from "./checkout";
 export * from "./pricing";
 export * from "./booking-poll";
-

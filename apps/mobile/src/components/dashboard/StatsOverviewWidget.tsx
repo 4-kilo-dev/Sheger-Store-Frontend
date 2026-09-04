@@ -1,5 +1,6 @@
 import { CalendarRange, Clock, DollarSign, Package, TrendingUp, Users } from "lucide-react-native";
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Pressable, View, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { to } from "@/utils/routes";
@@ -8,25 +9,15 @@ import { useAppContext } from "@/context/AppContext";
 import { useSystemCurrency } from "@/hooks/use-system-currency";
 import { useBookings, useInventory } from "@/hooks/useOperations";
 import { colors } from "@/theme/tokens";
-import { useCalendarSystem, type CalendarSystem } from "@/context/CalendarSystemContext";
+import { useCalendarSystem } from "@/context/CalendarSystemContext";
+import { getCalendarNowApi } from "@/services/calendar.api";
 
-function calendarYearMonth(date: Date, calendarSystem: CalendarSystem) {
-  if (calendarSystem === "ethiopic") {
-    const parts = new Intl.DateTimeFormat("en-US-u-ca-ethiopic", {
-      year: "numeric",
-      month: "numeric",
-    }).formatToParts(date);
-    return {
-      year: Number(parts.find((part) => part.type === "year")?.value),
-      month: Number(parts.find((part) => part.type === "month")?.value),
-    };
-  }
+function gregorianYearMonth(date: Date) {
   return { year: date.getFullYear(), month: date.getMonth() + 1 };
 }
 
-function previousCalendarMonth(year: number, month: number, calendarSystem: CalendarSystem) {
-  const monthCount = calendarSystem === "ethiopic" ? 13 : 12;
-  return month === 1 ? { year: year - 1, month: monthCount } : { year, month: month - 1 };
+function previousGregorianMonth(year: number, month: number) {
+  return month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
 }
 
 function namesMatch(assignee: string, profileName: string) {
@@ -40,20 +31,31 @@ export function StatsOverviewWidget() {
   const role = activeProfile.role;
   const { formatMoneyCompact } = useSystemCurrency();
   const { calendarSystem } = useCalendarSystem();
+  const { data: backendNow } = useQuery({
+    queryKey: ["calendar", "now"],
+    queryFn: getCalendarNowApi,
+    enabled: calendarSystem === "ethiopic",
+  });
   const { data: BOOKINGS = [] } = useBookings();
   const { data: INVENTORY = [] } = useInventory();
 
   const stats = useMemo(() => {
     const now = new Date();
-    const currentMonth = calendarYearMonth(now, calendarSystem);
-    const previousMonth = previousCalendarMonth(currentMonth.year, currentMonth.month, calendarSystem);
+    const currentMonth = calendarSystem === "ethiopic" ? backendNow?.ethiopian : gregorianYearMonth(now);
+    const previousMonth = calendarSystem === "ethiopic"
+      ? backendNow?.previousEthiopianMonth
+      : previousGregorianMonth(currentMonth?.year || now.getFullYear(), currentMonth?.month || now.getMonth() + 1);
     const thisMonth = BOOKINGS.filter((booking) => {
-      const date = calendarYearMonth(new Date(booking.eventDate), calendarSystem);
-      return date.year === currentMonth.year && date.month === currentMonth.month;
+      const date = calendarSystem === "ethiopic"
+        ? booking.ethiopianDates?.eventDate?.ethiopian
+        : gregorianYearMonth(new Date(booking.eventDate));
+      return date?.year === currentMonth?.year && date?.month === currentMonth?.month;
     });
     const lastMonth = BOOKINGS.filter((booking) => {
-      const date = calendarYearMonth(new Date(booking.eventDate), calendarSystem);
-      return date.year === previousMonth.year && date.month === previousMonth.month;
+      const date = calendarSystem === "ethiopic"
+        ? booking.ethiopianDates?.eventDate?.ethiopian
+        : gregorianYearMonth(new Date(booking.eventDate));
+      return date?.year === previousMonth?.year && date?.month === previousMonth?.month;
     });
     const revenue = thisMonth.reduce((sum, booking) => sum + booking.amount, 0);
     const lastMonthRevenue = lastMonth.reduce((sum, booking) => sum + booking.amount, 0);
@@ -100,7 +102,7 @@ export function StatsOverviewWidget() {
       mealBudgetsActive,
       inventoryDamaged,
     };
-  }, [activeProfile.name, BOOKINGS, INVENTORY, calendarSystem]);
+  }, [activeProfile.name, BOOKINGS, INVENTORY, calendarSystem, backendNow]);
 
   const cards = useMemo(() => {
     if (role === "CCR") {

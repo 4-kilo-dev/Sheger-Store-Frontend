@@ -1,8 +1,8 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import * as SecureStore from "expo-secure-store";
-import { formatEthiopianDateTimeClock } from "@vortex/utils";
 import { useAppContext } from "@/context/AppContext";
 import { getSettingsApi, updateSettingsApi } from "@/services/settings.api";
+import { formatCalendarValuesApi, type CalendarFormatEntry } from "@/services/calendar.api";
 
 export type CalendarSystem = "gregorian" | "ethiopic";
 export type NumeralsSystem = "geez" | "latn";
@@ -121,62 +121,60 @@ export function useCalendarSystem() {
 
 export function useDateFormatter() {
   const { calendarSystem, numeralsSystem } = useCalendarSystem();
+  const [cache, setCache] = useState<Record<string, CalendarFormatEntry>>({});
+  const pending = useRef(new Set<string>());
+  const failed = useRef(new Set<string>());
+  const flushScheduled = useRef(false);
+
+  useEffect(() => {
+    setCache({});
+    pending.current.clear();
+    failed.current.clear();
+  }, [calendarSystem, numeralsSystem]);
+
+  const request = useCallback((value: string | Date) => {
+    const normalized = value instanceof Date ? value.toISOString() : value;
+    if (Number.isNaN(new Date(normalized).getTime()) || failed.current.has(normalized)) return null;
+    const key = `${calendarSystem}:${numeralsSystem}:${normalized}`;
+    if (cache[key]) return cache[key];
+    pending.current.add(normalized);
+    if (!flushScheduled.current) {
+      flushScheduled.current = true;
+      Promise.resolve().then(async () => {
+        const values = [...pending.current];
+        pending.current.clear();
+        flushScheduled.current = false;
+        try {
+          const entries = await formatCalendarValuesApi(values, calendarSystem, numeralsSystem);
+          setCache((current) => ({
+            ...current,
+            ...Object.fromEntries(entries.map((entry) => [
+              `${calendarSystem}:${numeralsSystem}:${entry.value}`,
+              entry,
+            ])),
+          }));
+        } catch {
+          values.forEach((item) => failed.current.add(item));
+        }
+      });
+    }
+    return null;
+  }, [cache, calendarSystem, numeralsSystem]);
 
   const formatDate = useCallback(
     (dateInput?: string | Date | null) => {
       if (!dateInput) return "—";
-      const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
-      if (Number.isNaN(date.getTime())) return "—";
-
-      if (calendarSystem === "ethiopic") {
-        const locale =
-          numeralsSystem === "geez" ? "am-ET-u-ca-ethiopic" : "am-ET-u-ca-ethiopic-nu-latn";
-        return new Intl.DateTimeFormat(locale, {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        }).format(date);
-      }
-
-      return new Intl.DateTimeFormat("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      }).format(date);
+      return request(dateInput)?.displayDate || "…";
     },
-    [calendarSystem, numeralsSystem],
+    [request],
   );
 
   const formatDateTime = useCallback(
     (dateInput?: string | Date | null) => {
       if (!dateInput) return "—";
-      const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
-      if (Number.isNaN(date.getTime())) return "—";
-
-      if (calendarSystem === "ethiopic") {
-        const locale =
-          numeralsSystem === "geez" ? "am-ET-u-ca-ethiopic" : "am-ET-u-ca-ethiopic-nu-latn";
-        const datePart = new Intl.DateTimeFormat(locale, {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        }).format(date);
-        const timePart = formatEthiopianDateTimeClock(
-          date,
-          numeralsSystem === "geez" ? "geez" : "latn",
-        );
-        return `${datePart} ${timePart}`;
-      }
-
-      return new Intl.DateTimeFormat("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(date);
+      return request(dateInput)?.displayDateTime || "…";
     },
-    [calendarSystem, numeralsSystem],
+    [request],
   );
 
   return { formatDate, formatDateTime, calendarSystem, numeralsSystem };

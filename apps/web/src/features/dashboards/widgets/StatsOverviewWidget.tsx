@@ -12,27 +12,16 @@ import { getBookingsApi } from "@/features/bookings/services/bookings.api";
 import { getCombinedInventoryApi } from "@/features/inventory/services/inventory.api";
 import { StatCard } from "../components/StatCard";
 import { useSystemCurrency } from "@/hooks/use-system-currency";
-import { useCalendarSystem, type CalendarSystem } from "@/context/CalendarSystemContext";
+import { useCalendarSystem } from "@/context/CalendarSystemContext";
+import { getCalendarNowApi } from "@/lib/calendar/calendar.api";
 
-function calendarYearMonth(date: Date, calendarSystem: CalendarSystem) {
-  if (calendarSystem === "ethiopic") {
-    const parts = new Intl.DateTimeFormat("en-US-u-ca-ethiopic", {
-      year: "numeric",
-      month: "numeric",
-    }).formatToParts(date);
-    return {
-      year: Number(parts.find((part) => part.type === "year")?.value),
-      month: Number(parts.find((part) => part.type === "month")?.value),
-    };
-  }
+function gregorianYearMonth(date: Date) {
   return { year: date.getFullYear(), month: date.getMonth() + 1 };
 }
 
-function previousCalendarMonth(year: number, month: number, calendarSystem: CalendarSystem) {
-  const firstMonth = 1;
-  const monthCount = calendarSystem === "ethiopic" ? 13 : 12;
-  return month === firstMonth
-    ? { year: year - 1, month: monthCount }
+function previousGregorianMonth(year: number, month: number) {
+  return month === 1
+    ? { year: year - 1, month: 12 }
     : { year, month: month - 1 };
 }
 
@@ -43,6 +32,11 @@ export function StatsOverviewWidget() {
   const canViewFinancials = can(PERMISSION.PAYMENT_MANAGE);
   const { formatMoneyCompact } = useSystemCurrency();
   const { calendarSystem } = useCalendarSystem();
+  const { data: backendNow } = useQuery({
+    queryKey: ["calendar", "now"],
+    queryFn: getCalendarNowApi,
+    enabled: calendarSystem === "ethiopic",
+  });
 
   const { data: bookingsList = [] } = useQuery({
     queryKey: ["bookings"],
@@ -58,21 +52,29 @@ export function StatsOverviewWidget() {
   // 1. Calculations for Admin/Supervisor
   const adminStats = useMemo(() => {
     const now = new Date();
-    const currentMonth = calendarYearMonth(now, calendarSystem);
-    const lastMonth = previousCalendarMonth(currentMonth.year, currentMonth.month, calendarSystem);
+    const currentMonth = calendarSystem === "ethiopic"
+      ? backendNow?.ethiopian
+      : gregorianYearMonth(now);
+    const lastMonth = calendarSystem === "ethiopic"
+      ? backendNow?.previousEthiopianMonth
+      : previousGregorianMonth(currentMonth?.year || now.getFullYear(), currentMonth?.month || now.getMonth() + 1);
 
     // This month's bookings
     const thisMonth = bookingsList.filter((b) => {
       if (!b.eventDate) return false;
-      const d = calendarYearMonth(new Date(b.eventDate), calendarSystem);
-      return d.year === currentMonth.year && d.month === currentMonth.month;
+      const d = calendarSystem === "ethiopic"
+        ? b.ethiopianDates?.eventDate?.ethiopian
+        : gregorianYearMonth(new Date(b.eventDate));
+      return d?.year === currentMonth?.year && d?.month === currentMonth?.month;
     });
 
     // Last month's bookings (for trend comparison)
     const previousMonthBookings = bookingsList.filter((b) => {
       if (!b.eventDate) return false;
-      const d = calendarYearMonth(new Date(b.eventDate), calendarSystem);
-      return d.year === lastMonth.year && d.month === lastMonth.month;
+      const d = calendarSystem === "ethiopic"
+        ? b.ethiopianDates?.eventDate?.ethiopian
+        : gregorianYearMonth(new Date(b.eventDate));
+      return d?.year === lastMonth?.year && d?.month === lastMonth?.month;
     });
 
     // Revenue = sum of paymentAmount for this month's bookings
@@ -106,7 +108,7 @@ export function StatsOverviewWidget() {
     const paid = thisMonth.filter((b) => b.payment === "PAID").length;
 
     return { thisMonth: thisMonth.length, revenue, revenueTrend, onsite, upcoming, paid };
-  }, [bookingsList, calendarSystem]);
+  }, [bookingsList, calendarSystem, backendNow]);
 
   // 2. Calculations for CCR
   const ccrStats = useMemo(() => {

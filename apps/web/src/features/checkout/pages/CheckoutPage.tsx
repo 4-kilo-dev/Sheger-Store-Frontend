@@ -23,6 +23,7 @@ import {
 import { bookingToPackingSlip, printPackingSlip } from "@/features/bookings/utils/printPackingSlip";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { useCalendarSystem, useDateFormatter, type CalendarSystem } from "@/context/CalendarSystemContext";
+import { getCalendarNowApi } from "@/lib/calendar/calendar.api";
 
 /** Backend checkout only allows PREPARATION (→ ONSITE) or additional ONSITE out. */
 const CHECKOUT_STATUSES = new Set(["PREPARATION", "ONSITE"]);
@@ -36,16 +37,24 @@ function parseDay(value?: string | null): Date | null {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function calendarYearMonth(date: Date, calendarSystem: CalendarSystem): { year: number; month: number } {
-  const locale =
-    calendarSystem === "ethiopic" ? "en-US-u-ca-ethiopic-nu-latn" : "en-US";
-  const parts = new Intl.DateTimeFormat(locale, {
-    year: "numeric",
-    month: "numeric",
-  }).formatToParts(date);
-  const year = Number(parts.find((p) => p.type === "year")?.value);
-  const month = Number(parts.find((p) => p.type === "month")?.value);
-  return { year, month };
+type EthiopianDate = NonNullable<Booking["ethiopianDates"]>[string]["ethiopian"];
+
+function compareEthiopianDate(a: EthiopianDate, b: EthiopianDate): number {
+  if (a.year !== b.year) return a.year - b.year;
+  if (a.month !== b.month) return a.month - b.month;
+  return a.day - b.day;
+}
+
+function bookingEthiopianDate(booking: Booking, fields: string[]): EthiopianDate | null {
+  for (const field of fields) {
+    const date = booking.ethiopianDates?.[field]?.ethiopian;
+    if (date) return date;
+  }
+  return null;
+}
+
+function gregorianYearMonth(date: Date): { year: number; month: number } {
+  return { year: date.getFullYear(), month: date.getMonth() + 1 };
 }
 
 function compareYearMonth(
@@ -60,16 +69,26 @@ function compareYearMonth(
 function isUpcomingThisMonth(
   booking: Booking,
   calendarSystem: CalendarSystem,
+  currentEthiopianDate?: EthiopianDate,
   now = new Date(),
 ): boolean {
+  if (calendarSystem === "ethiopic") {
+    const bookingDate = bookingEthiopianDate(booking, ["assemblyStart", "deliveryDate", "rentalStart", "eventDate"]);
+    if (!bookingDate || !currentEthiopianDate) return false;
+    return (
+      compareEthiopianDate(bookingDate, currentEthiopianDate) >= 0 &&
+      bookingDate.year === currentEthiopianDate.year &&
+      bookingDate.month === currentEthiopianDate.month
+    );
+  }
   const day = parseDay(booking.assemblyDate) || parseDay(booking.eventDate);
   if (!day) return false;
 
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (day < today) return false;
 
-  const nowYm = calendarYearMonth(now, calendarSystem);
-  const bookingYm = calendarYearMonth(day, calendarSystem);
+  const nowYm = gregorianYearMonth(now);
+  const bookingYm = gregorianYearMonth(day);
   return nowYm.year === bookingYm.year && nowYm.month === bookingYm.month;
 }
 
@@ -80,16 +99,25 @@ function isUpcomingThisMonth(
 function isDueForCheckinThisMonth(
   booking: Booking,
   calendarSystem: CalendarSystem,
+  currentEthiopianDate?: EthiopianDate,
   now = new Date(),
 ): boolean {
+  if (calendarSystem === "ethiopic") {
+    const bookingDate = bookingEthiopianDate(booking, ["disassemblyEnd", "rentalEnd", "eventDate", "assemblyStart"]);
+    return Boolean(
+      bookingDate &&
+      currentEthiopianDate &&
+      compareEthiopianDate(bookingDate, currentEthiopianDate) <= 0,
+    );
+  }
   const day =
     parseDay(booking.dismantleDate) ||
     parseDay(booking.eventDate) ||
     parseDay(booking.assemblyDate);
   if (!day) return false;
 
-  const nowYm = calendarYearMonth(now, calendarSystem);
-  const bookingYm = calendarYearMonth(day, calendarSystem);
+  const nowYm = gregorianYearMonth(now);
+  const bookingYm = gregorianYearMonth(day);
   return compareYearMonth(bookingYm, nowYm) <= 0;
 }
 
@@ -123,6 +151,11 @@ export function CheckoutPage() {
   const authUser = useAuthUser();
   const { calendarSystem } = useCalendarSystem();
   const { formatDateTime } = useDateFormatter();
+  const { data: calendarNow } = useQuery({
+    queryKey: ["calendar", "now"],
+    queryFn: getCalendarNowApi,
+    enabled: calendarSystem === "ethiopic",
+  });
   const userRole = authUser?.role?.toLowerCase() || "";
   const [mode, setMode] = useState<Mode>("checkout");
   const [selectedCode, setSelectedCode] = useState("");
@@ -145,7 +178,7 @@ export function CheckoutPage() {
         .filter(
           (b) =>
             CHECKOUT_STATUSES.has(b.status) &&
-            isUpcomingThisMonth(b, calendarSystem),
+            isUpcomingThisMonth(b, calendarSystem, calendarNow?.ethiopian),
         )
         .sort((a, b) => (a.assemblyDate || "").localeCompare(b.assemblyDate || ""));
     }
@@ -153,14 +186,14 @@ export function CheckoutPage() {
       .filter(
         (b) =>
           CHECKIN_STATUSES.has(b.status) &&
-          isDueForCheckinThisMonth(b, calendarSystem),
+          isDueForCheckinThisMonth(b, calendarSystem, calendarNow?.ethiopian),
       )
       .sort((a, b) =>
         (a.dismantleDate || a.eventDate || "").localeCompare(
           b.dismantleDate || b.eventDate || "",
         ),
       );
-  }, [mode, bookingsList, calendarSystem]);
+  }, [mode, bookingsList, calendarSystem, calendarNow]);
 
   useEffect(() => {
     if (selectedCode && !eligibleBookings.some((b) => b.code === selectedCode)) {
