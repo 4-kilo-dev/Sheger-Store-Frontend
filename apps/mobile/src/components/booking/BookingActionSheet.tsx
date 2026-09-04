@@ -81,6 +81,7 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
   const [checkedCheckinItems, setCheckedCheckinItems] = useState<Set<string>>(new Set());
   const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
   const [returnConditions, setReturnConditions] = useState<Record<string, InventoryCondition>>({});
+  const [technicianQuery, setTechnicianQuery] = useState("");
   const { data: custody = [] } = useBookingCustody(
     showActionModal && isCheckinAction ? booking.id : "",
   );
@@ -112,6 +113,10 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
     }
   }, [showActionModal, isCheckinAction, selectedAction?.id]);
 
+  useEffect(() => {
+    if (!showActionModal) setTechnicianQuery("");
+  }, [showActionModal]);
+
   if (!selectedAction) return null;
 
   const isAssignTechnicianAction =
@@ -119,6 +124,9 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
     selectedAction.requiresForm === "assign";
 
   const assignableStaff = staff.filter((s) => isAssignableTechnician(s.role));
+  const filteredTechnicians = assignableStaff.filter((member) =>
+    `${member.name} ${member.role}`.toLowerCase().includes(technicianQuery.trim().toLowerCase()),
+  );
   const alreadyAssignedTechIds = new Set(
     (booking.assignments || [])
       .filter((a) => a.roleContext === "TECHNICIAN" && !isDeclinedAssignment(a))
@@ -301,11 +309,24 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
   };
 
   return (
-    <BottomSheet visible={showActionModal} title={selectedAction.label} onClose={close}>
-      <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 8 }}>
+    <BottomSheet
+      visible={showActionModal}
+      title={selectedAction.label}
+      onClose={close}
+      footer={
+        <>
+          <Button disabled={confirmDisabled} onPress={handleConfirm}>
+            {isBusy ? "Processing..." : `Confirm: ${selectedAction.label}`}
+          </Button>
+          <Button variant="outline" onPress={close}>
+            Cancel
+          </Button>
+        </>
+      }
+    >
+      <View style={styles.actionContent}>
         <AppText variant="subtitle">
           This will transition the booking from {booking.status} to {selectedAction.targetStatus}.
-          {"\n"}Permission required: {selectedAction.permissionKey || selectedAction.id}
         </AppText>
 
         {showPaymentCapture ? (
@@ -401,20 +422,40 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
         ) : null}
 
         {isAssignTechnicianAction ? (
-          <View style={{ gap: 10 }}>
-            <AppText variant="small" color={colors.text2}>
-              Select the technician crew. Uncheck someone to remove them; check someone new to add
-              them.
-            </AppText>
+          <View style={styles.technicianPicker}>
+            <View style={styles.technicianPickerHeader}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <AppText style={{ fontWeight: "800" }}>Technician crew</AppText>
+                <AppText variant="small" color={colors.text2}>
+                  Select one or more technicians for this booking.
+                </AppText>
+              </View>
+              <AppText variant="eyebrow" color={colors.accent}>
+                {selectedTechnicianIds.length} selected
+              </AppText>
+            </View>
+            <Field label="Search technicians">
+              <Input
+                value={technicianQuery}
+                onChangeText={setTechnicianQuery}
+                placeholder="Search by name or role"
+                autoCapitalize="words"
+              />
+            </Field>
             {assignableStaff.length === 0 ? (
               <AppText variant="subtitle">No technicians available to assign.</AppText>
+            ) : filteredTechnicians.length === 0 ? (
+              <AppText variant="subtitle">No technicians match that search.</AppText>
             ) : (
-              assignableStaff.map((member) => {
+              filteredTechnicians.map((member) => {
                 const already = alreadyAssignedTechIds.has(member.id);
                 const selected = selectedTechnicianIds.includes(member.id);
                 return (
                   <Pressable
                     key={member.id}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: selected }}
+                    accessibilityLabel={`Assign ${member.name}`}
                     onPress={() => {
                       setSelectedTechnicianIds((prev) =>
                         prev.includes(member.id)
@@ -427,21 +468,17 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
                     <View style={[styles.check, selected ? styles.checkOn : null]}>
                       {selected ? <Check size={12} color={colors.accentForeground} /> : null}
                     </View>
-                    <AppText style={{ flex: 1, fontWeight: "700" }}>
-                      {member.name}
-                      {isChiefTechnicianRole(member.role) ? " (Chief Technician)" : ""}
-                      {already ? " — currently assigned" : ""}
-                    </AppText>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <AppText style={{ fontWeight: "700" }}>{member.name}</AppText>
+                      <AppText variant="small" color={colors.text2}>
+                        {isChiefTechnicianRole(member.role) ? "Chief Technician" : member.role}
+                        {already ? " · Currently assigned" : ""}
+                      </AppText>
+                    </View>
                   </Pressable>
                 );
               })
             )}
-            {selectedTechnicianIds.length > 0 ? (
-              <AppText variant="small" color={colors.text2}>
-                {selectedTechnicianIds.length} technician
-                {selectedTechnicianIds.length === 1 ? "" : "s"} selected
-              </AppText>
-            ) : null}
           </View>
         ) : null}
 
@@ -601,14 +638,7 @@ export function BookingActionSheet({ booking, actions }: BookingActionSheetProps
             />
           </Field>
         ) : null}
-
-        <Button disabled={confirmDisabled} onPress={handleConfirm}>
-          {isBusy ? "Processing..." : `Confirm: ${selectedAction.label}`}
-        </Button>
-        <Button variant="outline" onPress={close}>
-          Cancel
-        </Button>
-      </ScrollView>
+      </View>
     </BottomSheet>
   );
 }
@@ -653,6 +683,10 @@ function Choice({
 }
 
 const styles = StyleSheet.create({
+  actionContent: {
+    gap: 14,
+    paddingBottom: 4,
+  },
   choiceWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -683,6 +717,15 @@ const styles = StyleSheet.create({
   },
   staffRowActive: {
     borderColor: colors.accent,
+    backgroundColor: colors.accentDim,
+  },
+  technicianPicker: {
+    gap: 10,
+  },
+  technicianPickerHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
   },
   check: {
     height: 20,

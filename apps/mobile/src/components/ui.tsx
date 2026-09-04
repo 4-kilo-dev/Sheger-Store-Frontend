@@ -639,36 +639,42 @@ export function BottomSheet({
   title,
   onClose,
   children,
+  footer,
 }: {
   visible: boolean;
   title: string;
   onClose: () => void;
   children: ReactNode;
+  footer?: ReactNode;
 }) {
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop} onPress={onClose} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.sheetKeyboardWrap}
-      >
-        <View style={styles.sheet}>
-          <View style={styles.sheetHandle} />
-          <View style={styles.sheetHeader}>
-            <AppText style={styles.sheetTitle}>{title}</AppText>
-            <Button variant="ghost" onPress={onClose}>
-              Close
-            </Button>
+      <View style={styles.modalRoot}>
+        <Pressable style={styles.modalBackdrop} onPress={onClose} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.sheetKeyboardWrap}
+        >
+          <View style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <AppText style={styles.sheetTitle}>{title}</AppText>
+              <Button variant="ghost" onPress={onClose}>
+                Close
+              </Button>
+            </View>
+            <ScrollView
+              style={styles.sheetBody}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.sheetScrollContent}
+            >
+              {children}
+            </ScrollView>
+            {footer ? <View style={styles.sheetFooter}>{footer}</View> : null}
           </View>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.sheetScrollContent}
-          >
-            {children}
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -949,17 +955,24 @@ export const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   modalBackdrop: {
-    flex: 1,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  modalRoot: {
+    flex: 1,
   },
   sheetKeyboardWrap: {
     position: "absolute",
+    top: "18%",
     left: 0,
     right: 0,
     bottom: 0,
+    width: "100%",
+    justifyContent: "flex-end",
   },
   sheet: {
-    maxHeight: "82%",
+    maxHeight: "100%",
+    flexShrink: 1,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     backgroundColor: colors.surface,
@@ -970,6 +983,15 @@ export const styles = StyleSheet.create({
   },
   sheetScrollContent: {
     gap: 12,
+  },
+  sheetBody: {
+    flexShrink: 1,
+  },
+  sheetFooter: {
+    gap: 8,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
   sheetHandle: {
     alignSelf: "center",
