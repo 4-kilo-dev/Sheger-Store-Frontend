@@ -11,6 +11,7 @@ import {
   FileText,
   MapPin,
   MessageSquare,
+  Menu,
   Package,
   PhoneCall,
   Paperclip,
@@ -25,6 +26,7 @@ import {
   XCircle,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { PaymentBadge, StatusBadge, StatusStepper, ToneBadge } from "@/components/status";
@@ -34,6 +36,7 @@ import {
   BottomSheet,
   Button,
   Card,
+  DatePickerInput,
   EmptyState,
   ErrorState,
   Field,
@@ -69,7 +72,6 @@ import {
   useDeleteBomLine,
   useDeleteAttachment,
   useDownloadAttachment,
-  useInventory,
   usePerformanceMetrics,
   useSubmitInternalEvaluation,
   useUpdateBooking,
@@ -104,6 +106,13 @@ type BookingReservationWithPool = BookingReservation & {
   };
 };
 
+function toIsoOrUndefined(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const date = new Date(trimmed.includes("T") ? trimmed : `${trimmed}T12:00`);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
 export default function BookingDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const {
@@ -136,7 +145,7 @@ export default function BookingDetailScreen() {
   const [tab, setTab] = useState<BookingTabName>("Overview");
   const [reverseOpen, setReverseOpen] = useState(false);
   const [reverseReason, setReverseReason] = useState("");
-  const [criticalActionsOpen, setCriticalActionsOpen] = useState(false);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
 
   const bookingWithAssignments = useMemo(() => {
     if (!booking) return undefined;
@@ -217,24 +226,37 @@ export default function BookingDetailScreen() {
           variant: "destructive" as const,
           targetStatus: "DONE" as const,
           permissionKey: PERMISSION.BOOKING_FORCE_DONE,
+          requiresForm: undefined,
           reasonRequired: true,
           requiresReason: true,
         }
       : null;
   const allActions = forceDoneAction ? [...barActions, forceDoneAction] : barActions;
+  const submitBomAction =
+    caps.advancePreparationAction ??
+    allActions.find(
+      (action) =>
+        action.id === "bom.create" ||
+        action.permissionKey === PERMISSION.BOM_CREATE ||
+        action.targetStatus === "PREPARATION",
+    ) ??
+    null;
   const reverseAction = barActions.find(
     (a) =>
       a.permissionKey === PERMISSION.INVENTORY_CHECKOUT_REVERSE ||
       a.id === "booking.checkout_reverse" ||
       a.id === "inventory.checkout_reverse",
   );
-  const primaryCandidate = allActions[0] ?? caps.assignTechnicianAction ?? null;
+  const primaryCandidate =
+    allActions.find((action) => action !== submitBomAction) ?? caps.assignTechnicianAction ?? null;
   const primaryAction = primaryCandidate?.variant === "destructive" ? null : primaryCandidate;
   const secondaryActions = allActions.filter(
-    (action) => action !== primaryAction && action.variant !== "destructive",
+    (action) =>
+      action !== primaryAction && action !== submitBomAction && action.variant !== "destructive",
   );
   const criticalActions = allActions.filter((action) => action.variant === "destructive");
   const hasCriticalActions = caps.canDeleteBooking || criticalActions.length > 0;
+  const hasActionsMenu = secondaryActions.length > 0 || hasCriticalActions;
 
   const isSubmittingAction =
     actions.isTransitioning ||
@@ -242,6 +264,23 @@ export default function BookingDetailScreen() {
     actions.isCheckingOut ||
     actions.isAssigningTechnicians ||
     createHandoff.isPending;
+
+  const submitBom = async () => {
+    if (!submitBomAction) return;
+    try {
+      await createHandoff.mutateAsync(booking.id);
+      if (submitBomAction.requiresForm) {
+        actions.openAction(submitBomAction);
+      } else {
+        actions.transitionStatus({ toStatus: submitBomAction.targetStatus });
+      }
+    } catch (error) {
+      Alert.alert(
+        "Submit BOM failed",
+        error instanceof Error ? error.message : "Failed to submit BOM",
+      );
+    }
+  };
 
   const confirmDeleteBooking = () => {
     Alert.alert(
@@ -278,38 +317,22 @@ export default function BookingDetailScreen() {
         ) : null
       }
     >
-      <BackLink label="Back to Bookings" href="/bookings" />
-
-      {secondaryActions.length > 0 ? (
-        <View style={styles.actionBar}>
-          {secondaryActions.map((act) => (
-            <Button
-              key={`${act.id}-${act.targetStatus}`}
-              variant={
-                act.variant === "destructive"
-                  ? "danger"
-                  : act.variant === "outline"
-                    ? "outline"
-                    : "primary"
-              }
-              onPress={() => actions.openAction(act)}
-            >
-              {act.label}
-            </Button>
-          ))}
-        </View>
-      ) : null}
-
-      {hasCriticalActions ? (
-        <Button
-          variant="outline"
-          icon={ShieldAlert}
-          onPress={() => setCriticalActionsOpen(true)}
-          style={styles.criticalActionsTrigger}
-        >
-          Critical actions
-        </Button>
-      ) : null}
+      <View style={styles.detailTopRow}>
+        <BackLink label="Back to Bookings" href="/bookings" />
+        {hasActionsMenu ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open booking actions"
+            onPress={() => setActionsMenuOpen(true)}
+            style={({ pressed }) => [
+              styles.bookingActionsMenu,
+              pressed ? styles.menuPressed : null,
+            ]}
+          >
+            <Menu size={21} color={colors.foreground} strokeWidth={2.4} />
+          </Pressable>
+        ) : null}
+      </View>
 
       <Card style={styles.hero}>
         <View style={styles.heroHeader}>
@@ -319,18 +342,29 @@ export default function BookingDetailScreen() {
                 {booking.code}
               </AppText>
               <StatusBadge status={booking.status} large />
-              <PaymentBadge status={booking.payment} />
+              {caps.showFinancials ? <PaymentBadge status={booking.payment} /> : null}
             </View>
             <View style={{ gap: 6, marginTop: 8 }}>
               <Meta icon={User} text={booking.client} />
               <Meta icon={MapPin} text={booking.venue} />
               <Meta icon={Calendar} text={booking.eventDate} />
+              <Meta icon={FileText} text={`Arrangement · ${booking.arrangement || "—"}`} />
+              <Meta
+                icon={Clock}
+                text={`Number of days · ${booking.rentedDays && booking.rentedDays > 0 ? booking.rentedDays : "—"}`}
+              />
+              <Meta
+                icon={Package}
+                text={`Size · ${booking.size > 0 ? `${booking.size} sqm` : "—"}`}
+              />
             </View>
           </View>
-          <View style={{ alignItems: "flex-end" }}>
-            <AppText variant="eyebrow">Total Contract Value</AppText>
-            <AppText variant="stat">{formatCurrency(booking.amount)}</AppText>
-          </View>
+          {caps.showFinancials ? (
+            <View style={{ alignItems: "flex-end" }}>
+              <AppText variant="eyebrow">Total Contract Value</AppText>
+              <AppText variant="stat">{formatCurrency(booking.amount)}</AppText>
+            </View>
+          ) : null}
         </View>
         {booking.ctoNotes ? (
           <View style={styles.noteBox}>
@@ -342,6 +376,12 @@ export default function BookingDetailScreen() {
         ) : null}
         <StatusStepper current={booking.status} />
       </Card>
+
+      {submitBomAction ? (
+        <Button icon={Package} disabled={isSubmittingAction} onPress={submitBom}>
+          {isSubmittingAction ? "Submitting..." : "Submit BOM to Operations"}
+        </Button>
+      ) : null}
 
       <BookingSyncStatus phase={pollPhase} onRetry={() => refetch()} />
 
@@ -387,33 +427,6 @@ export default function BookingDetailScreen() {
                 onPress={() => actions.setShowDeclineModal(true)}
               >
                 Decline
-              </Button>
-            ) : null}
-            {caps.advancePreparationAction && booking.status === "ACCEPTED" ? (
-              <Button
-                icon={Package}
-                disabled={isSubmittingAction}
-                onPress={async () => {
-                  try {
-                    await createHandoff.mutateAsync(booking.id);
-                    if (caps.advancePreparationAction?.requiresForm) {
-                      actions.openAction(caps.advancePreparationAction);
-                    } else {
-                      actions.transitionStatus({ toStatus: "PREPARATION" });
-                    }
-                  } catch (error) {
-                    Alert.alert(
-                      "Submit BOM failed",
-                      error instanceof Error ? error.message : "Failed to submit BOM",
-                    );
-                  }
-                }}
-              >
-                {isSubmittingAction
-                  ? "Submitting..."
-                  : caps.advancePreparationAction.viaBypass
-                    ? "Submit BOM to Operations"
-                    : caps.advancePreparationAction.label}
               </Button>
             ) : null}
             {(booking.status === "ONSITE" || booking.status === "COMPLETED") &&
@@ -496,28 +509,48 @@ export default function BookingDetailScreen() {
 
       <BookingActionSheet booking={booking} actions={actions} />
       <BottomSheet
-        visible={criticalActionsOpen}
-        title="Critical actions"
-        onClose={() => setCriticalActionsOpen(false)}
+        visible={actionsMenuOpen}
+        title="Booking actions"
+        onClose={() => setActionsMenuOpen(false)}
       >
         <AppText variant="subtitle">
-          These actions force a booking change or permanently delete its records. Review the booking
-          before continuing.
+          Choose an available action for {booking.code}. Changes that force or delete a booking
+          require an additional confirmation.
         </AppText>
-        <Card style={styles.criticalActionContext}>
-          <AppText variant="eyebrow">Booking</AppText>
-          <AppText style={{ fontWeight: "800" }}>{booking.code}</AppText>
-          <AppText variant="small" color={colors.text2}>
-            {booking.client} · {STATUS_LABELS[booking.status]}
+        {secondaryActions.map((action) => (
+          <Button
+            key={`${action.id}-${action.targetStatus}`}
+            variant={action.variant === "outline" ? "outline" : "primary"}
+            disabled={isSubmittingAction}
+            onPress={() => {
+              setActionsMenuOpen(false);
+              actions.openAction(action);
+            }}
+          >
+            {action.label}
+          </Button>
+        ))}
+        {hasCriticalActions ? (
+          <AppText variant="eyebrow" color={colors.destructive}>
+            Critical actions
           </AppText>
-        </Card>
+        ) : null}
+        {hasCriticalActions ? (
+          <Card style={styles.criticalActionContext}>
+            <AppText variant="eyebrow">Booking</AppText>
+            <AppText style={{ fontWeight: "800" }}>{booking.code}</AppText>
+            <AppText variant="small" color={colors.text2}>
+              {booking.client} · {STATUS_LABELS[booking.status]}
+            </AppText>
+          </Card>
+        ) : null}
         {criticalActions.map((action) => (
           <Button
             key={`${action.id}-${action.targetStatus}`}
             variant="danger"
             disabled={isSubmittingAction}
             onPress={() => {
-              setCriticalActionsOpen(false);
+              setActionsMenuOpen(false);
               actions.openAction(action);
             }}
           >
@@ -534,7 +567,7 @@ export default function BookingDetailScreen() {
             {deleteBooking.isPending ? "Deleting..." : "Delete Booking"}
           </Button>
         ) : null}
-        <Button variant="outline" onPress={() => setCriticalActionsOpen(false)}>
+        <Button variant="outline" onPress={() => setActionsMenuOpen(false)}>
           Close
         </Button>
       </BottomSheet>
@@ -679,13 +712,45 @@ function OverviewTab({
   const [vehiclePlate, setVehiclePlate] = useState(booking.vehiclePlate || "");
   const [driverName, setDriverName] = useState(booking.driver || "");
   const [teamLeader, setTeamLeader] = useState(booking.teamLeader || "");
+  const [venue, setVenue] = useState(booking.venue || "");
+  const [arrangement, setArrangement] = useState(booking.arrangement || "");
+  const [size, setSize] = useState(booking.size > 0 ? String(booking.size) : "");
+  const [rentedDays, setRentedDays] = useState(
+    booking.rentedDays && booking.rentedDays > 0 ? String(booking.rentedDays) : "",
+  );
+  const [intakeSpec, setIntakeSpec] = useState(booking.itemServiceSpec || "");
+  const [assemblyDate, setAssemblyDate] = useState(
+    booking.rentalStart || booking.assemblyDate || "",
+  );
+  const [eventDate, setEventDate] = useState(booking.eventDate || "");
+  const [dismantleDate, setDismantleDate] = useState(
+    booking.rentalEnd || booking.dismantleDate || "",
+  );
+  const [customFieldEdits, setCustomFieldEdits] = useState<Record<string, unknown>>(
+    booking.customFields || {},
+  );
+  const [savingBookingDetails, setSavingBookingDetails] = useState(false);
   const customFieldsQuery = useCustomFieldDefinitions();
+  const canEditBookingDetails =
+    caps.canEditLogistics && booking.status !== "DONE" && booking.status !== "CANCELED";
 
   useEffect(() => {
     setClientName(booking.client || "");
     setContactPerson(booking.contactPerson || "");
     setContactPhone(booking.contactPhone || "");
   }, [booking.client, booking.contactPerson, booking.contactPhone]);
+
+  useEffect(() => {
+    setVenue(booking.venue || "");
+    setArrangement(booking.arrangement || "");
+    setSize(booking.size > 0 ? String(booking.size) : "");
+    setRentedDays(booking.rentedDays && booking.rentedDays > 0 ? String(booking.rentedDays) : "");
+    setIntakeSpec(booking.itemServiceSpec || "");
+    setAssemblyDate(booking.rentalStart || booking.assemblyDate || "");
+    setEventDate(booking.eventDate || "");
+    setDismantleDate(booking.rentalEnd || booking.dismantleDate || "");
+    setCustomFieldEdits(booking.customFields || {});
+  }, [booking]);
 
   useEffect(() => {
     if (!caps.showTechnicalHolds) return;
@@ -794,6 +859,53 @@ function OverviewTab({
     }
   };
 
+  const saveBookingDetails = async () => {
+    const sizeValue = Number(size);
+    const daysValue = Number.parseInt(rentedDays, 10);
+    if (size.trim() && (!Number.isFinite(sizeValue) || sizeValue < 0)) {
+      Alert.alert("Invalid size", "Requested size must be zero or a positive number.");
+      return;
+    }
+    if (rentedDays.trim() && (!Number.isFinite(daysValue) || daysValue < 1)) {
+      Alert.alert("Invalid days", "Number of days must be at least 1.");
+      return;
+    }
+    setSavingBookingDetails(true);
+    try {
+      const assemblyIso = toIsoOrUndefined(assemblyDate);
+      const eventIso = toIsoOrUndefined(eventDate);
+      const dismantleIso = toIsoOrUndefined(dismantleDate);
+      await updateBooking.mutateAsync({
+        bookingId: booking.id,
+        payload: {
+          eventLocation: venue.trim() || undefined,
+          arrangementDetails: arrangement.trim() || undefined,
+          itemServiceSpec: intakeSpec.trim() || undefined,
+          ...(size.trim() ? { screenAreaSqm: String(sizeValue) } : {}),
+          ...(rentedDays.trim() ? { rentedDays: daysValue } : {}),
+          ...(assemblyIso ? { assemblyStart: assemblyIso, deliveryDate: assemblyIso } : {}),
+          ...(eventIso ? { eventDate: eventIso, rentalStart: eventIso } : {}),
+          ...(dismantleIso
+            ? {
+                disassemblyStart: dismantleIso,
+                disassemblyEnd: dismantleIso,
+                rentalEnd: dismantleIso,
+              }
+            : {}),
+          customFields: customFieldEdits,
+        },
+      });
+      Alert.alert("Saved", "Booking details saved.");
+    } catch (error) {
+      Alert.alert(
+        "Save failed",
+        error instanceof Error ? error.message : "Could not save booking details.",
+      );
+    } finally {
+      setSavingBookingDetails(false);
+    }
+  };
+
   return (
     <View style={{ gap: 14 }}>
       {caps.showTechAcceptedWorkspace ? (
@@ -810,6 +922,136 @@ function OverviewTab({
           {booking.itemServiceSpec ? (
             <KV label="Intake Spec" value={booking.itemServiceSpec} />
           ) : null}
+        </Section>
+      ) : null}
+
+      {canEditBookingDetails ? (
+        <Section title="Booking Details & Specifications" icon={MessageSquare}>
+          <Field label="Venue / Location">
+            <Input value={venue} onChangeText={setVenue} placeholder="Venue or location" />
+          </Field>
+          <Field label="Requested Size (sqm)">
+            <Input
+              value={size}
+              onChangeText={setSize}
+              keyboardType="decimal-pad"
+              placeholder="e.g. 24"
+            />
+          </Field>
+          <Field label="Arrangement">
+            <Input
+              value={arrangement}
+              onChangeText={setArrangement}
+              placeholder="e.g. Hanging (4w × 3h)"
+            />
+          </Field>
+          <Field label="Rented Days">
+            <Input
+              value={rentedDays}
+              onChangeText={setRentedDays}
+              keyboardType="number-pad"
+              placeholder="e.g. 2"
+            />
+          </Field>
+          <Field label="Intake / Technical Spec">
+            <TextArea
+              value={intakeSpec}
+              onChangeText={setIntakeSpec}
+              placeholder="Screen, mounting, power, and venue requirements"
+            />
+          </Field>
+          <Field label="Assembly Date & Time">
+            <DatePickerInput value={assemblyDate} onChangeText={setAssemblyDate} mode="datetime" />
+          </Field>
+          <Field label="Event Date & Time">
+            <DatePickerInput value={eventDate} onChangeText={setEventDate} mode="datetime" />
+          </Field>
+          <Field label="Dismantle Date & Time">
+            <DatePickerInput
+              value={dismantleDate}
+              onChangeText={setDismantleDate}
+              mode="datetime"
+            />
+          </Field>
+          {(customFieldsQuery.data || []).map((field) => {
+            const rawValue = customFieldEdits[field.key];
+            const updateValue = (value: unknown) =>
+              setCustomFieldEdits((previous) => ({ ...previous, [field.key]: value }));
+            if (field.type === "boolean") {
+              return (
+                <Field key={field.id} label={field.name}>
+                  <View style={styles.choiceWrap}>
+                    <Choice
+                      label="Yes"
+                      active={rawValue === true}
+                      onPress={() => updateValue(true)}
+                    />
+                    <Choice
+                      label="No"
+                      active={rawValue !== true}
+                      onPress={() => updateValue(false)}
+                    />
+                  </View>
+                </Field>
+              );
+            }
+            if (field.type === "enum" || field.type === "multi_select") {
+              const selectedValues = Array.isArray(rawValue)
+                ? rawValue.map(String)
+                : rawValue
+                  ? [String(rawValue)]
+                  : [];
+              return (
+                <Field key={field.id} label={field.name}>
+                  <View style={styles.choiceWrap}>
+                    {(field.options || []).map((option) => {
+                      const active = selectedValues.includes(option);
+                      return (
+                        <Choice
+                          key={option}
+                          label={option}
+                          active={active}
+                          onPress={() =>
+                            updateValue(
+                              field.type === "multi_select"
+                                ? active
+                                  ? selectedValues.filter((value) => value !== option)
+                                  : [...selectedValues, option]
+                                : option,
+                            )
+                          }
+                        />
+                      );
+                    })}
+                  </View>
+                </Field>
+              );
+            }
+            if (field.type === "date") {
+              return (
+                <Field key={field.id} label={field.name}>
+                  <DatePickerInput
+                    value={rawValue ? String(rawValue) : ""}
+                    onChangeText={updateValue}
+                  />
+                </Field>
+              );
+            }
+            return (
+              <Field key={field.id} label={field.name}>
+                <Input
+                  value={rawValue == null ? "" : String(rawValue)}
+                  onChangeText={(value) =>
+                    updateValue(field.type === "number" ? Number(value || 0) : value)
+                  }
+                  keyboardType={field.type === "number" ? "decimal-pad" : "default"}
+                />
+              </Field>
+            );
+          })}
+          <Button disabled={savingBookingDetails} onPress={saveBookingDetails}>
+            {savingBookingDetails ? "Saving..." : "Save Booking Details"}
+          </Button>
         </Section>
       ) : null}
 
@@ -993,7 +1235,7 @@ function OverviewTab({
       ) : null}
 
       <Section title="Client & Contact" icon={User}>
-        {caps.canManageCustomer && booking.customerId ? (
+        {caps.canEditClient && booking.customerId ? (
           <>
             <Field label="Client">
               <Input value={clientName} onChangeText={setClientName} placeholder="Client name" />
@@ -1069,23 +1311,25 @@ function OverviewTab({
           </>
         )}
       </Section>
-      <Section title="Venue & Setup" icon={MapPin}>
-        <KV label="Venue" value={booking.venue} />
-        <KV label="Arrangement" value={booking.arrangement} mono />
-        <KV label="Screen Type" value={booking.screenType} mono />
-        <KV label="Size (sqm)" value={booking.size} mono />
-        {booking.itemServiceSpec ? (
-          <KV label="Intake Specification" value={booking.itemServiceSpec} />
-        ) : null}
-      </Section>
-      {caps.showOpsSidebar ? (
-        <Section title="Logistics & Team" icon={Truck}>
-          <KV label="Team Leader" value={booking.teamLeader} />
-          <KV label="Stage Hand" value={booking.stageHand} />
-          <KV label="Driver" value={booking.driver} />
-          <KV label="Meal Budget" value={formatCurrency(booking.mealBudget)} mono />
+      {!canEditBookingDetails ? (
+        <Section title="Venue & Setup" icon={MapPin}>
+          <KV label="Venue" value={booking.venue} />
+          <KV label="Arrangement" value={booking.arrangement} mono />
+          <KV label="Screen Type" value={booking.screenType} mono />
+          <KV label="Size (sqm)" value={booking.size} mono />
+          {booking.itemServiceSpec ? (
+            <KV label="Intake Specification" value={booking.itemServiceSpec} />
+          ) : null}
         </Section>
       ) : null}
+      <Section title="Logistics & Team" icon={Truck}>
+        <KV label="Team Leader" value={booking.teamLeader} />
+        <KV label="Stage Hand" value={booking.stageHand} />
+        <KV label="Driver" value={booking.driver} />
+        {caps.showFinancials ? (
+          <KV label="Meal Budget" value={formatCurrency(booking.mealBudget)} mono />
+        ) : null}
+      </Section>
       <Section title="Schedule" icon={Calendar}>
         <KV label="Assembly" value={formatDate(booking.assemblyDate)} mono />
         <KV label="Event" value={formatDate(booking.eventDate)} mono />
@@ -1144,7 +1388,7 @@ function OverviewTab({
           ))}
         </Section>
       ) : null}
-      {(customFieldsQuery.data || []).length > 0 ? (
+      {!canEditBookingDetails && (customFieldsQuery.data || []).length > 0 ? (
         <Section title="Booking Specifications" icon={MessageSquare}>
           {(customFieldsQuery.data || []).map((field) => {
             const rawVal = booking.customFields?.[field.key];
@@ -1510,8 +1754,6 @@ function EquipmentTab({
 }) {
   const { can } = usePermissions();
   const canEditBom = canEditBomProp ?? can(PERMISSION.BOM_CREATE);
-  const { data: inventoryRows } = useInventory();
-  const pools = Array.isArray(inventoryRows) ? inventoryRows : [];
   const createBomLine = useCreateBomLine();
   const deleteBomLine = useDeleteBomLine();
   const [addOpen, setAddOpen] = useState(false);
@@ -1519,6 +1761,15 @@ function EquipmentTab({
   const [quantity, setQuantity] = useState("1");
   const [bomError, setBomError] = useState<string | null>(null);
   const [poolQuery, setPoolQuery] = useState("");
+  const {
+    data: poolRows = [],
+    isLoading: poolsLoading,
+    isError: poolsError,
+  } = useQuery({
+    queryKey: ["inventory-pools-for-bom"],
+    queryFn: getInventoryPoolsApi,
+    enabled: canEditBom && addOpen,
+  });
 
   const lines = Array.isArray(bomLines) ? bomLines : [];
 
@@ -1533,30 +1784,37 @@ function EquipmentTab({
     const stagedPoolIds = new Set(
       lines.map((line) => line.poolId).filter((id): id is string => Boolean(id)),
     );
-    const selectable = pools.filter((pool) => {
-      if (pool.entityKind === "item") return false;
-      const poolId = pool.poolId || pool.entityId || pool.id;
+    const selectable = poolRows.filter((pool) => {
+      const poolId = pool.id;
       if (!poolId || stagedPoolIds.has(poolId)) return false;
       return true;
     });
     const q = poolQuery.trim().toLowerCase();
     if (!q) return selectable;
     return selectable.filter((pool) => {
-      const haystack = [pool.name, pool.category, pool.sku, String(pool.total ?? "")]
+      const haystack = [pool.name, pool.sku, String(pool.totalQuantity ?? "")]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [pools, poolQuery, lines]);
+  }, [poolRows, poolQuery, lines]);
 
   const handleAddLine = async () => {
-    if (!selectedPoolId) return;
+    if (!selectedPoolId) {
+      setBomError("Select an equipment pool before adding a line.");
+      return;
+    }
+    const parsedQuantity = Number(quantity);
+    if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
+      setBomError("Quantity must be greater than zero.");
+      return;
+    }
     setBomError(null);
     try {
       await createBomLine.mutateAsync({
         bookingId: booking.id,
-        payload: { poolId: selectedPoolId, quantity },
+        payload: { poolId: selectedPoolId, quantity: String(parsedQuantity) },
       });
       setAddOpen(false);
       setSelectedPoolId("");
@@ -1665,12 +1923,12 @@ function EquipmentTab({
             <Field label="Equipment Pool">
               <View style={styles.choiceWrap}>
                 {filteredPools.map((pool) => {
-                  const poolId = pool.poolId || pool.entityId || pool.id;
+                  const poolId = pool.id;
                   return (
                     <Choice
                       key={poolId || pool.id}
-                      label={`${pool.name} (${pool.category || "General"})${
-                        pool.total != null ? ` — stock ${pool.total}` : ""
+                      label={`${pool.name}${pool.sku ? ` (${pool.sku})` : ""}${
+                        pool.totalQuantity != null ? ` — stock ${pool.totalQuantity}` : ""
                       }`}
                       active={selectedPoolId === poolId}
                       onPress={() => setSelectedPoolId(poolId)}
@@ -1679,7 +1937,11 @@ function EquipmentTab({
                 })}
                 {filteredPools.length === 0 ? (
                   <AppText variant="small" color={colors.text3}>
-                    No equipment matches.
+                    {poolsLoading
+                      ? "Loading equipment pools..."
+                      : poolsError
+                        ? "Could not load equipment pools. Check your inventory access and retry."
+                        : "No equipment matches."}
                   </AppText>
                 ) : null}
               </View>
@@ -2447,14 +2709,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  actionBar: {
+  detailTopRow: {
+    minHeight: 44,
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 8,
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  criticalActionsTrigger: {
-    alignSelf: "flex-start",
+  bookingActionsMenu: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+  },
+  menuPressed: {
+    opacity: 0.72,
   },
   criticalActionContext: {
     padding: 12,

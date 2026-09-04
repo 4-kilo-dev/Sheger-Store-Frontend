@@ -50,6 +50,7 @@ export interface Booking {
   id: string;
   code: string;
   customerId?: string;
+  createdBy?: string;
   client: string;
   contactPerson: string;
   contactPhone: string;

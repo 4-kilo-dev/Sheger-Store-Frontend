@@ -44,6 +44,7 @@ interface RawBooking {
   bookingCode?: string;
   code?: string;
   customerId?: string;
+  createdBy?: string;
   customerName?: string;
   client?: string;
   status?: string;
@@ -283,6 +284,7 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
     id: b.id,
     code: b.bookingCode || b.code || b.id,
     customerId: b.customerId || b.customer?.id || undefined,
+    createdBy: b.createdBy || undefined,
     client: customerName,
     contactPerson,
     contactPhone: customerPhone,

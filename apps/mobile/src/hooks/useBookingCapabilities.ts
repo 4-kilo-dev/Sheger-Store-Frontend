@@ -105,6 +105,9 @@ export function useBookingCapabilities(booking: Booking | undefined) {
       PERMISSION.PAYMENT_MANAGE,
     ]);
   const canManageCustomer = can(PERMISSION.CUSTOMER_MANAGE);
+  const canEditClient =
+    !!booking?.customerId && (canManageCustomer || booking.createdBy === authUser?.id);
+  const canEditDriverLogistics = can(PERMISSION.DRIVER_TRIP_EDIT);
   const canReportDamage = can(PERMISSION.DAMAGE_REPORT);
   const canSubmitEval =
     can(PERMISSION.EVAL_SUBMIT_INTERNAL) &&
@@ -203,7 +206,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     );
     if (fromTransitions) return fromTransitions;
 
-    if (booking.status === "CONFIRMED" || booking.status === "ASSIGNED") {
+    if (["CONFIRMED", "ASSIGNED", "ACCEPTED", "PREPARATION", "ONSITE"].includes(booking.status)) {
       return createAssignTechnicianAction();
     }
 
@@ -214,6 +217,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     const showPayments = can(PERMISSION.PAYMENT_MANAGE);
     const showOpsTabs = canAny([
       PERMISSION.BOOKING_VIEW_ALL,
+      PERMISSION.BOOKING_VIEW_ASSIGNED,
       PERMISSION.BOOKING_EDIT,
       PERMISSION.ASSIGNMENT_ASSIGN_TECHNICIAN,
       PERMISSION.ASSIGNMENT_ASSIGN_CREW,
@@ -263,6 +267,8 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     canEditBooking,
     canEditLogistics,
     canManageCustomer,
+    canEditClient,
+    canEditDriverLogistics,
     canReportDamage,
     canSubmitEval,
     canViewEval,

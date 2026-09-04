@@ -30,8 +30,8 @@ import { transitionBookingStatusApi } from "@/services/bookings-api";
 
 const TABS = [
   "All",
-  "This Month",
   "This Week",
+  "This Month",
   "Upcoming",
   "Onsite",
   "Last Week",
@@ -39,8 +39,18 @@ const TABS = [
 ] as const;
 const PAYMENT_STATUSES: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
 
-function isBookingTab(value: string | undefined): value is (typeof TABS)[number] {
-  return Boolean(value && TABS.includes(value as (typeof TABS)[number]));
+type BookingTab = (typeof TABS)[number];
+
+const DASHBOARD_TAB_MAP: Record<string, BookingTab> = {
+  "this-week": "This Week",
+  "this-month": "This Month",
+  onsite: "Onsite",
+};
+
+function bookingTabFromParam(value: string | string[] | undefined): BookingTab | null {
+  const tab = Array.isArray(value) ? value[0] : value;
+  if (!tab) return null;
+  return DASHBOARD_TAB_MAP[tab] ?? (TABS.includes(tab as BookingTab) ? (tab as BookingTab) : null);
 }
 
 function calendarYearMonth(date: Date, calendarSystem: CalendarSystem) {
@@ -90,7 +100,7 @@ async function runBulkTransitions(
 }
 
 export default function BookingsScreen() {
-  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string | string[] }>();
   const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings({ poll: true });
   const { data: staff = [] } = useStaff();
   const { canAny, can } = usePermissions();
@@ -111,7 +121,8 @@ export default function BookingsScreen() {
   const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
-    if (isBookingTab(tabParam)) setTab(tabParam);
+    const requestedTab = bookingTabFromParam(tabParam);
+    if (requestedTab) setTab(requestedTab);
   }, [tabParam]);
 
   const isAssignedScopeOnly =
@@ -140,11 +151,16 @@ export default function BookingsScreen() {
         return !isNaN(d.getTime()) && d >= now;
       });
     } else if (tab === "This Week") {
-      const now = new Date();
+      const today = new Date();
+      const startOfWeek = new Date(today);
+      startOfWeek.setHours(0, 0, 0, 0);
+      startOfWeek.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
       result = result.filter((booking) => {
-        const date = new Date(booking.assemblyDate);
-        const daysAway = (date.getTime() - now.getTime()) / 86400000;
-        return !Number.isNaN(date.getTime()) && daysAway >= 0 && daysAway <= 7;
+        const date = new Date(booking.eventDate);
+        return !Number.isNaN(date.getTime()) && date >= startOfWeek && date <= endOfWeek;
       });
     } else if (tab === "Last Week") {
       const now = new Date();

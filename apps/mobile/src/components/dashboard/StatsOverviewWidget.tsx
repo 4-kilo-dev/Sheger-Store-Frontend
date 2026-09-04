@@ -34,7 +34,8 @@ function namesMatch(assignee: string, profileName: string) {
   return a === p || a.startsWith(p) || p.startsWith(a);
 }
 
-type DashboardBookingTab = "This Month" | "This Week" | "Onsite";
+/** Stable route values; display labels can change without breaking dashboard navigation. */
+type DashboardBookingTab = "this-month" | "this-week" | "onsite";
 
 type DashboardCard = {
   label: string;
@@ -253,7 +254,7 @@ export function StatsOverviewWidget() {
         note: `${stats.paid} paid`,
         icon: CalendarRange,
         href: "/bookings",
-        bookingTab: "This Month",
+        bookingTab: "this-month",
       },
       {
         label: "Revenue",
@@ -276,7 +277,7 @@ export function StatsOverviewWidget() {
         icon: Package,
         tone: colors.status.ACCEPTED,
         href: "/bookings",
-        bookingTab: "Onsite",
+        bookingTab: "onsite",
       },
       {
         label: "This week",
@@ -285,7 +286,7 @@ export function StatsOverviewWidget() {
         icon: Clock,
         tone: colors.payment.ADVANCE,
         href: "/bookings",
-        bookingTab: "This Week",
+        bookingTab: "this-week",
       },
     ];
   }, [formatMoneyCompact, role, stats]);
@@ -297,15 +298,13 @@ export function StatsOverviewWidget() {
           key={card.label}
           accessibilityRole="button"
           accessibilityLabel={`${card.label}: ${card.value}`}
-          onPress={() =>
-            router.push(
-              to(
-                card.bookingTab
-                  ? `${card.href}?tab=${encodeURIComponent(card.bookingTab)}`
-                  : card.href,
-              ),
-            )
-          }
+          onPress={() => {
+            if (card.bookingTab) {
+              router.navigate({ pathname: "/bookings", params: { tab: card.bookingTab } });
+              return;
+            }
+            router.push(to(card.href));
+          }}
           style={({ pressed }) => [styles.statTile, pressed ? styles.statTilePressed : null]}
         >
           <StatCard
