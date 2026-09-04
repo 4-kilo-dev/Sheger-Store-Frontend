@@ -82,6 +82,7 @@ import {
   useBookingReservations,
   useReplacePoolReservations,
   useCustomFieldDefinitions,
+  useCreateAssignment,
   useDeleteAssignment,
   useDeleteBooking,
 } from "@/hooks/useOperations";
@@ -94,6 +95,7 @@ import { getInventoryCategoriesApi, getInventoryPoolsApi } from "@/services/inve
 import { filterScreenPools, isScreenPool } from "@/utils/screen-pools";
 import { assignBomLineCodes } from "@/utils/bomLineCodes";
 import { uploadBookingAttachmentApi } from "@/services/attachments.api";
+import { getStaffApi } from "@/services/staff-api";
 import { useBookingCapabilities, type BookingTabName } from "@/hooks/useBookingCapabilities";
 import { getBookingPollPhaseFromQuery } from "@/hooks/useBookingPoll";
 import { createAssignTechnicianAction } from "@/utils/bookingActions";
@@ -1190,6 +1192,10 @@ function OverviewTab({
         </Section>
       ) : null}
 
+      {caps.canAssignCrew && ["PREPARATION", "ONSITE"].includes(booking.status) ? (
+        <StagehandLeaderAssignment booking={booking} />
+      ) : null}
+
       {booking.status === "PREPARATION" &&
       (caps.canAssignCrew || caps.canEditLogistics || caps.canEditBooking) ? (
         <Section title="Dispatch Logistics" icon={Truck}>
@@ -1510,6 +1516,150 @@ function ScheduleTab({ booking }: { booking: Booking }) {
   );
 }
 
+function isStagehandRole(role?: string) {
+  const normalized = (role || "").trim().toLowerCase();
+  return normalized === "stagehand" || normalized === "sh";
+}
+
+/** Admin/OO crew assignment parity with the web booking overview. */
+function StagehandLeaderAssignment({ booking }: { booking: Booking }) {
+  const createAssignment = useCreateAssignment();
+  const deleteAssignment = useDeleteAssignment();
+  const [selectedStagehandId, setSelectedStagehandId] = useState("");
+  const {
+    data: staffList = [],
+    isLoading: staffLoading,
+    isError: staffError,
+  } = useQuery({
+    queryKey: ["staff-for-stagehand-assignment"],
+    queryFn: getStaffApi,
+  });
+
+  const stagehandLeader = (booking.assignments || []).find(
+    (assignment) =>
+      assignment.roleContext === "CREW" &&
+      assignment.isTeamLead &&
+      !assignment.declineReason &&
+      (assignment as { status?: string }).status !== "DECLINED",
+  );
+  const stagehands = staffList.filter((member) => isStagehandRole(member.role));
+  const isSaving = createAssignment.isPending || deleteAssignment.isPending;
+
+  const assignStagehandLeader = async () => {
+    if (!selectedStagehandId) {
+      Alert.alert("Select a stagehand", "Choose the stagehand who will lead this booking.");
+      return;
+    }
+    if (stagehandLeader?.userId === selectedStagehandId) {
+      Alert.alert("Already assigned", "This stagehand is already the team leader.");
+      return;
+    }
+
+    try {
+      if (stagehandLeader) await deleteAssignment.mutateAsync(stagehandLeader.id);
+      await createAssignment.mutateAsync({
+        bookingId: booking.id,
+        payload: {
+          userId: selectedStagehandId,
+          roleContext: "CREW",
+          isTeamLead: true,
+        },
+      });
+      setSelectedStagehandId("");
+      Alert.alert(
+        "Stagehand leader assigned",
+        "The stagehand leader is now part of this booking's logistics team.",
+      );
+    } catch (error) {
+      Alert.alert(
+        "Assignment failed",
+        error instanceof Error ? error.message : "Could not assign the stagehand leader.",
+      );
+    }
+  };
+
+  const removeStagehandLeader = () => {
+    if (!stagehandLeader) return;
+    Alert.alert(
+      "Remove stagehand leader?",
+      `${stagehandLeader.user?.name || "This stagehand"} will be removed from the booking team.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteAssignment.mutateAsync(stagehandLeader.id);
+              Alert.alert(
+                "Stagehand leader removed",
+                "No stagehand leader is assigned to this booking.",
+              );
+            } catch (error) {
+              Alert.alert(
+                "Removal failed",
+                error instanceof Error ? error.message : "Could not remove the stagehand leader.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  return (
+    <Section title="Assign Stagehand Leader" icon={Users}>
+      <AppText variant="subtitle" color={colors.text2}>
+        Choose the stagehand responsible for this deployment. They appear in the team brief and
+        checkout logistics.
+      </AppText>
+      {stagehandLeader ? (
+        <View style={styles.assignmentSummary}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <AppText variant="eyebrow">Current stagehand leader</AppText>
+            <AppText style={{ fontWeight: "800" }}>{stagehandLeader.user?.name || "—"}</AppText>
+          </View>
+          <Button variant="danger" disabled={isSaving} onPress={removeStagehandLeader}>
+            Remove
+          </Button>
+        </View>
+      ) : null}
+      <Field label={stagehandLeader ? "Replace stagehand leader" : "Stagehand leader"}>
+        <View style={styles.choiceWrap}>
+          {stagehands.map((member) => (
+            <Choice
+              key={member.id}
+              label={member.name}
+              active={selectedStagehandId === member.id}
+              onPress={() => setSelectedStagehandId(member.id)}
+            />
+          ))}
+        </View>
+      </Field>
+      {staffLoading ? (
+        <AppText variant="small" color={colors.text2}>
+          Loading stagehands...
+        </AppText>
+      ) : staffError ? (
+        <AppText variant="small" color={colors.destructive}>
+          Could not load stagehands. Check staff access and try again.
+        </AppText>
+      ) : stagehands.length === 0 ? (
+        <AppText variant="small" color={colors.text2}>
+          No stagehands are available to assign.
+        </AppText>
+      ) : null}
+      <Button disabled={!selectedStagehandId || isSaving} onPress={assignStagehandLeader}>
+        {isSaving
+          ? "Saving..."
+          : stagehandLeader
+            ? "Replace Stagehand Leader"
+            : "Assign Stagehand Leader"}
+      </Button>
+    </Section>
+  );
+}
+
 function TeamTab({
   booking,
   assignments,
@@ -1818,6 +1968,19 @@ function EquipmentTab({
     });
   }, [poolRows, poolQuery, lines]);
 
+  const selectedPool = useMemo(
+    () => poolRows.find((pool) => pool.id === selectedPoolId) ?? null,
+    [poolRows, selectedPoolId],
+  );
+
+  const closeAddSheet = () => {
+    setAddOpen(false);
+    setSelectedPoolId("");
+    setQuantity("1");
+    setPoolQuery("");
+    setBomError(null);
+  };
+
   const handleAddLine = async () => {
     if (!selectedPoolId) {
       setBomError("Select an equipment pool before adding a line.");
@@ -1834,10 +1997,7 @@ function EquipmentTab({
         bookingId: booking.id,
         payload: { poolId: selectedPoolId, quantity: String(parsedQuantity) },
       });
-      setAddOpen(false);
-      setSelectedPoolId("");
-      setQuantity("1");
-      setPoolQuery("");
+      closeAddSheet();
     } catch (e) {
       setBomError(e instanceof Error ? e.message : "Failed to add equipment line.");
     }
@@ -1924,10 +2084,24 @@ function EquipmentTab({
       <BottomSheet
         visible={addOpen}
         title="Add Equipment Line"
-        onClose={() => {
-          setAddOpen(false);
-          setPoolQuery("");
-        }}
+        onClose={closeAddSheet}
+        footer={
+          addOpen ? (
+            <View style={styles.addBomFooter}>
+              {bomError ? (
+                <AppText variant="small" color={colors.destructive}>
+                  {bomError}
+                </AppText>
+              ) : null}
+              <Field label="Quantity">
+                <Input value={quantity} onChangeText={setQuantity} keyboardType="numeric" />
+              </Field>
+              <Button disabled={!selectedPool || createBomLine.isPending} onPress={handleAddLine}>
+                {createBomLine.isPending ? "Adding..." : "Add Line"}
+              </Button>
+            </View>
+          ) : null
+        }
       >
         {addOpen ? (
           <>
@@ -1938,43 +2112,54 @@ function EquipmentTab({
                 placeholder="Search equipment, category, stock…"
               />
             </Field>
-            <Field label="Equipment Pool">
-              <View style={styles.choiceWrap}>
-                {filteredPools.map((pool) => {
-                  const poolId = pool.id;
-                  return (
-                    <Choice
-                      key={poolId || pool.id}
-                      label={`${pool.name}${pool.sku ? ` (${pool.sku})` : ""}${
-                        pool.totalQuantity != null ? ` — stock ${pool.totalQuantity}` : ""
-                      }`}
-                      active={selectedPoolId === poolId}
-                      onPress={() => setSelectedPoolId(poolId)}
-                    />
-                  );
-                })}
-                {filteredPools.length === 0 ? (
-                  <AppText variant="small" color={colors.text3}>
-                    {poolsLoading
-                      ? "Loading equipment pools..."
-                      : poolsError
-                        ? "Could not load equipment pools. Check your inventory access and retry."
-                        : "No equipment matches."}
-                  </AppText>
-                ) : null}
-              </View>
-            </Field>
-            <Field label="Quantity">
-              <Input value={quantity} onChangeText={setQuantity} keyboardType="numeric" />
-            </Field>
-            {bomError ? (
-              <AppText variant="small" color={colors.destructive}>
-                {bomError}
+            <View style={styles.poolPickerHeader}>
+              <AppText variant="eyebrow">Available inventory</AppText>
+              <AppText variant="small" color={colors.text2}>
+                {filteredPools.length} available
+              </AppText>
+            </View>
+            {filteredPools.map((pool) => {
+              const poolId = pool.id;
+              if (!poolId) return null;
+              const active = selectedPoolId === poolId;
+              return (
+                <Pressable
+                  key={poolId}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select ${pool.name || "equipment pool"}`}
+                  accessibilityState={{ selected: active }}
+                  onPress={() => {
+                    setSelectedPoolId(poolId);
+                    setBomError(null);
+                  }}
+                  style={({ pressed }) => [
+                    styles.poolOption,
+                    active ? styles.poolOptionActive : null,
+                    pressed ? styles.poolOptionPressed : null,
+                  ]}
+                >
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <AppText style={{ fontWeight: "800" }}>{pool.name || "Equipment pool"}</AppText>
+                    <AppText variant="small" color={colors.text2}>
+                      {pool.sku ? `${pool.sku} · ` : ""}
+                      {pool.totalQuantity != null
+                        ? `Stock ${pool.totalQuantity}`
+                        : "Stock unavailable"}
+                    </AppText>
+                  </View>
+                  {active ? <CheckCircle2 size={20} color={colors.accent} /> : null}
+                </Pressable>
+              );
+            })}
+            {filteredPools.length === 0 ? (
+              <AppText variant="small" color={colors.text2}>
+                {poolsLoading
+                  ? "Loading equipment pools..."
+                  : poolsError
+                    ? "Could not load equipment pools. Check your inventory access and retry."
+                    : "No equipment matches."}
               </AppText>
             ) : null}
-            <Button disabled={createBomLine.isPending} onPress={handleAddLine}>
-              {createBomLine.isPending ? "Adding..." : "Add Line"}
-            </Button>
           </>
         ) : null}
       </BottomSheet>
@@ -2844,6 +3029,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  assignmentSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+    padding: 12,
+  },
   itemRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2851,6 +3046,34 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
     paddingBottom: 12,
+  },
+  poolPickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
+  poolOption: {
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  poolOptionActive: {
+    borderColor: colors.accent,
+    backgroundColor: alpha(colors.accent, 0.1),
+  },
+  poolOptionPressed: {
+    opacity: 0.72,
+  },
+  addBomFooter: {
+    gap: 8,
   },
   fileCard: {
     flexDirection: "row",

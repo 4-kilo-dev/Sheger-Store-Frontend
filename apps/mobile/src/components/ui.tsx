@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -22,6 +23,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import brandLogo from "../../assets/icon.png";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 import { alpha, colors, radius, typography } from "@/theme/tokens";
 import { to } from "@/utils/routes";
@@ -84,17 +86,12 @@ export function AppText({
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <View style={styles.brandRow}>
-      <View style={styles.brandDiamond}>
-        <View style={styles.brandDiamondInner} />
-      </View>
-      {!compact ? (
-        <View>
-          <AppText style={styles.brandName}>VORTEX</AppText>
-          <AppText style={styles.brandSub} color={colors.accent}>
-            VISUAL
-          </AppText>
-        </View>
-      ) : null}
+      <Image
+        accessibilityLabel="VORTEX logo"
+        source={brandLogo}
+        style={[styles.brandLogo, compact ? styles.brandLogoCompact : null]}
+      />
+      {!compact ? <AppText style={styles.brandName}>VORTEX</AppText> : null}
     </View>
   );
 }
@@ -707,31 +704,20 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  brandDiamond: {
+  brandLogo: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.md,
+  },
+  brandLogoCompact: {
     width: 36,
     height: 36,
-    borderWidth: 2,
-    borderColor: colors.accent,
-    transform: [{ rotate: "45deg" }],
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  brandDiamondInner: {
-    width: 19,
-    height: 19,
-    borderWidth: 1,
-    borderColor: colors.foreground,
   },
   brandName: {
     fontSize: 13,
     fontFamily: typography.sansExtraBold,
     letterSpacing: 3,
     color: colors.foreground,
-  },
-  brandSub: {
-    fontSize: 9,
-    fontFamily: typography.sansExtraBold,
-    letterSpacing: 3,
   },
   button: {
     minHeight: 44,
