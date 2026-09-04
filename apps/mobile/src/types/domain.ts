@@ -84,6 +84,18 @@ export interface Booking {
   itemServiceSpec?: string;
   assignments: BookingAssignment[];
   customFields: Record<string, unknown>;
+  ethiopianDates?: Record<string, {
+    iso: string;
+    ethiopian: {
+      year: number; month: number; day: number; monthName: string; display: string;
+      time: {
+        hour24: number; minute: number; isoTime: string; ethiopianHour: number;
+        clockPeriod: "day" | "night";
+        dayPeriod: "LELIT" | "TEWAT" | "KESEAT" | "MATA";
+        dayPeriodLabel: string; display: string;
+      };
+    };
+  }>;
 }
 
 export type InventoryCondition = "GOOD" | "SERVICE DUE" | "DAMAGED";

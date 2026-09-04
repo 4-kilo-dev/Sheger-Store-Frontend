@@ -41,6 +41,7 @@ import {
 } from "@/features/users/services/staff.api";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
+import { formatCalendarValuesApi } from "@/lib/calendar/calendar.api";
 
 const _Route = createFileRoute("/settings")({
   head: () => ({
@@ -84,10 +85,19 @@ export function SettingsPage() {
   const [tempCurrency, setTempCurrency] = useState("ETB");
   const [tempTimezone, setTempTimezone] = useState("Africa/Addis_Ababa");
   const [savingSettings, setSavingSettings] = useState(false);
+  const [previewInstant] = useState(() => new Date().toISOString());
 
   const { data: systemSettings } = useQuery({
     queryKey: ["system-settings"],
     queryFn: getSettingsApi,
+  });
+
+  const { data: calendarPreview } = useQuery({
+    queryKey: ["calendar", "regional-preview", previewInstant, tempCalendarSystem, tempNumeralsSystem],
+    queryFn: () =>
+      formatCalendarValuesApi([previewInstant], tempCalendarSystem, tempNumeralsSystem).then(
+        (entries) => entries[0],
+      ),
   });
 
   useEffect(() => {
@@ -121,39 +131,6 @@ export function SettingsPage() {
       toast.error("Failed to save settings. Please try again.");
     } finally {
       setSavingSettings(false);
-    }
-  };
-
-  const formatPreviewDate = (date: Date) => {
-    if (tempCalendarSystem === "ethiopic") {
-      const locale =
-        tempNumeralsSystem === "geez" ? "am-ET-u-ca-ethiopic" : "am-ET-u-ca-ethiopic-nu-latn";
-      return new Intl.DateTimeFormat(locale, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }).format(date);
-    }
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }).format(date);
-  };
-
-  const formatPreviewTime = (date: Date) => {
-    try {
-      return new Intl.DateTimeFormat("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: tempTimezone,
-        timeZoneName: "short",
-      }).format(date);
-    } catch {
-      return new Intl.DateTimeFormat("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(date);
     }
   };
 
@@ -270,14 +247,14 @@ export function SettingsPage() {
                 <div className="grid grid-cols-2 gap-3 text-[12px]">
                   <div>
                     <span style={{ color: "var(--text-3)" }}>Date:</span>{" "}
-                    {formatPreviewDate(new Date())}
+                    {calendarPreview?.displayDate ?? "…"}
                   </div>
                   <div>
                     <span style={{ color: "var(--text-3)" }}>Currency:</span> {currencyPreview}
                   </div>
                   <div>
                     <span style={{ color: "var(--text-3)" }}>Time:</span>{" "}
-                    {formatPreviewTime(new Date())}
+                    {calendarPreview?.date.ethiopian.time.display ?? "…"}
                   </div>
                   <div>
                     <span style={{ color: "var(--text-3)" }}>Timezone:</span> {tempTimezone}

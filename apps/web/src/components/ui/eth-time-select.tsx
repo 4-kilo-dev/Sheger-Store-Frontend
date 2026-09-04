@@ -1,13 +1,12 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
-  ETHIOPIAN_DAY_PERIODS,
-  ethiopianSelectionToWesternHHmm,
-  parseWesternHHmm,
-  westernToEthiopianTime,
-  type EthiopianDayPeriod,
-} from "@vortex/utils";
-import { useCalendarSystem } from "@/context/CalendarSystemContext";
+  getEthiopianTimeApi,
+  getEthiopianTimeOptionsApi,
+  toGregorianTimeApi,
+  type EthiopianTimeValue,
+} from "@/lib/calendar/calendar.api";
 
-const MINUTES = ["00", "15", "30", "45"] as const;
+type EthiopianDayPeriod = EthiopianTimeValue["dayPeriod"];
 
 type EthTimeSelectProps = {
   /** Western 24h `HH:mm` */
@@ -22,17 +21,30 @@ type EthTimeSelectProps = {
  * Stores/emits Western 24h `HH:mm` for API compatibility.
  */
 export function EthTimeSelect({ value, onChange, className, disabled }: EthTimeSelectProps) {
-  const { numeralsSystem } = useCalendarSystem();
-  const { hour, minute } = parseWesternHHmm(value || "12:00");
-  const parts = westernToEthiopianTime(hour, minute, numeralsSystem === "geez" ? "geez" : "latn");
-  const periodMeta = ETHIOPIAN_DAY_PERIODS.find((p) => p.id === parts.period)!;
+  const { data: options } = useQuery({
+    queryKey: ["calendar", "ethiopian-time-options"],
+    queryFn: getEthiopianTimeOptionsApi,
+  });
+  const { data: parts } = useQuery({
+    queryKey: ["calendar", "ethiopian-time", value],
+    queryFn: () => getEthiopianTimeApi(value || "12:00"),
+  });
+  const convert = useMutation({
+    mutationFn: ({ period, hour, minute }: { period: EthiopianDayPeriod; hour: number; minute: number }) =>
+      toGregorianTimeApi(period, hour, minute),
+    onSuccess: (result) => onChange(result.isoTime),
+  });
+  if (!options) {
+    return <div className={`h-9 text-[12px] text-[var(--text-3)] ${className || ""}`}>Loading time…</div>;
+  }
 
-  const snapMinute = MINUTES.includes(String(minute).padStart(2, "0") as (typeof MINUTES)[number])
-    ? String(minute).padStart(2, "0")
-    : String(Math.round(minute / 15) * 15).padStart(2, "0").replace("60", "00");
-
-  const emit = (period: EthiopianDayPeriod, ethHour: number, min: number) => {
-    onChange(ethiopianSelectionToWesternHHmm(period, ethHour, min));
+  const period = parts?.dayPeriod || options.periods[0].id;
+  const periodMeta = options.periods.find((item) => item.id === period) || options.periods[0];
+  const ethHour = parts?.ethiopianHour ?? periodMeta.hours[0];
+  const minute = parts?.minute ?? 0;
+  const snapMinute = options.minutes.includes(minute) ? minute : options.minutes[0];
+  const emit = (nextPeriod: EthiopianDayPeriod, nextHour: number, nextMinute: number) => {
+    convert.mutate({ period: nextPeriod, hour: nextHour, minute: nextMinute });
   };
 
   const selectCls =
@@ -41,29 +53,29 @@ export function EthTimeSelect({ value, onChange, className, disabled }: EthTimeS
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className || ""}`}>
       <select
-        disabled={disabled}
-        value={parts.period}
+        disabled={disabled || convert.isPending}
+        value={period}
         onChange={(e) => {
           const next = e.target.value as EthiopianDayPeriod;
-          const hours = ETHIOPIAN_DAY_PERIODS.find((p) => p.id === next)!.hours;
-          const ethHour = hours.includes(parts.ethHour) ? parts.ethHour : hours[0];
-          emit(next, ethHour, minute);
+          const hours = options.periods.find((item) => item.id === next)!.hours;
+          const nextHour = hours.includes(ethHour) ? ethHour : hours[0];
+          emit(next, nextHour, minute);
         }}
         className={selectCls}
         style={{ borderColor: "var(--border)", minWidth: 110 }}
         aria-label="Time of day period"
       >
-        {ETHIOPIAN_DAY_PERIODS.map((p) => (
+        {options.periods.map((p) => (
           <option key={p.id} value={p.id}>
-            {p.labelAm} · {p.labelEn}
+            {p.label}
           </option>
         ))}
       </select>
 
       <select
-        disabled={disabled}
-        value={parts.ethHour}
-        onChange={(e) => emit(parts.period, Number(e.target.value), minute)}
+        disabled={disabled || convert.isPending}
+        value={ethHour}
+        onChange={(e) => emit(period, Number(e.target.value), minute)}
         className={selectCls}
         style={{ borderColor: "var(--border)" }}
         aria-label="Hour"
@@ -80,16 +92,16 @@ export function EthTimeSelect({ value, onChange, className, disabled }: EthTimeS
       </span>
 
       <select
-        disabled={disabled}
-        value={snapMinute === "60" ? "00" : snapMinute}
-        onChange={(e) => emit(parts.period, parts.ethHour, Number(e.target.value))}
+        disabled={disabled || convert.isPending}
+        value={snapMinute}
+        onChange={(e) => emit(period, ethHour, Number(e.target.value))}
         className={selectCls}
         style={{ borderColor: "var(--border)" }}
         aria-label="Minute"
       >
-        {MINUTES.map((m) => (
+        {options.minutes.map((m) => (
           <option key={m} value={m}>
-            {m}
+            {String(m).padStart(2, "0")}
           </option>
         ))}
       </select>

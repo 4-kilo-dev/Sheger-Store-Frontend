@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { formatEthiopianDateTimeClock } from "@vortex/utils";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { getSettingsApi, updateSettingsApi } from "@/features/settings/services/settings.api";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { formatCalendarValuesApi, type CalendarFormatEntry } from "@/lib/calendar/calendar.api";
 
 export type CalendarSystem = "gregorian" | "ethiopic";
 export type NumeralsSystem = "geez" | "latn";
@@ -15,15 +15,9 @@ interface CalendarSystemContextType {
 
 const CalendarSystemContext = createContext<CalendarSystemContextType | undefined>(undefined);
 
-function parseCalendarDate(dateInput: string | Date): Date {
-  if (dateInput instanceof Date) return dateInput;
-  // Date-only ISO strings are parsed as UTC by JavaScript. Calendar fields represent
-  // a local civil day, so construct them locally to prevent a one-day shift.
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateInput);
-  if (dateOnly) {
-    return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
-  }
-  return new Date(dateInput);
+function calendarValue(value: string | Date): string | null {
+  const normalized = value instanceof Date ? value.toISOString() : value;
+  return Number.isNaN(new Date(normalized).getTime()) ? null : normalized;
 }
 
 export function CalendarSystemProvider({ children }: { children: React.ReactNode }) {
@@ -101,55 +95,57 @@ export function useCalendarSystem() {
 
 export function useDateFormatter() {
   const { calendarSystem, numeralsSystem } = useCalendarSystem();
+  const [cache, setCache] = useState<Record<string, CalendarFormatEntry>>({});
+  const pending = useRef(new Set<string>());
+  const failed = useRef(new Set<string>());
+  const isFlushScheduled = useRef(false);
+
+  useEffect(() => {
+    // A preference change needs fresh labels from the backend calendar service.
+    setCache({});
+    pending.current.clear();
+    failed.current.clear();
+  }, [calendarSystem, numeralsSystem]);
+
+  const request = useCallback((value: string | Date) => {
+    const normalized = calendarValue(value);
+    if (!normalized || typeof window === "undefined" || failed.current.has(normalized)) return null;
+    const key = `${calendarSystem}:${numeralsSystem}:${normalized}`;
+    if (cache[key]) return cache[key];
+    pending.current.add(normalized);
+    if (!isFlushScheduled.current) {
+      isFlushScheduled.current = true;
+      queueMicrotask(async () => {
+        const values = [...pending.current];
+        pending.current.clear();
+        isFlushScheduled.current = false;
+        if (values.length === 0) return;
+        try {
+          const entries = await formatCalendarValuesApi(values, calendarSystem, numeralsSystem);
+          setCache((current) => {
+            const next = { ...current };
+            for (const entry of entries) {
+              next[`${calendarSystem}:${numeralsSystem}:${entry.value}`] = entry;
+            }
+            return next;
+          });
+        } catch {
+          values.forEach((item) => failed.current.add(item));
+        }
+      });
+    }
+    return null;
+  }, [cache, calendarSystem, numeralsSystem]);
 
   const formatDate = React.useCallback((dateInput?: string | Date | null) => {
     if (!dateInput) return "—";
-    const date = parseCalendarDate(dateInput);
-    if (isNaN(date.getTime())) return "—";
-
-    if (calendarSystem === "ethiopic") {
-      const locale = numeralsSystem === "geez" ? "am-ET-u-ca-ethiopic" : "am-ET-u-ca-ethiopic-nu-latn";
-      return new Intl.DateTimeFormat(locale, {
-        year: "numeric",
-        month: "long",
-        day: "numeric"
-      }).format(date);
-    }
-
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric"
-    }).format(date);
-  }, [calendarSystem, numeralsSystem]);
+    return request(dateInput)?.displayDate ?? "…";
+  }, [request]);
 
   const formatDateTime = React.useCallback((dateInput?: string | Date | null) => {
     if (!dateInput) return "—";
-    const date = parseCalendarDate(dateInput);
-    if (isNaN(date.getTime())) return "—";
-
-    if (calendarSystem === "ethiopic") {
-      const locale = numeralsSystem === "geez" ? "am-ET-u-ca-ethiopic" : "am-ET-u-ca-ethiopic-nu-latn";
-      const datePart = new Intl.DateTimeFormat(locale, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }).format(date);
-      const timePart = formatEthiopianDateTimeClock(
-        date,
-        numeralsSystem === "geez" ? "geez" : "latn",
-      );
-      return `${datePart} ${timePart}`;
-    }
-
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
-  }, [calendarSystem, numeralsSystem]);
+    return request(dateInput)?.displayDateTime ?? "…";
+  }, [request]);
 
   return { formatDate, formatDateTime };
 }

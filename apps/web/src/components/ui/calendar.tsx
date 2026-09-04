@@ -3,8 +3,6 @@
 import * as React from "react";
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { DayButton, DayPicker, getDefaultClassNames } from "react-day-picker";
-import { DayPicker as EthiopicDayPicker } from "react-day-picker/ethiopic";
-import { useCalendarSystem } from "@/context/CalendarSystemContext";
 
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -22,14 +20,9 @@ function Calendar({
   buttonVariant?: React.ComponentProps<typeof Button>["variant"];
 }) {
   const defaultClassNames = getDefaultClassNames();
-  const { calendarSystem, numeralsSystem } = useCalendarSystem();
-
-  const PickerComponent = calendarSystem === "ethiopic" ? (EthiopicDayPicker as any) : DayPicker;
-  const ethiopicProps = calendarSystem === "ethiopic" ? { numerals: numeralsSystem } : {};
 
   return (
-    <PickerComponent
-      {...ethiopicProps}
+    <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn(
         "bg-background group/calendar p-3 [--cell-size:2rem] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
@@ -38,22 +31,7 @@ function Calendar({
         className,
       )}
       captionLayout={captionLayout}
-      formatters={{
-        // Keep month names consistent with the Ethiopian date formatter even when
-        // Latin numerals are selected (the picker otherwise transliterates them).
-        formatCaption: (date: Date) =>
-          calendarSystem === "ethiopic"
-            ? new Intl.DateTimeFormat("am-ET-u-ca-ethiopic-nu-latn", {
-                month: "long",
-                year: "numeric",
-              }).format(date)
-            : new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(date),
-        formatMonthDropdown: (date: Date) =>
-          calendarSystem === "ethiopic"
-            ? new Intl.DateTimeFormat("am-ET-u-ca-ethiopic-nu-latn", { month: "long" }).format(date)
-            : date.toLocaleString("default", { month: "short" }),
-        ...formatters,
-      }}
+      formatters={formatters}
       classNames={{
         root: cn("w-fit", defaultClassNames.root),
         months: cn("relative flex flex-col gap-4 md:flex-row", defaultClassNames.months),

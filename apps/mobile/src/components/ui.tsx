@@ -22,7 +22,6 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { formatEthiopianTimeOfDay } from "@vortex/utils";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 import { alpha, colors, radius, typography } from "@/theme/tokens";
 import { to } from "@/utils/routes";
@@ -340,7 +339,7 @@ export function DatePickerInput({
   minimumDate?: Date;
   maximumDate?: Date;
 }) {
-  const { formatDate, calendarSystem, numeralsSystem } = useDateFormatter();
+  const { formatDate, formatDateTime } = useDateFormatter();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const parsed = parseDateValue(value, mode) ?? new Date();
@@ -373,12 +372,8 @@ export function DatePickerInput({
 
   const displayText = value
     ? mode === "datetime"
-      ? `${formatDate(parsed)} · ${
-          calendarSystem === "ethiopic"
-            ? formatEthiopianTimeOfDay(timeValue, numeralsSystem === "geez" ? "geez" : "latn")
-            : timeValue
-        }`
-      : formatDate(parsed)
+      ? formatDateTime(value)
+      : formatDate(value)
     : placeholder || (mode === "datetime" ? "Select date & time" : "Select date");
 
   return (
@@ -415,9 +410,7 @@ export function DatePickerInput({
           >
             <Clock3 size={14} color={colors.text2} />
             <AppText variant="small" color={colors.text2} style={{ fontWeight: "700" }}>
-              {calendarSystem === "ethiopic"
-                ? formatEthiopianTimeOfDay(timeValue, numeralsSystem === "geez" ? "geez" : "latn")
-                : timeValue}
+              {timeValue}
             </AppText>
           </Pressable>
         </View>

@@ -340,6 +340,19 @@ export interface Booking {
   itemServiceSpec?: string;
   assignments?: any[];
   customFields: Record<string, any>;
+  /** Server-owned Ethiopian calendar values; ISO fields remain canonical. */
+  ethiopianDates?: Record<string, {
+    iso: string;
+    ethiopian: {
+      year: number; month: number; day: number; monthName: string; display: string;
+      time: {
+        hour24: number; minute: number; isoTime: string; ethiopianHour: number;
+        clockPeriod: "day" | "night";
+        dayPeriod: "LELIT" | "TEWAT" | "KESEAT" | "MATA";
+        dayPeriodLabel: string; display: string;
+      };
+    };
+  }>;
 }
 
 export interface CustomFieldDefinition {
@@ -578,6 +591,7 @@ function mapBackendBookingToFrontend(b: any): Booking {
     itemServiceSpec: intakeSpec,
     assignments: b.assignments || [],
     customFields: b.customFields || {},
+    ethiopianDates: b.ethiopianDates,
   };
 }
 
