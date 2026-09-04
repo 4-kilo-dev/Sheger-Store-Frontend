@@ -10,6 +10,10 @@ import {
   SlidersHorizontal,
   Trash2,
   Pencil,
+  ShieldCheck,
+  LockKeyhole,
+  RotateCcw,
+  Clock3,
 } from "lucide-react";
 import { useState, useEffect, useMemo, Fragment } from "react";
 import { AppShell } from "@/components/app-shell";
@@ -42,6 +46,14 @@ import {
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { calendarQueryOptions, formatCalendarValuesApi } from "@/lib/calendar/calendar.api";
+import {
+  armRestoreApi,
+  cancelRestoreApi,
+  executeRestoreApi,
+  listRecoveryBackupsApi,
+  type RecoveryBackup,
+  type RestoreAuthorization,
+} from "@/features/recovery/services/recovery.api";
 
 const _Route = createFileRoute("/settings")({
   head: () => ({
@@ -78,6 +90,7 @@ const inputCls =
 
 export function SettingsPage() {
   const { calendarSystem, numeralsSystem, commitSettings } = useCalendarSystem();
+  const { can } = usePermissions();
   const [active, setActive] = useState("Roles & permissions");
 
   const [tempCalendarSystem, setTempCalendarSystem] = useState(calendarSystem);
@@ -93,7 +106,13 @@ export function SettingsPage() {
   });
 
   const { data: calendarPreview } = useQuery({
-    queryKey: ["calendar", "regional-preview", previewInstant, tempCalendarSystem, tempNumeralsSystem],
+    queryKey: [
+      "calendar",
+      "regional-preview",
+      previewInstant,
+      tempCalendarSystem,
+      tempNumeralsSystem,
+    ],
     queryFn: () =>
       formatCalendarValuesApi([previewInstant], tempCalendarSystem, tempNumeralsSystem).then(
         (entries) => entries[0],
@@ -139,6 +158,9 @@ export function SettingsPage() {
     tempCurrency === "USD"
       ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(125000)
       : new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" }).format(125000);
+  const visiblePanels = can(PERMISSION.SYSTEM_RESTORE)
+    ? [...panels, { icon: ShieldCheck, label: "Recovery" }]
+    : panels;
 
   return (
     <AppShell>
@@ -158,7 +180,7 @@ export function SettingsPage() {
           className="h-fit rounded-lg border p-2"
           style={{ borderColor: "var(--border)", background: "var(--surface)" }}
         >
-          {panels.map(({ icon: Icon, label }) => (
+          {visiblePanels.map(({ icon: Icon, label }) => (
             <button
               key={label}
               onClick={() => setActive(label)}
@@ -268,6 +290,7 @@ export function SettingsPage() {
           {active === "Performance Metrics" && <PerformanceMetricsPanel />}
 
           {active === "Custom Fields" && <CustomFieldsPanel />}
+          {active === "Recovery" && <RecoveryPanel />}
 
           {/* Save button */}
           {active === "Regional" && (
@@ -539,6 +562,262 @@ function RolesPermissionsPanel() {
   );
 }
 
+const RESTORE_CONFIRMATION = "I WANT TO RESTORE";
+
+function formatBackupSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatCountdown(expiresAt: string) {
+  const remaining = Math.max(0, new Date(expiresAt).getTime() - Date.now());
+  const seconds = Math.ceil(remaining / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function recoveryErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function RecoveryPanel() {
+  const queryClient = useQueryClient();
+  const [selectedBackup, setSelectedBackup] = useState<RecoveryBackup | null>(null);
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [authorization, setAuthorization] = useState<RestoreAuthorization | null>(null);
+  const [, setNow] = useState(Date.now());
+
+  const {
+    data: backups = [],
+    isLoading,
+    error,
+  } = useQuery<RecoveryBackup[]>({
+    queryKey: ["recovery-backups"],
+    queryFn: listRecoveryBackupsApi,
+    refetchInterval: 60_000,
+  });
+
+  useEffect(() => {
+    if (!authorization) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [authorization]);
+
+  const isArmed =
+    authorization?.status === "armed" && new Date(authorization.expiresAt).getTime() > Date.now();
+  const resetAuthorization = () => {
+    setAuthorization(null);
+    setPassword("");
+    setConfirmation("");
+  };
+
+  const armMutation = useMutation({
+    mutationFn: () => armRestoreApi({ backupId: selectedBackup!.id, password, confirmation }),
+    onSuccess: (next) => {
+      setAuthorization(next);
+      setPassword("");
+      toast.success("Restore authorization is active for five minutes.");
+    },
+    onError: (error: unknown) =>
+      toast.error(recoveryErrorMessage(error, "Restore authorization was not created")),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: () => cancelRestoreApi(authorization!.id),
+    onSuccess: () => {
+      resetAuthorization();
+      toast.success("Restore authorization cancelled.");
+    },
+    onError: (error: unknown) =>
+      toast.error(recoveryErrorMessage(error, "Restore authorization could not be cancelled")),
+  });
+
+  const executeMutation = useMutation({
+    mutationFn: () => executeRestoreApi(authorization!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recovery-backups"] });
+      toast.success("Restore job started. The system is entering recovery mode.");
+    },
+    onError: (error: unknown) =>
+      toast.error(recoveryErrorMessage(error, "Restore job could not start")),
+  });
+
+  return (
+    <Section title="Recovery" aside="Disaster recovery">
+      <div
+        className="border-l-2 px-4 py-1"
+        style={{ borderColor: "var(--accent)", background: "var(--surface-2)" }}
+      >
+        <div className="flex items-center gap-2 text-[12px] font-bold">
+          <ShieldCheck className="h-4 w-4" style={{ color: "var(--accent)" }} />
+          Restore a verified backup
+        </div>
+        <p className="mt-1 text-[11px] leading-5" style={{ color: "var(--text-2)" }}>
+          Restores replace the current database and attachments. The selected archive, password
+          verification, and confirmation phrase are all checked by the server.
+        </p>
+      </div>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="label-eyebrow">Managed backup archives</span>
+            <button
+              type="button"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["recovery-backups"] })}
+              className="flex cursor-pointer items-center gap-1 text-[11px] font-semibold hover:opacity-75"
+              style={{ color: "var(--accent)" }}
+            >
+              <RotateCcw className="h-3.5 w-3.5" /> Refresh
+            </button>
+          </div>
+          {isLoading ? (
+            <div
+              className="border px-4 py-8 text-center text-[12px]"
+              style={{ borderColor: "var(--border)", color: "var(--text-3)" }}
+            >
+              Loading recovery archives…
+            </div>
+          ) : error ? (
+            <div
+              className="border px-4 py-8 text-center text-[12px]"
+              style={{ borderColor: "var(--border)", color: "var(--text-2)" }}
+            >
+              The recovery service is not connected yet. Archive records will appear here when its
+              backend endpoint is available.
+            </div>
+          ) : backups.length === 0 ? (
+            <div
+              className="border px-4 py-8 text-center text-[12px]"
+              style={{ borderColor: "var(--border)", color: "var(--text-3)" }}
+            >
+              No verified backup archives are available.
+            </div>
+          ) : (
+            <div className="overflow-hidden border" style={{ borderColor: "var(--border)" }}>
+              {backups.map((backup) => {
+                const selected = backup.id === selectedBackup?.id;
+                return (
+                  <button
+                    key={backup.id}
+                    type="button"
+                    onClick={() => {
+                      if (isArmed) return;
+                      setSelectedBackup(backup);
+                      resetAuthorization();
+                    }}
+                    disabled={isArmed}
+                    className="flex w-full cursor-pointer items-center justify-between border-b px-4 py-3 text-left last:border-0 disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{
+                      borderColor: "var(--border)",
+                      background: selected ? "var(--surface-2)" : "var(--surface)",
+                    }}
+                  >
+                    <span>
+                      <span className="block font-mono text-[11px] font-semibold">
+                        {backup.name}
+                      </span>
+                      <span className="mt-1 block text-[10px]" style={{ color: "var(--text-3)" }}>
+                        {new Date(backup.createdAt).toLocaleString()} ·{" "}
+                        {formatBackupSize(backup.sizeBytes)}
+                      </span>
+                    </span>
+                    {selected && <Check className="h-4 w-4" style={{ color: "var(--accent)" }} />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div
+          className="border p-4"
+          style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+        >
+          {isArmed ? (
+            <>
+              <div className="flex items-center gap-2 text-[12px] font-bold">
+                <Clock3 className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                Restore window active
+              </div>
+              <p className="mt-2 text-[12px]" style={{ color: "var(--text-2)" }}>
+                This authorization is bound to{" "}
+                <span className="font-mono">{selectedBackup?.name}</span> and expires in{" "}
+                {formatCountdown(authorization!.expiresAt)}.
+              </p>
+              <button
+                type="button"
+                onClick={() => executeMutation.mutate()}
+                disabled={executeMutation.isPending}
+                className="mt-5 flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-red-600 px-3 text-[12px] font-bold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ShieldCheck className="h-4 w-4" />{" "}
+                {executeMutation.isPending ? "Starting restore…" : "Restore this snapshot"}
+              </button>
+              <button
+                type="button"
+                onClick={() => cancelMutation.mutate()}
+                disabled={cancelMutation.isPending}
+                className="mt-2 h-9 w-full cursor-pointer text-[12px] font-semibold hover:opacity-75 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ color: "var(--text-2)" }}
+              >
+                Cancel restore window
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-[12px] font-bold">
+                <LockKeyhole className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                Authorize a restore
+              </div>
+              <p className="mt-2 text-[11px] leading-5" style={{ color: "var(--text-2)" }}>
+                Select an archive, re-enter your password, then type the confirmation exactly. The
+                final restore action remains available for five minutes.
+              </p>
+              <label className="mt-4 block text-[11px] font-semibold">
+                Current password
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  disabled={!selectedBackup}
+                  className={inputCls}
+                  autoComplete="current-password"
+                />
+              </label>
+              <label className="mt-3 block text-[11px] font-semibold">
+                Type <span className="font-mono">{RESTORE_CONFIRMATION}</span>
+                <input
+                  value={confirmation}
+                  onChange={(event) => setConfirmation(event.target.value)}
+                  disabled={!selectedBackup}
+                  className={inputCls}
+                  autoComplete="off"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => armMutation.mutate()}
+                disabled={
+                  !selectedBackup ||
+                  !password ||
+                  confirmation !== RESTORE_CONFIRMATION ||
+                  armMutation.isPending
+                }
+                className="mt-5 flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-md px-3 text-[12px] font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                <LockKeyhole className="h-4 w-4" />{" "}
+                {armMutation.isPending ? "Authorizing…" : "Start five-minute window"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 function PerformanceMetricsPanel() {
   const queryClient = useQueryClient();
   const [activeProfile] = useActiveProfile();
@@ -615,7 +894,11 @@ function PerformanceMetricsPanel() {
       toast.error("Only administrators can manage performance metrics!");
       return;
     }
-    if (window.confirm(`Delete the "${metric.label}" metric? Historical evaluations will be preserved.`)) {
+    if (
+      window.confirm(
+        `Delete the "${metric.label}" metric? Historical evaluations will be preserved.`,
+      )
+    ) {
       deleteMetric(metric.id);
     }
   };

@@ -52,6 +52,8 @@ export const PERMISSION = {
   CUSTOMER_MANAGE: "customer.manage",
   /** Configure notification event types and recipient routing. */
   NOTIFICATION_MANAGE: "notification.manage",
+  /** Arm and execute a guarded disaster-recovery restore. */
+  SYSTEM_RESTORE: "system.restore",
 } as const;
 
 /** Human labels for role-editor / permission catalog UI (explicit DB grants). */
@@ -70,6 +72,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   "payment.manage": "Manage payments, rates & financial details",
   "report.business.view": "View revenue, booking & client reports",
   "notification.manage": "Manage notification events and routing",
+  "system.restore": "Restore a verified system backup",
   "driver_trip.create": "Create driver trips",
   "driver_trip.edit": "Edit driver trips",
   "driver_trip.view": "View driver trips",
