@@ -24,6 +24,7 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.nuelsha.vortexvisualoperations",
+      "googleServicesFile": "./android/app/google-services.json",
       "usesCleartextTraffic": false,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
@@ -41,9 +42,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "cb5c4a47-2d0a-402c-8660-e1d4dde724d6"
+        "projectId": "3dc8b87c-fff9-4f51-a01c-4ab490ca1db0"
       }
     },
-    "owner": "nuelsha"
+    "owner": "mhri"
   }
 }

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "247788329659",
+    "project_id": "vortexvisual-74a57",
+    "storage_bucket": "vortexvisual-74a57.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:247788329659:android:e7436c2441f50c3495679e",
+        "android_client_info": {
+          "package_name": "com.nuelsha.vortexvisualoperations"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA55SbYsbC9n57UC5BCy5xmVzz_L07697w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
