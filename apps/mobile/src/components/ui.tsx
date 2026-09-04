@@ -1,8 +1,15 @@
 import { FlashList, type FlashListProps } from "@shopify/flash-list";
-import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { router } from "expo-router";
-import { Calendar, Clock3, PhoneCall, type LucideIcon } from "lucide-react-native";
-import { useState, type ReactNode } from "react";
+import {
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  PhoneCall,
+  type LucideIcon,
+} from "lucide-react-native";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -24,7 +31,15 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import brandLogo from "../../assets/icon.png";
-import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { useCalendarSystem, useDateFormatter } from "@/context/CalendarSystemContext";
+import {
+  ETHIOPIAN_MONTH_NAMES,
+  ETHIOPIAN_WEEKDAY_HEADERS,
+  addisToday,
+  formatEthiopianDate,
+  getEthiopianMonth,
+  toEthiopianDate,
+} from "@/lib/ethiopian-calendar";
 import { alpha, colors, radius, typography } from "@/theme/tokens";
 import { to } from "@/utils/routes";
 
@@ -337,17 +352,13 @@ export function DatePickerInput({
   maximumDate?: Date;
 }) {
   const { formatDate, formatDateTime } = useDateFormatter();
+  const { calendarSystem } = useCalendarSystem();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const parsed = parseDateValue(value, mode) ?? new Date();
   const timeValue = parseTimeValue(value);
 
-  const handleDateChange = (event: DateTimePickerEvent, next?: Date) => {
-    if (event.type === "dismissed") {
-      setShowDatePicker(false);
-      return;
-    }
-    if (!next) return;
+  const handleDateChange = (next: Date) => {
     const formatted =
       mode === "datetime"
         ? formatDateTimeValue(mergeDateAndTime(next, timeValue))
@@ -356,21 +367,22 @@ export function DatePickerInput({
     setShowDatePicker(false);
   };
 
-  const handleTimeChange = (event: DateTimePickerEvent, next?: Date) => {
-    if (event.type === "dismissed") {
-      setShowTimePicker(false);
-      return;
-    }
-    if (!next) return;
+  const handleTimeChange = (next: Date) => {
     const formatted = formatDateTimeValue(next);
     onChangeText(formatted);
     setShowTimePicker(false);
   };
 
+  const dateOnlyValue = value?.split("T")[0];
+  const localEthiopianLabel = dateOnlyValue ? formatEthiopianDate(dateOnlyValue) : null;
   const displayText = value
     ? mode === "datetime"
-      ? formatDateTime(value)
-      : formatDate(value)
+      ? calendarSystem === "ethiopic"
+        ? `${localEthiopianLabel ?? value} · ${timeValue}`
+        : formatDateTime(value)
+      : calendarSystem === "ethiopic"
+        ? (localEthiopianLabel ?? value)
+        : formatDate(value)
     : placeholder || (mode === "datetime" ? "Select date & time" : "Select date");
 
   return (
@@ -413,14 +425,29 @@ export function DatePickerInput({
         </View>
       ) : null}
 
-      {showDatePicker ? (
+      {showDatePicker && calendarSystem === "ethiopic" ? (
+        <EthiopianDatePickerSheet
+          value={dateOnlyValue}
+          minimumDate={minimumDate}
+          maximumDate={maximumDate}
+          onClose={() => setShowDatePicker(false)}
+          onSelect={(date) => {
+            onChangeText(mode === "datetime" ? `${date}T${timeValue}` : date);
+            setShowDatePicker(false);
+          }}
+        />
+      ) : null}
+
+      {showDatePicker && calendarSystem === "gregorian" ? (
         <DateTimePicker
           value={parsed}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
           minimumDate={minimumDate}
           maximumDate={maximumDate}
-          onChange={handleDateChange}
+          onValueChange={(_event, next) => handleDateChange(next)}
+          onDismiss={() => setShowDatePicker(false)}
+          onNeutralButtonPress={() => setShowDatePicker(false)}
         />
       ) : null}
 
@@ -429,10 +456,124 @@ export function DatePickerInput({
           value={mergeDateAndTime(parsed, timeValue)}
           mode="time"
           display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={handleTimeChange}
+          onValueChange={(_event, next) => handleTimeChange(next)}
+          onDismiss={() => setShowTimePicker(false)}
+          onNeutralButtonPress={() => setShowTimePicker(false)}
         />
       ) : null}
     </View>
+  );
+}
+
+function addEthiopianMonth(view: { year: number; month: number }, direction: -1 | 1) {
+  if (direction === -1)
+    return view.month === 1
+      ? { year: view.year - 1, month: 13 }
+      : { ...view, month: view.month - 1 };
+  return view.month === 13 ? { year: view.year + 1, month: 1 } : { ...view, month: view.month + 1 };
+}
+
+function EthiopianDatePickerSheet({
+  value,
+  minimumDate,
+  maximumDate,
+  onSelect,
+  onClose,
+}: {
+  value?: string;
+  minimumDate?: Date;
+  maximumDate?: Date;
+  onSelect: (date: string) => void;
+  onClose: () => void;
+}) {
+  const selected = useMemo(() => (value ? toEthiopianDate(value) : null), [value]);
+  const [view, setView] = useState(() => {
+    const source = selected ?? toEthiopianDate(addisToday())!;
+    return { year: source.year, month: source.month };
+  });
+  useEffect(() => {
+    if (selected) setView(selected);
+  }, [selected?.year, selected?.month]);
+  const days = useMemo(() => getEthiopianMonth(view.year, view.month), [view.year, view.month]);
+  const cells = [...Array.from({ length: days[0]?.weekday ?? 0 }, () => null), ...days];
+  while (cells.length % 7 !== 0) cells.push(null);
+  const min = minimumDate?.toISOString().slice(0, 10);
+  const max = maximumDate?.toISOString().slice(0, 10);
+
+  return (
+    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+      <Pressable style={styles.calendarBackdrop} onPress={onClose}>
+        <Pressable style={styles.calendarSheet} onPress={(event) => event.stopPropagation()}>
+          <View style={styles.calendarHeader}>
+            <Pressable
+              accessibilityLabel="Previous Ethiopian month"
+              style={styles.calendarNav}
+              onPress={() => setView((current) => addEthiopianMonth(current, -1))}
+            >
+              <ChevronLeft size={20} color={colors.foreground} />
+            </Pressable>
+            <AppText variant="subtitle">
+              {ETHIOPIAN_MONTH_NAMES[view.month - 1]} {view.year}
+            </AppText>
+            <Pressable
+              accessibilityLabel="Next Ethiopian month"
+              style={styles.calendarNav}
+              onPress={() => setView((current) => addEthiopianMonth(current, 1))}
+            >
+              <ChevronRight size={20} color={colors.foreground} />
+            </Pressable>
+          </View>
+          <View style={styles.calendarGrid}>
+            {ETHIOPIAN_WEEKDAY_HEADERS.map((day) => (
+              <AppText
+                key={day}
+                variant="small"
+                color={colors.text3}
+                style={styles.calendarWeekday}
+              >
+                {day}
+              </AppText>
+            ))}
+            {cells.map((day, index) => {
+              if (!day) return <View key={`blank-${index}`} style={styles.calendarDay} />;
+              const disabled = Boolean(
+                (min && day.gregorianDate < min) || (max && day.gregorianDate > max),
+              );
+              const isSelected = day.gregorianDate === value;
+              return (
+                <Pressable
+                  key={day.gregorianDate}
+                  disabled={disabled}
+                  onPress={() => onSelect(day.gregorianDate)}
+                  style={[
+                    styles.calendarDay,
+                    day.isToday && !isSelected ? styles.calendarToday : null,
+                    isSelected ? styles.calendarSelected : null,
+                    disabled ? styles.calendarDisabled : null,
+                  ]}
+                >
+                  <AppText
+                    variant="data"
+                    color={
+                      isSelected
+                        ? colors.accentForeground
+                        : disabled
+                          ? colors.text3
+                          : colors.foreground
+                    }
+                  >
+                    {day.ethiopian.day}
+                  </AppText>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Button variant="ghost" onPress={onClose}>
+            Close
+          </Button>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -995,6 +1136,58 @@ export const styles = StyleSheet.create({
   sheetTitle: {
     fontSize: 17,
     fontWeight: "800",
+  },
+  calendarBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    padding: 20,
+    backgroundColor: "rgba(0,0,0,0.68)",
+  },
+  calendarSheet: {
+    gap: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    padding: 16,
+  },
+  calendarHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  calendarNav: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+  },
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  calendarWeekday: {
+    width: "14.2857%",
+    paddingBottom: 6,
+    textAlign: "center",
+  },
+  calendarDay: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "14.2857%",
+    height: 40,
+    borderRadius: radius.md,
+  },
+  calendarToday: {
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  calendarSelected: {
+    backgroundColor: colors.accent,
+  },
+  calendarDisabled: {
+    opacity: 0.35,
   },
 });
 

@@ -25,7 +25,8 @@ import { useBookings, useStaff } from "@/hooks/useOperations";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { useAppContext } from "@/context/AppContext";
-import { useCalendarSystem, type CalendarSystem } from "@/context/CalendarSystemContext";
+import { useCalendarSystem } from "@/context/CalendarSystemContext";
+import { addisToday, ETHIOPIAN_MONTH_NAMES, toEthiopianDate } from "@/lib/ethiopian-calendar";
 import { transitionBookingStatusApi } from "@/services/bookings-api";
 
 const TABS = [
@@ -38,6 +39,7 @@ const TABS = [
   "Assigned to Me",
 ] as const;
 const PAYMENT_STATUSES: PaymentStatus[] = ["PAID", "ADVANCE", "UNPAID"];
+const SCREEN_TYPES = ["P2.97", "P2.97-New", "P3.91 INDOOR", "P3.91 OUTDOOR", "P4", "P5"] as const;
 
 type BookingTab = (typeof TABS)[number];
 
@@ -53,18 +55,30 @@ function bookingTabFromParam(value: string | string[] | undefined): BookingTab |
   return DASHBOARD_TAB_MAP[tab] ?? (TABS.includes(tab as BookingTab) ? (tab as BookingTab) : null);
 }
 
-function calendarYearMonth(date: Date, calendarSystem: CalendarSystem) {
-  if (calendarSystem === "ethiopic") {
-    const parts = new Intl.DateTimeFormat("en-US-u-ca-ethiopic", {
-      year: "numeric",
-      month: "numeric",
-    }).formatToParts(date);
-    return {
-      year: Number(parts.find((part) => part.type === "year")?.value),
-      month: Number(parts.find((part) => part.type === "month")?.value),
-    };
-  }
-  return { year: date.getFullYear(), month: date.getMonth() + 1 };
+function dateKey(value?: string): string | null {
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(value ?? "");
+  return match ? match[1] : null;
+}
+
+function addDays(date: string, days: number): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const value = new Date(Date.UTC(year, month - 1, day + days, 12));
+  return value.toISOString().slice(0, 10);
+}
+
+function mondayWeekBounds(today = addisToday(), weeksAgo = 0): { start: string; end: string } {
+  const [year, month, day] = today.split("-").map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay();
+  const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+  const start = addDays(today, mondayOffset - weeksAgo * 7);
+  return { start, end: addDays(start, 6) };
+}
+
+function toggleSet<T>(current: Set<T>, value: T): Set<T> {
+  const next = new Set(current);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  return next;
 }
 
 function matchesQuery(haystack: Array<string | number | null | undefined>, query: string): boolean {
@@ -103,8 +117,8 @@ export default function BookingsScreen() {
   const { tab: tabParam } = useLocalSearchParams<{ tab?: string | string[] }>();
   const { data: BOOKINGS = [], isLoading, isError, refetch } = useBookings({ poll: true });
   const { data: staff = [] } = useStaff();
-  const { canAny, can } = usePermissions();
-  const { activeProfile } = useAppContext();
+  const { can } = usePermissions();
+  const { authUser } = useAppContext();
   const { calendarSystem } = useCalendarSystem();
   const canCreateBooking = can(PERMISSION.BOOKING_CREATE);
   const canCancelOverride = can(PERMISSION.BOOKING_CANCEL_OVERRIDE);
@@ -112,9 +126,12 @@ export default function BookingsScreen() {
   const [query, setQuery] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [statusFilter, setStatusFilter] = useState<BookingStatus | null>(null);
-  const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
-  const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | null>(null);
+  const [statusFilter, setStatusFilter] = useState<Set<BookingStatus>>(new Set());
+  const [screenFilter, setScreenFilter] = useState<Set<string>>(new Set());
+  const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
+  const [paymentFilter, setPaymentFilter] = useState<Set<PaymentStatus>>(new Set());
+  const [ethiopianYearFilter, setEthiopianYearFilter] = useState<string | null>(null);
+  const [ethiopianMonthFilter, setEthiopianMonthFilter] = useState<number | null>(null);
   const [bulkModal, setBulkModal] = useState<"status" | "cancel" | null>(null);
   const [bulkStatus, setBulkStatus] = useState<BookingStatus>("CONFIRMED");
   const [bulkReason, setBulkReason] = useState("");
@@ -125,63 +142,77 @@ export default function BookingsScreen() {
     if (requestedTab) setTab(requestedTab);
   }, [tabParam]);
 
-  const isAssignedScopeOnly =
-    !canAny([PERMISSION.BOOKING_VIEW_ALL]) && canAny([PERMISSION.BOOKING_VIEW_ASSIGNED]);
-
   const rows = useMemo(() => {
-    let result: Booking[] = BOOKINGS;
-    if (isAssignedScopeOnly) {
-      result = result.filter((booking) => booking.assignees.includes(activeProfile.name));
-    }
+    let result: Booking[] = [...BOOKINGS];
     if (tab === "This Month") {
-      const currentMonth = calendarYearMonth(new Date(), calendarSystem);
+      const today = addisToday();
+      const currentEthiopian = toEthiopianDate(today);
       result = result.filter((booking) => {
-        const date = new Date(booking.eventDate);
-        if (Number.isNaN(date.getTime())) return false;
-        const bookingMonth = calendarYearMonth(date, calendarSystem);
-        return bookingMonth.year === currentMonth.year && bookingMonth.month === currentMonth.month;
+        if (calendarSystem === "ethiopic") {
+          const event = booking.ethiopianDates?.eventDate?.ethiopian;
+          return Boolean(
+            event &&
+            currentEthiopian &&
+            event.year === currentEthiopian.year &&
+            event.month === currentEthiopian.month,
+          );
+        }
+        const event = dateKey(booking.eventDate);
+        return Boolean(event && event.slice(0, 7) === today.slice(0, 7));
       });
     } else if (tab === "Onsite") {
       result = result.filter((booking) => booking.status === "ONSITE");
     } else if (tab === "Upcoming") {
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
+      const start = addisToday();
+      const end = addDays(start, 7);
       result = result.filter((booking) => {
-        const d = new Date(booking.assemblyDate);
-        return !isNaN(d.getTime()) && d >= now;
+        const assembly = dateKey(booking.assemblyDate);
+        return Boolean(assembly && assembly >= start && assembly <= end);
       });
     } else if (tab === "This Week") {
-      const today = new Date();
-      const startOfWeek = new Date(today);
-      startOfWeek.setHours(0, 0, 0, 0);
-      startOfWeek.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
-      endOfWeek.setHours(23, 59, 59, 999);
+      const { start, end } = mondayWeekBounds();
       result = result.filter((booking) => {
-        const date = new Date(booking.eventDate);
-        return !Number.isNaN(date.getTime()) && date >= startOfWeek && date <= endOfWeek;
+        const event = dateKey(booking.eventDate);
+        return Boolean(event && event >= start && event <= end);
       });
     } else if (tab === "Last Week") {
-      const now = new Date();
-      const startOfThisWeek = new Date(now);
-      startOfThisWeek.setHours(0, 0, 0, 0);
-      startOfThisWeek.setDate(now.getDate() - now.getDay());
-      const startOfLastWeek = new Date(startOfThisWeek);
-      startOfLastWeek.setDate(startOfThisWeek.getDate() - 7);
-      const endOfLastWeek = new Date(startOfThisWeek);
-      endOfLastWeek.setMilliseconds(-1);
+      const { start, end } = mondayWeekBounds(addisToday(), 1);
       result = result.filter((booking) => {
-        const d = new Date(booking.eventDate);
-        return !isNaN(d.getTime()) && d >= startOfLastWeek && d <= endOfLastWeek;
+        const event = dateKey(booking.eventDate);
+        return Boolean(event && event >= start && event <= end);
       });
     } else if (tab === "Assigned to Me") {
-      result = result.filter((booking) => booking.assignees.includes(activeProfile.name));
+      result = result.filter((booking) =>
+        booking.assignments?.some(
+          (assignment) => assignment.userId === authUser?.id && !assignment.declineReason,
+        ),
+      );
     }
-    if (statusFilter) result = result.filter((booking) => booking.status === statusFilter);
-    if (assigneeFilter)
-      result = result.filter((booking) => booking.assignees.includes(assigneeFilter));
-    if (paymentFilter) result = result.filter((booking) => booking.payment === paymentFilter);
+    if (statusFilter.size > 0)
+      result = result.filter((booking) => statusFilter.has(booking.status));
+    if (screenFilter.size > 0)
+      result = result.filter((booking) =>
+        String(booking.screenType)
+          .split(",")
+          .map((type) => type.trim())
+          .some((type) => screenFilter.has(type)),
+      );
+    if (assigneeFilter.size > 0)
+      result = result.filter((booking) =>
+        booking.assignees.some((name) => assigneeFilter.has(name)),
+      );
+    if (paymentFilter.size > 0)
+      result = result.filter((booking) => paymentFilter.has(booking.payment));
+    if (calendarSystem === "ethiopic" && ethiopianYearFilter) {
+      result = result.filter((booking) => {
+        const event = booking.ethiopianDates?.eventDate?.ethiopian;
+        return Boolean(
+          event &&
+          String(event.year) === ethiopianYearFilter &&
+          (ethiopianMonthFilter === null || event.month === ethiopianMonthFilter),
+        );
+      });
+    }
     if (query.trim()) {
       result = result.filter((booking) =>
         matchesQuery(
@@ -207,7 +238,7 @@ export default function BookingsScreen() {
         ),
       );
     }
-    return result;
+    return result.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
   }, [
     BOOKINGS,
     query,
@@ -215,9 +246,11 @@ export default function BookingsScreen() {
     statusFilter,
     assigneeFilter,
     paymentFilter,
-    isAssignedScopeOnly,
-    activeProfile.name,
+    authUser?.id,
     calendarSystem,
+    screenFilter,
+    ethiopianYearFilter,
+    ethiopianMonthFilter,
   ]);
 
   const selectedBookings = useMemo(
@@ -225,8 +258,14 @@ export default function BookingsScreen() {
     [BOOKINGS, selected],
   );
 
-  const activeFilterCount = [statusFilter, assigneeFilter, paymentFilter].filter(Boolean).length;
-  const listStateKey = `${tab}|${statusFilter ?? ""}|${assigneeFilter ?? ""}|${paymentFilter ?? ""}|${query.trim()}`;
+  const activeFilterCount =
+    statusFilter.size +
+    screenFilter.size +
+    assigneeFilter.size +
+    paymentFilter.size +
+    Number(Boolean(ethiopianYearFilter)) +
+    Number(ethiopianMonthFilter !== null);
+  const listStateKey = `${tab}|${[...statusFilter].join(",")}|${[...screenFilter].join(",")}|${[...assigneeFilter].join(",")}|${[...paymentFilter].join(",")}|${ethiopianYearFilter ?? ""}|${ethiopianMonthFilter ?? ""}|${query.trim()}`;
 
   const toggle = (code: string) => {
     setSelected((current) => {
@@ -399,7 +438,7 @@ export default function BookingsScreen() {
       <NativeList
         key={listStateKey}
         data={rows}
-        extraData={`${query}|${tab}|${statusFilter}|${assigneeFilter}|${paymentFilter}|${selected.size}`}
+        extraData={`${listStateKey}|${selected.size}`}
         keyExtractor={(item) => item.code}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={BookingsHeader}
@@ -427,9 +466,21 @@ export default function BookingsScreen() {
             {STATUS_ORDER.map((status) => (
               <FilterChip
                 key={status}
-                label={status}
-                active={statusFilter === status}
-                onPress={() => setStatusFilter((current) => (current === status ? null : status))}
+                label={STATUS_LABELS[status]}
+                active={statusFilter.has(status)}
+                onPress={() => setStatusFilter((current) => toggleSet(current, status))}
+              />
+            ))}
+          </View>
+        </Field>
+        <Field label="Screen type">
+          <View style={styles.choiceWrap}>
+            {SCREEN_TYPES.map((screen) => (
+              <FilterChip
+                key={screen}
+                label={screen}
+                active={screenFilter.has(screen)}
+                onPress={() => setScreenFilter((current) => toggleSet(current, screen))}
               />
             ))}
           </View>
@@ -440,10 +491,8 @@ export default function BookingsScreen() {
               <FilterChip
                 key={member.id}
                 label={member.name}
-                active={assigneeFilter === member.name}
-                onPress={() =>
-                  setAssigneeFilter((current) => (current === member.name ? null : member.name))
-                }
+                active={assigneeFilter.has(member.name)}
+                onPress={() => setAssigneeFilter((current) => toggleSet(current, member.name))}
               />
             ))}
           </View>
@@ -454,18 +503,65 @@ export default function BookingsScreen() {
               <FilterChip
                 key={status}
                 label={status}
-                active={paymentFilter === status}
-                onPress={() => setPaymentFilter((current) => (current === status ? null : status))}
+                active={paymentFilter.has(status)}
+                onPress={() => setPaymentFilter((current) => toggleSet(current, status))}
               />
             ))}
           </View>
         </Field>
+        {calendarSystem === "ethiopic" ? (
+          <>
+            <Field label="Ethiopian year">
+              <View style={styles.choiceWrap}>
+                {[
+                  toEthiopianDate(addisToday())?.year,
+                  (toEthiopianDate(addisToday())?.year ?? 0) + 1,
+                ]
+                  .filter(Boolean)
+                  .map((year) => (
+                    <FilterChip
+                      key={year}
+                      label={String(year)}
+                      active={ethiopianYearFilter === String(year)}
+                      onPress={() => {
+                        setEthiopianYearFilter((current) =>
+                          current === String(year) ? null : String(year),
+                        );
+                        setEthiopianMonthFilter(null);
+                      }}
+                    />
+                  ))}
+              </View>
+            </Field>
+            {ethiopianYearFilter ? (
+              <Field label="Ethiopian month">
+                <View style={styles.choiceWrap}>
+                  {ETHIOPIAN_MONTH_NAMES.map((month, index) => (
+                    <FilterChip
+                      key={month}
+                      label={month}
+                      active={ethiopianMonthFilter === index + 1}
+                      onPress={() =>
+                        setEthiopianMonthFilter((current) =>
+                          current === index + 1 ? null : index + 1,
+                        )
+                      }
+                    />
+                  ))}
+                </View>
+              </Field>
+            ) : null}
+          </>
+        ) : null}
         <Button
           variant="outline"
           onPress={() => {
-            setStatusFilter(null);
-            setAssigneeFilter(null);
-            setPaymentFilter(null);
+            setStatusFilter(new Set());
+            setScreenFilter(new Set());
+            setAssigneeFilter(new Set());
+            setPaymentFilter(new Set());
+            setEthiopianYearFilter(null);
+            setEthiopianMonthFilter(null);
           }}
         >
           Clear filters
