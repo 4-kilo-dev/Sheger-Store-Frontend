@@ -33,6 +33,7 @@ export const PERMISSION = {
   EVAL_SUBMIT_INTERNAL: "eval.submit_internal",
   EVAL_VIEW: "eval.view",
   REPORT_BUSINESS_VIEW: "report.business.view",
+  PAYMENT_VIEW: "payment.view",
   PAYMENT_MANAGE: "payment.manage",
   USER_VIEW: "user.view",
   USER_MANAGE: "user.manage",

@@ -35,6 +35,7 @@ export const PERMISSION = {
   EVAL_SUBMIT_INTERNAL: "eval.submit_internal",
   EVAL_VIEW: "eval.view",
   REPORT_BUSINESS_VIEW: "report.business.view",
+  PAYMENT_VIEW: "payment.view",
   PAYMENT_MANAGE: "payment.manage",
   /** Read staff list / user detail */
   USER_VIEW: "user.view",
@@ -65,6 +66,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   "role.manage": "Manage roles & permissions",
   "booking.delete": "Hard-delete booking & associated data",
   "booking.force_done": "Force a booking to DONE without check-in or evaluation",
+  "payment.view": "View booking payment status",
   "payment.manage": "Manage payments, rates & financial details",
   "report.business.view": "View revenue, booking & client reports",
   "notification.manage": "Manage notification events and routing",
