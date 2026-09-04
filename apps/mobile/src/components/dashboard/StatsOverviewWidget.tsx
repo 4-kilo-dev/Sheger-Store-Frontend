@@ -1,4 +1,12 @@
-import { CalendarRange, Clock, DollarSign, Package, TrendingUp, Users } from "lucide-react-native";
+import {
+  CalendarRange,
+  Clock,
+  DollarSign,
+  Package,
+  TrendingUp,
+  Users,
+  type LucideIcon,
+} from "lucide-react-native";
 import { useMemo } from "react";
 import { Pressable, View, StyleSheet } from "react-native";
 import { router } from "expo-router";
@@ -35,6 +43,18 @@ function namesMatch(assignee: string, profileName: string) {
   return a === p || a.startsWith(p) || p.startsWith(a);
 }
 
+type DashboardBookingTab = "This Month" | "This Week" | "Onsite";
+
+type DashboardCard = {
+  label: string;
+  value: string | number;
+  note: string;
+  icon: LucideIcon;
+  tone?: string;
+  href: string;
+  bookingTab?: DashboardBookingTab;
+};
+
 export function StatsOverviewWidget() {
   const { activeProfile } = useAppContext();
   const role = activeProfile.role;
@@ -46,7 +66,11 @@ export function StatsOverviewWidget() {
   const stats = useMemo(() => {
     const now = new Date();
     const currentMonth = calendarYearMonth(now, calendarSystem);
-    const previousMonth = previousCalendarMonth(currentMonth.year, currentMonth.month, calendarSystem);
+    const previousMonth = previousCalendarMonth(
+      currentMonth.year,
+      currentMonth.month,
+      calendarSystem,
+    );
     const thisMonth = BOOKINGS.filter((booking) => {
       const date = calendarYearMonth(new Date(booking.eventDate), calendarSystem);
       return date.year === currentMonth.year && date.month === currentMonth.month;
@@ -102,7 +126,7 @@ export function StatsOverviewWidget() {
     };
   }, [activeProfile.name, BOOKINGS, INVENTORY, calendarSystem]);
 
-  const cards = useMemo(() => {
+  const cards = useMemo<DashboardCard[]>(() => {
     if (role === "CCR") {
       return [
         {
@@ -231,6 +255,7 @@ export function StatsOverviewWidget() {
         note: `${stats.paid} paid`,
         icon: CalendarRange,
         href: "/bookings",
+        bookingTab: "This Month",
       },
       {
         label: "Revenue",
@@ -253,6 +278,7 @@ export function StatsOverviewWidget() {
         icon: Package,
         tone: colors.status.ACCEPTED,
         href: "/bookings",
+        bookingTab: "Onsite",
       },
       {
         label: "This week",
@@ -261,6 +287,7 @@ export function StatsOverviewWidget() {
         icon: Clock,
         tone: colors.payment.ADVANCE,
         href: "/bookings",
+        bookingTab: "This Week",
       },
     ];
   }, [formatMoneyCompact, role, stats]);
@@ -272,7 +299,15 @@ export function StatsOverviewWidget() {
           key={card.label}
           accessibilityRole="button"
           accessibilityLabel={`${card.label}: ${card.value}`}
-          onPress={() => router.push(to(card.href))}
+          onPress={() =>
+            router.push(
+              to(
+                card.bookingTab
+                  ? `${card.href}?tab=${encodeURIComponent(card.bookingTab)}`
+                  : card.href,
+              ),
+            )
+          }
           style={({ pressed }) => [styles.statTile, pressed ? styles.statTilePressed : null]}
         >
           <StatCard
