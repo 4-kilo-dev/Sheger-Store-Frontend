@@ -307,9 +307,10 @@ export function BookingsIndex() {
   const [ethiopianMonthFilter, setEthiopianMonthFilter] = useState<Set<string>>(new Set());
 
   const ethiopianYears = useMemo(() => {
-    const currentYear = getEthiopianYear(new Date());
+    const currentYear = backendNow?.ethiopian.year;
+    if (!currentYear) return [];
     return [String(currentYear), String(currentYear + 1)];
-  }, []);
+  }, [backendNow?.ethiopian.year]);
 
   // Sort — newest created first by default
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
