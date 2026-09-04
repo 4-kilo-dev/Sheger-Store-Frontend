@@ -22,6 +22,11 @@
       "typedRoutes": true
     },
     "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
     "android": {
       "package": "com.nuelsha.vortexvisualoperations",
       "googleServicesFile": "./android/app/google-services.json",
