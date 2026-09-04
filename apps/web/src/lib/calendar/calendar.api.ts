@@ -1,5 +1,33 @@
 import { client } from "@/lib/api/client";
 
+/** Avoid a request storm when the web release arrives before the calendar API. */
+export const calendarQueryOptions = {
+  retry: false,
+  staleTime: 60_000,
+  refetchOnWindowFocus: false,
+} as const;
+
+export class CalendarServiceUnavailableError extends Error {
+  constructor() {
+    super("The calendar service is temporarily unavailable.");
+  }
+}
+
+let unavailableUntil = 0;
+
+async function calendarRequest<T>(request: () => Promise<T>): Promise<T> {
+  if (Date.now() < unavailableUntil) throw new CalendarServiceUnavailableError();
+  try {
+    return await request();
+  } catch (error) {
+    if (typeof error === "object" && error && "status" in error && error.status === 404) {
+      // A version-skewed deployment needs a refresh after the API is updated, not retries per cell.
+      unavailableUntil = Date.now() + 60_000;
+    }
+    throw error;
+  }
+}
+
 export type BackendCalendarSystem = "ethiopic" | "gregorian";
 export type BackendNumeralsSystem = "latn" | "geez";
 
@@ -60,11 +88,11 @@ export async function formatCalendarValuesApi(
   calendar: BackendCalendarSystem,
   numerals: BackendNumeralsSystem,
 ): Promise<CalendarFormatEntry[]> {
-  const result = await client.post<{ entries: CalendarFormatEntry[] }>("/api/calendar/format", {
+  const result = await calendarRequest(() => client.post<{ entries: CalendarFormatEntry[] }>("/api/calendar/format", {
     values,
     calendar,
     numerals,
-  });
+  }));
   return result.entries;
 }
 
@@ -73,24 +101,24 @@ export function getEthiopianMonthApi(
   month: number,
   numerals: BackendNumeralsSystem,
 ) {
-  return client.get<EthiopianMonthGrid>(
+  return calendarRequest(() => client.get<EthiopianMonthGrid>(
     `/api/calendar/ethiopian/month?year=${year}&month=${month}&numerals=${numerals}`,
-  );
+  ));
 }
 
 export function getCalendarNowApi() {
-  return client.get<CalendarFormatEntry["date"] & {
+  return calendarRequest(() => client.get<CalendarFormatEntry["date"] & {
     gregorianDate: string;
     previousEthiopianMonth: { year: number; month: number };
-  }>("/api/calendar/now");
+  }>("/api/calendar/now"));
 }
 
 export function getEthiopianTimeApi(value: string) {
-  return client.get<EthiopianTimeValue>(`/api/calendar/ethiopian/time?value=${encodeURIComponent(value)}`);
+  return calendarRequest(() => client.get<EthiopianTimeValue>(`/api/calendar/ethiopian/time?value=${encodeURIComponent(value)}`));
 }
 
 export function getEthiopianTimeOptionsApi() {
-  return client.get<EthiopianTimeOptions>("/api/calendar/ethiopian/time/options");
+  return calendarRequest(() => client.get<EthiopianTimeOptions>("/api/calendar/ethiopian/time/options"));
 }
 
 export function toGregorianTimeApi(
@@ -98,9 +126,9 @@ export function toGregorianTimeApi(
   ethiopianHour: number,
   minute: number,
 ) {
-  return client.post<EthiopianTimeValue>("/api/calendar/ethiopian/time/to-gregorian", {
+  return calendarRequest(() => client.post<EthiopianTimeValue>("/api/calendar/ethiopian/time/to-gregorian", {
     dayPeriod,
     ethiopianHour,
     minute,
-  });
+  }));
 }

@@ -13,7 +13,7 @@ import { getCombinedInventoryApi } from "@/features/inventory/services/inventory
 import { StatCard } from "../components/StatCard";
 import { useSystemCurrency } from "@/hooks/use-system-currency";
 import { useCalendarSystem } from "@/context/CalendarSystemContext";
-import { getCalendarNowApi } from "@/lib/calendar/calendar.api";
+import { calendarQueryOptions, getCalendarNowApi } from "@/lib/calendar/calendar.api";
 
 function gregorianYearMonth(date: Date) {
   return { year: date.getFullYear(), month: date.getMonth() + 1 };
@@ -36,6 +36,7 @@ export function StatsOverviewWidget() {
     queryKey: ["calendar", "now"],
     queryFn: getCalendarNowApi,
     enabled: calendarSystem === "ethiopic",
+    ...calendarQueryOptions,
   });
 
   const { data: bookingsList = [] } = useQuery({

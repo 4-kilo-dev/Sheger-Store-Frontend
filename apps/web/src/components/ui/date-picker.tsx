@@ -8,7 +8,11 @@ import { EthiopianCalendar } from "@/components/ui/ethiopian-calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCalendarSystem } from "@/context/CalendarSystemContext";
 import { EthTimeSelect } from "@/components/ui/eth-time-select";
-import { formatCalendarValuesApi, getEthiopianTimeApi } from "@/lib/calendar/calendar.api";
+import {
+  calendarQueryOptions,
+  formatCalendarValuesApi,
+  getEthiopianTimeApi,
+} from "@/lib/calendar/calendar.api";
 
 interface DatePickerProps {
   /** Value in "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm" format */
@@ -52,16 +56,20 @@ export function DatePicker({
   }, [value]);
 
   const dateValue = value?.split("T")[0] || "";
-  const { data: formattedDate } = useQuery({
+  const formattedDateQuery = useQuery({
     queryKey: ["calendar", "format", dateValue, calendarSystem, numeralsSystem],
     queryFn: () => formatCalendarValuesApi([dateValue], calendarSystem, numeralsSystem).then((entries) => entries[0]),
     enabled: Boolean(dateValue),
+    ...calendarQueryOptions,
   });
-  const { data: ethiopianTime } = useQuery({
+  const ethiopianTimeQuery = useQuery({
     queryKey: ["calendar", "ethiopian-time", timeValue],
     queryFn: () => getEthiopianTimeApi(timeValue),
     enabled: showTime && calendarSystem === "ethiopic",
+    ...calendarQueryOptions,
   });
+  const { data: formattedDate } = formattedDateQuery;
+  const { data: ethiopianTime } = ethiopianTimeQuery;
 
   const handleSelectDate = (date?: Date) => {
     if (!date) {
@@ -103,10 +111,10 @@ export function DatePicker({
 
   const displayText = React.useMemo(() => {
     if (!dateValue) return placeholder;
-    let dateStr = formattedDate?.displayDate || "Loading date…";
+    let dateStr = formattedDate?.displayDate || (formattedDateQuery.isError ? "Calendar unavailable" : "Loading date…");
     if (showTime && value?.includes("T")) {
       if (calendarSystem === "ethiopic") {
-        dateStr += ` · ${ethiopianTime?.display || "Loading time…"}`;
+        dateStr += ` · ${ethiopianTime?.display || (ethiopianTimeQuery.isError ? "Calendar unavailable" : "Loading time…")}`;
       } else {
         dateStr += ` · ${timeValue}`;
       }
@@ -120,7 +128,9 @@ export function DatePicker({
     timeValue,
     value,
     formattedDate,
+    formattedDateQuery.isError,
     ethiopianTime,
+    ethiopianTimeQuery.isError,
   ]);
 
   return (

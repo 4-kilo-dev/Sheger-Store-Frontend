@@ -56,6 +56,9 @@ export function StatsOverviewWidget() {
     queryKey: ["calendar", "now"],
     queryFn: getCalendarNowApi,
     enabled: calendarSystem === "ethiopic",
+    retry: false,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
   const { data: BOOKINGS = [] } = useBookings();
   const { data: INVENTORY = [] } = useInventory();

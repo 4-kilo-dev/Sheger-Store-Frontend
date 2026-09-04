@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   formatCalendarValuesApi,
+  calendarQueryOptions,
   getCalendarNowApi,
   getEthiopianMonthApi,
 } from "@/lib/calendar/calendar.api";
@@ -19,12 +20,19 @@ type EthiopianCalendarProps = {
 export function EthiopianCalendar({ value, onSelect, minDate }: EthiopianCalendarProps) {
   const { numeralsSystem } = useCalendarSystem();
   const dateValue = value?.split("T")[0] || "";
-  const { data: now } = useQuery({ queryKey: ["calendar", "now"], queryFn: getCalendarNowApi });
-  const { data: selected } = useQuery({
+  const nowQuery = useQuery({
+    queryKey: ["calendar", "now"],
+    queryFn: getCalendarNowApi,
+    ...calendarQueryOptions,
+  });
+  const selectedQuery = useQuery({
     queryKey: ["calendar", "format", dateValue, numeralsSystem],
     queryFn: () => formatCalendarValuesApi([dateValue], "ethiopic", numeralsSystem).then((entries) => entries[0]),
     enabled: Boolean(dateValue),
+    ...calendarQueryOptions,
   });
+  const { data: now } = nowQuery;
+  const { data: selected } = selectedQuery;
   const [view, setView] = React.useState<{ year: number; month: number } | null>(null);
 
   React.useEffect(() => {
@@ -33,13 +41,22 @@ export function EthiopianCalendar({ value, onSelect, minDate }: EthiopianCalenda
     if (source) setView({ year: source.year, month: source.month });
   }, [now, selected, view]);
 
-  const { data: month } = useQuery({
+  const monthQuery = useQuery({
     queryKey: ["calendar", "ethiopian-month", view?.year, view?.month, numeralsSystem],
     queryFn: () => getEthiopianMonthApi(view!.year, view!.month, numeralsSystem),
     enabled: Boolean(view),
+    ...calendarQueryOptions,
   });
+  const { data: month } = monthQuery;
 
   const minimum = minDate ? minDate.toISOString().slice(0, 10) : undefined;
+  if (nowQuery.isError || selectedQuery.isError || monthQuery.isError) {
+    return (
+      <div className="grid h-64 w-72 place-items-center px-6 text-center text-sm text-[var(--text-3)]">
+        Calendar service is unavailable. Refresh after the server update completes.
+      </div>
+    );
+  }
   if (!month) {
     return <div className="grid h-64 w-72 place-items-center text-sm text-[var(--text-3)]">Loading calendar…</div>;
   }

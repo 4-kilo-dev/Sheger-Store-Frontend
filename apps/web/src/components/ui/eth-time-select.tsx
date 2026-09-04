@@ -4,6 +4,7 @@ import {
   getEthiopianTimeOptionsApi,
   toGregorianTimeApi,
   type EthiopianTimeValue,
+  calendarQueryOptions,
 } from "@/lib/calendar/calendar.api";
 
 type EthiopianDayPeriod = EthiopianTimeValue["dayPeriod"];
@@ -21,21 +22,29 @@ type EthTimeSelectProps = {
  * Stores/emits Western 24h `HH:mm` for API compatibility.
  */
 export function EthTimeSelect({ value, onChange, className, disabled }: EthTimeSelectProps) {
-  const { data: options } = useQuery({
+  const optionsQuery = useQuery({
     queryKey: ["calendar", "ethiopian-time-options"],
     queryFn: getEthiopianTimeOptionsApi,
+    ...calendarQueryOptions,
   });
-  const { data: parts } = useQuery({
+  const timeQuery = useQuery({
     queryKey: ["calendar", "ethiopian-time", value],
     queryFn: () => getEthiopianTimeApi(value || "12:00"),
+    ...calendarQueryOptions,
   });
+  const { data: options } = optionsQuery;
+  const { data: parts } = timeQuery;
   const convert = useMutation({
     mutationFn: ({ period, hour, minute }: { period: EthiopianDayPeriod; hour: number; minute: number }) =>
       toGregorianTimeApi(period, hour, minute),
     onSuccess: (result) => onChange(result.isoTime),
   });
   if (!options) {
-    return <div className={`h-9 text-[12px] text-[var(--text-3)] ${className || ""}`}>Loading time…</div>;
+    return (
+      <div className={`h-9 text-[12px] text-[var(--text-3)] ${className || ""}`}>
+        {optionsQuery.isError ? "Calendar service unavailable" : "Loading time…"}
+      </div>
+    );
   }
 
   const period = parts?.dayPeriod || options.periods[0].id;

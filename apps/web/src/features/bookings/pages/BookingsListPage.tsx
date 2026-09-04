@@ -31,7 +31,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { useCalendarSystem, useDateFormatter } from "@/context/CalendarSystemContext";
 import { useBookingsList } from "@/features/bookings/hooks/useBookingsList";
-import { getCalendarNowApi } from "@/lib/calendar/calendar.api";
+import { calendarQueryOptions, getCalendarNowApi } from "@/lib/calendar/calendar.api";
 
 const BULK_STATUS_TARGETS: BookingStatus[] = [
   ...STATUS_ORDER,
@@ -189,6 +189,7 @@ export function BookingsIndex() {
     queryKey: ["calendar", "now"],
     queryFn: getCalendarNowApi,
     enabled: calendarSystem === "ethiopic",
+    ...calendarQueryOptions,
   });
 
   const selectedBookings = useMemo(

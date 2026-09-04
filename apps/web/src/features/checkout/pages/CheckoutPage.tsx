@@ -23,7 +23,7 @@ import {
 import { bookingToPackingSlip, printPackingSlip } from "@/features/bookings/utils/printPackingSlip";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { useCalendarSystem, useDateFormatter, type CalendarSystem } from "@/context/CalendarSystemContext";
-import { getCalendarNowApi } from "@/lib/calendar/calendar.api";
+import { calendarQueryOptions, getCalendarNowApi } from "@/lib/calendar/calendar.api";
 
 /** Backend checkout only allows PREPARATION (→ ONSITE) or additional ONSITE out. */
 const CHECKOUT_STATUSES = new Set(["PREPARATION", "ONSITE"]);
@@ -155,6 +155,7 @@ export function CheckoutPage() {
     queryKey: ["calendar", "now"],
     queryFn: getCalendarNowApi,
     enabled: calendarSystem === "ethiopic",
+    ...calendarQueryOptions,
   });
   const userRole = authUser?.role?.toLowerCase() || "";
   const [mode, setMode] = useState<Mode>("checkout");

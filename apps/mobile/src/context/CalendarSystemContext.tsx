@@ -122,6 +122,7 @@ export function useCalendarSystem() {
 export function useDateFormatter() {
   const { calendarSystem, numeralsSystem } = useCalendarSystem();
   const [cache, setCache] = useState<Record<string, CalendarFormatEntry>>({});
+  const [, setFailureVersion] = useState(0);
   const pending = useRef(new Set<string>());
   const failed = useRef(new Set<string>());
   const flushScheduled = useRef(false);
@@ -155,6 +156,7 @@ export function useDateFormatter() {
           }));
         } catch {
           values.forEach((item) => failed.current.add(item));
+          setFailureVersion((version) => version + 1);
         }
       });
     }
@@ -164,7 +166,8 @@ export function useDateFormatter() {
   const formatDate = useCallback(
     (dateInput?: string | Date | null) => {
       if (!dateInput) return "—";
-      return request(dateInput)?.displayDate || "…";
+      const normalized = dateInput instanceof Date ? dateInput.toISOString() : dateInput;
+      return request(dateInput)?.displayDate || (failed.current.has(normalized) ? "Calendar unavailable" : "…");
     },
     [request],
   );
@@ -172,7 +175,8 @@ export function useDateFormatter() {
   const formatDateTime = useCallback(
     (dateInput?: string | Date | null) => {
       if (!dateInput) return "—";
-      return request(dateInput)?.displayDateTime || "…";
+      const normalized = dateInput instanceof Date ? dateInput.toISOString() : dateInput;
+      return request(dateInput)?.displayDateTime || (failed.current.has(normalized) ? "Calendar unavailable" : "…");
     },
     [request],
   );

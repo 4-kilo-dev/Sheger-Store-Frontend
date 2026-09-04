@@ -41,7 +41,7 @@ import {
 } from "@/features/users/services/staff.api";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
-import { formatCalendarValuesApi } from "@/lib/calendar/calendar.api";
+import { calendarQueryOptions, formatCalendarValuesApi } from "@/lib/calendar/calendar.api";
 
 const _Route = createFileRoute("/settings")({
   head: () => ({
@@ -98,6 +98,7 @@ export function SettingsPage() {
       formatCalendarValuesApi([previewInstant], tempCalendarSystem, tempNumeralsSystem).then(
         (entries) => entries[0],
       ),
+    ...calendarQueryOptions,
   });
 
   useEffect(() => {
