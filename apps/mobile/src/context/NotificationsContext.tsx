@@ -9,7 +9,6 @@ import React, {
 } from "react";
 import { AppState, Platform } from "react-native";
 import Constants from "expo-constants";
-import * as Notifications from "expo-notifications";
 import { useQuery } from "@tanstack/react-query";
 import { useAppContext } from "@/context/AppContext";
 import { authStorage } from "@/lib/api/client";
@@ -117,8 +116,12 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [isAuthenticated, refetch]);
 
   useEffect(() => {
+    // Importing expo-notifications eagerly is unsafe in Android Expo Go. Its
+    // auto-registration module installs a push-token listener at import time,
+    // and remote push notifications are intentionally unavailable there.
     if (!isAuthenticated || Platform.OS === "web" || Constants.appOwnership === "expo") return;
     let cancelled = false;
+    let subscription: { remove: () => void } | undefined;
     const registerDeviceToken = (deviceToken: { data: string }) => {
       if (
         cancelled ||
@@ -128,17 +131,22 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         return;
       void registerNotificationDeviceApi(Platform.OS, deviceToken.data).catch(() => undefined);
     };
-    const subscription = Notifications.addPushTokenListener(registerDeviceToken);
-    (async () => {
-      const current = await Notifications.getPermissionsAsync();
-      const permission = current.granted ? current : await Notifications.requestPermissionsAsync();
-      if (!permission.granted || cancelled) return;
-      const token = await Notifications.getDevicePushTokenAsync();
-      registerDeviceToken(token);
-    })().catch(() => undefined);
+    void import("expo-notifications")
+      .then(async (Notifications) => {
+        if (cancelled) return;
+        subscription = Notifications.addPushTokenListener(registerDeviceToken);
+        const current = await Notifications.getPermissionsAsync();
+        const permission = current.granted
+          ? current
+          : await Notifications.requestPermissionsAsync();
+        if (!permission.granted || cancelled) return;
+        const token = await Notifications.getDevicePushTokenAsync();
+        registerDeviceToken(token);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
-      subscription.remove();
+      subscription?.remove();
     };
   }, [authUser?.id, isAuthenticated]);
 

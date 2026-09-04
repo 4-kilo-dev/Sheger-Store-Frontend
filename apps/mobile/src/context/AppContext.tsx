@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { setUnauthorizedHandler } from "@/lib/api/client";
 import { authService } from "@/services/auth-service";
+import { applyTheme, type AppTheme } from "@/theme/tokens";
 import type { AuthUser, Profile } from "@/types/domain";
 
 const THEME_KEY = "vortex_theme";
@@ -16,7 +17,7 @@ const EMPTY_PROFILE: Profile = {
 interface AppContextValue {
   activeProfile: Profile;
   authUser: AuthUser | null;
-  theme: "dark" | "light";
+  theme: AppTheme;
   toggleTheme: () => void;
   isAuthenticated: boolean;
   isRestoringSession: boolean;
@@ -31,7 +32,7 @@ const AppContext = createContext<AppContextValue | undefined>(undefined);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [activeProfile, setActiveProfile] = useState<Profile>(EMPTY_PROFILE);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<AppTheme>("dark");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [mustChangePassword, setMustChangePassword] = useState(false);
@@ -46,7 +47,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setUnauthorizedHandler(clearSession);
 
     SecureStore.getItemAsync(THEME_KEY).then((saved) => {
-      if (saved === "light" || saved === "dark") setTheme(saved);
+      if (saved === "light" || saved === "dark") {
+        applyTheme(saved);
+        setTheme(saved);
+      }
     });
 
     authService
@@ -68,11 +72,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       authUser,
       theme,
       toggleTheme: () => {
-        setTheme((current) => {
-          const next = current === "dark" ? "light" : "dark";
-          SecureStore.setItemAsync(THEME_KEY, next);
-          return next;
-        });
+        const next = theme === "dark" ? "light" : "dark";
+        applyTheme(next);
+        setTheme(next);
+        void SecureStore.setItemAsync(THEME_KEY, next);
       },
       isAuthenticated,
       isRestoringSession,
