@@ -20,12 +20,13 @@ interface RawPerson {
 
 interface RawBomLine {
   id: string;
+  createdAt?: string;
   quantity: string;
   poolId?: string;
   itemId?: string;
   acceptedShortfall?: boolean;
-  item?: RawPerson & { name?: string };
-  pool?: { name?: string };
+  item?: RawPerson & { name?: string; category?: { key?: string } };
+  pool?: { name?: string; category?: { key?: string } };
 }
 
 interface RawAssignment {
@@ -55,6 +56,8 @@ interface RawBooking {
   assemblyStart?: string;
   disassemblyEnd?: string;
   itemServiceSpec?: string;
+  arrangementDetails?: string;
+  arrangement_details?: string;
   screenAreaSqm?: number;
   rentedDays?: number;
   rentalStart?: string;
@@ -84,18 +87,29 @@ interface RawBooking {
     createdAt: string;
   }>;
   customFields?: Record<string, unknown>;
-  ethiopianDates?: Record<string, {
-    iso: string;
-    ethiopian: {
-      year: number; month: number; day: number; monthName: string; display: string;
-      time: {
-        hour24: number; minute: number; isoTime: string; ethiopianHour: number;
-        clockPeriod: "day" | "night";
-        dayPeriod: "LELIT" | "TEWAT" | "KESEAT" | "MATA";
-        dayPeriodLabel: string; display: string;
+  ethiopianDates?: Record<
+    string,
+    {
+      iso: string;
+      ethiopian: {
+        year: number;
+        month: number;
+        day: number;
+        monthName: string;
+        display: string;
+        time: {
+          hour24: number;
+          minute: number;
+          isoTime: string;
+          ethiopianHour: number;
+          clockPeriod: "day" | "night";
+          dayPeriod: "LELIT" | "TEWAT" | "KESEAT" | "MATA";
+          dayPeriodLabel: string;
+          display: string;
+        };
       };
-    };
-  }>;
+    }
+  >;
 }
 
 function parseNumericField(value: string | number | null | undefined): number | undefined {
@@ -119,9 +133,49 @@ function parseSqm(value: string): number {
 }
 
 const MOUNT_STYLE_RE = /^(hanging|sitting)$/i;
+const DIMENSION_RE = /(\d+(?:\.\d+)?)\s*[wW]\s*[x×]\s*(\d+(?:\.\d+)?)\s*[hH]?/i;
+const DIMENSION_TOKEN_RE = /(\d+(?:\.\d+)?)\s*[wW]\s*[x×]\s*(\d+(?:\.\d+)?)\s*[hH]?/gi;
 
 function isMountStyle(value?: string | null): boolean {
   return MOUNT_STYLE_RE.test(String(value ?? "").trim());
+}
+
+/** Mirrors the web summary: show the layout, never the full technical specification. */
+function formatArrangementLabel(value?: string | null): string {
+  const raw = String(value ?? "").trim();
+  if (!raw || isMountStyle(raw)) return "";
+
+  const dimension = raw.match(
+    /^\(?\s*(\d+(?:\.\d+)?)\s*[wW]\s*[x×]\s*(\d+(?:\.\d+)?)\s*[hH]?\s*\)?$/,
+  );
+  if (dimension) return `(${dimension[1]}wx${dimension[2]}h)`;
+
+  const dimensions = [...raw.matchAll(DIMENSION_TOKEN_RE)];
+  if (dimensions.length > 1) {
+    return raw.replace(
+      DIMENSION_TOKEN_RE,
+      (_match, width: string, height: string) => `${width}wx${height}h`,
+    );
+  }
+
+  const loose = dimensions[0];
+  if (loose) return `(${loose[1]}wx${loose[2]}h)`;
+
+  return raw;
+}
+
+function isGenericScreenLabel(value?: string | null): boolean {
+  const text = String(value ?? "").trim();
+  return /^(led\s*)?(screen|panel)s?(\s+modules?)?$/i.test(text);
+}
+
+function isScreenTypeToken(value?: string | null): boolean {
+  const text = String(value ?? "").trim();
+  return (
+    KNOWN_SCREEN_TYPES.has(text) ||
+    isGenericScreenLabel(text) ||
+    /\bP\s*\d+(?:\.\d+)?\b/i.test(text)
+  );
 }
 
 /** multi_select: ["hanging", "sitting"] → "Hanging & Sitting" */
@@ -170,6 +224,8 @@ function normalizeCustomFieldPayload(raw: Record<string, unknown>): Record<strin
 /** Derive display fields from backend spec without inventing defaults for new (spec-less) bookings. */
 function parseBookingScreenFields(b: {
   itemServiceSpec?: string | null;
+  arrangementDetails?: string | null;
+  arrangement_details?: string | null;
   screenAreaSqm?: number | string | null;
   customFields?: Record<string, unknown>;
 }): { screenType: ScreenType | ""; size: number; arrangement: string } {
@@ -192,20 +248,57 @@ function parseBookingScreenFields(b: {
   const backendSize = Number(b.screenAreaSqm);
   if (Number.isFinite(backendSize) && backendSize > 0) size = backendSize;
 
-  const hangingOrSitting = custom.hanging_or_sitting;
-  const arrangementFromMount =
-    formatMountStyleLabel(
-      Array.isArray(hangingOrSitting)
-        ? hangingOrSitting.map((v) => String(v))
-        : typeof hangingOrSitting === "string"
-          ? hangingOrSitting
-          : null,
-    ) ||
-    formatMountStyleLabel(typeof custom.arrangement === "string" ? custom.arrangement : null) ||
-    formatMountStyleLabel(specParts[specParts.length - 1]);
+  const layoutCandidates: Array<string | null | undefined> = [
+    b.arrangementDetails,
+    b.arrangement_details,
+    typeof custom.arrangement_details === "string" ? custom.arrangement_details : null,
+    typeof custom.screen_arrangement === "string" ? custom.screen_arrangement : null,
+    typeof custom.screen_specification === "string" ? custom.screen_specification : null,
+    typeof custom.arrangement === "string" && !isMountStyle(custom.arrangement)
+      ? custom.arrangement
+      : null,
+    spec,
+    ...specParts.filter(
+      (part) =>
+        !isMountStyle(part) &&
+        !/sqm/i.test(part) &&
+        !isScreenTypeToken(part) &&
+        !isGenericScreenLabel(part),
+    ),
+  ];
 
-  const specLooksLikeLayout = /\d/.test(spec) && !isMountStyle(spec);
-  const arrangement = specLooksLikeLayout ? spec : arrangementFromMount || spec;
+  let arrangement = "";
+  for (const candidate of layoutCandidates) {
+    if (!DIMENSION_RE.test(String(candidate ?? ""))) continue;
+    const formatted = formatArrangementLabel(candidate);
+    if (formatted) {
+      arrangement = formatted;
+      break;
+    }
+  }
+  if (!arrangement) {
+    for (const candidate of layoutCandidates) {
+      if (candidate == null || candidate === spec) continue;
+      const formatted = formatArrangementLabel(candidate);
+      if (formatted && !isScreenTypeToken(formatted) && !isGenericScreenLabel(formatted)) {
+        arrangement = formatted;
+        break;
+      }
+    }
+  }
+  if (!arrangement) {
+    const hangingOrSitting = custom.hanging_or_sitting;
+    arrangement =
+      formatMountStyleLabel(
+        Array.isArray(hangingOrSitting)
+          ? hangingOrSitting.map((v) => String(v))
+          : typeof hangingOrSitting === "string"
+            ? hangingOrSitting
+            : null,
+      ) ||
+      formatMountStyleLabel(typeof custom.arrangement === "string" ? custom.arrangement : null) ||
+      formatMountStyleLabel(specParts[specParts.length - 1]);
+  }
 
   return { screenType, size, arrangement };
 }
@@ -218,15 +311,21 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
       ? b.customer.notes.trim()
       : customerName;
 
+  const sortedBomLines = [...(b.bomLines || [])].sort((first, second) => {
+    const firstTime = first.createdAt ? new Date(first.createdAt).getTime() : 0;
+    const secondTime = second.createdAt ? new Date(second.createdAt).getTime() : 0;
+    if (firstTime !== secondTime) return firstTime - secondTime;
+    return first.id.localeCompare(second.id);
+  });
   const bomItems: BomItem[] = assignBomLineCodes(
-    (b.bomLines || []).map((line) => ({
+    sortedBomLines.map((line) => ({
       id: line.id,
       name: line.item?.name || line.pool?.name || "Equipment Line",
       qty: parseFloat(line.quantity),
       status: (line.acceptedShortfall ? "Checked Out" : "Reserved") as BomItem["status"],
       poolId: line.poolId || undefined,
       itemId: line.itemId || undefined,
-      categoryKey: (line.pool as { category?: { key?: string } } | undefined)?.category?.key,
+      categoryKey: line.pool?.category?.key || line.item?.category?.key,
     })),
   );
 

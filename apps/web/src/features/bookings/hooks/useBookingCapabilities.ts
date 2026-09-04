@@ -165,15 +165,13 @@ export function useBookingCapabilities(booking: Booking | undefined) {
       .filter((t) => {
         const id = t.actionId || t.permissionKey;
         if (ASSIGNMENT_ACTION_IDS.has(id)) return false;
-        // Soft UX: confirm usually needs tech holds (API may still 400)
-        if (
-          (t.permissionKey === PERMISSION.BOOKING_CONFIRM ||
-            t.actionId === "booking.confirm" ||
-            t.actionId === "booking_confirm") &&
-          !hasTechnicalHolds
-        ) {
-          return false;
-        }
+        const isConfirmAction =
+          t.permissionKey === PERMISSION.BOOKING_CONFIRM ||
+          t.actionId === "booking.confirm" ||
+          t.actionId === "booking_confirm";
+        if (isConfirmAction && booking?.status !== "RESERVED") return false;
+        if (isConfirmAction && !hasTechnicalHolds) return false;
+        if (t.toStatus === booking?.status) return false;
         return true;
       })
       .map((t) => {
@@ -190,7 +188,12 @@ export function useBookingCapabilities(booking: Booking | undefined) {
           requiresForm: ui.requiresForm,
         } satisfies BookingAction;
       });
-  }, [transitionsResponse?.transitions, booking?.ctoNotes, booking?.itemServiceSpec]);
+  }, [
+    transitionsResponse?.transitions,
+    booking?.ctoNotes,
+    booking?.itemServiceSpec,
+    booking?.status,
+  ]);
 
   const advancePreparationAction = useMemo(
     () =>

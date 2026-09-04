@@ -92,6 +92,7 @@ import { PERMISSION } from "@/lib/auth/permission-keys";
 import { getPaymentSummary, transitionBookingStatusApi } from "@/services/bookings-api";
 import { getInventoryCategoriesApi, getInventoryPoolsApi } from "@/services/inventory-api";
 import { filterScreenPools, isScreenPool } from "@/utils/screen-pools";
+import { assignBomLineCodes } from "@/utils/bomLineCodes";
 import { uploadBookingAttachmentApi } from "@/services/attachments.api";
 import { useBookingCapabilities, type BookingTabName } from "@/hooks/useBookingCapabilities";
 import { getBookingPollPhaseFromQuery } from "@/hooks/useBookingPoll";
@@ -926,10 +927,13 @@ function OverviewTab({
       ) : null}
 
       {canEditBookingDetails ? (
-        <Section title="Booking Details & Specifications" icon={MessageSquare}>
+        <Section title="Venue & Setup" icon={MapPin}>
           <Field label="Venue / Location">
             <Input value={venue} onChangeText={setVenue} placeholder="Venue or location" />
           </Field>
+          <View style={styles.specificationsHeading}>
+            <AppText variant="eyebrow">Booking specifications</AppText>
+          </View>
           <Field label="Requested Size (sqm)">
             <Input
               value={size}
@@ -1320,6 +1324,34 @@ function OverviewTab({
           {booking.itemServiceSpec ? (
             <KV label="Intake Specification" value={booking.itemServiceSpec} />
           ) : null}
+          {(customFieldsQuery.data || []).length > 0 ? (
+            <View style={styles.specificationsHeading}>
+              <AppText variant="eyebrow">Booking specifications</AppText>
+            </View>
+          ) : null}
+          {(customFieldsQuery.data || []).map((field) => {
+            const rawVal = booking.customFields?.[field.key];
+            let displayVal = rawVal;
+            if (field.type === "multi_select") {
+              const selectedValues = Array.isArray(rawVal)
+                ? rawVal
+                : typeof rawVal === "string" && rawVal
+                  ? rawVal
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean)
+                  : [];
+              displayVal = selectedValues.length > 0 ? selectedValues.join(", ") : "—";
+            } else if (field.type === "boolean") {
+              displayVal =
+                rawVal === true || rawVal === "true"
+                  ? "Yes"
+                  : rawVal === false || rawVal === "false"
+                    ? "No"
+                    : "—";
+            }
+            return <KV key={field.id} label={field.name} value={String(displayVal ?? "—")} />;
+          })}
         </Section>
       ) : null}
       <Section title="Logistics & Team" icon={Truck}>
@@ -1386,33 +1418,6 @@ function OverviewTab({
               </AppText>
             </View>
           ))}
-        </Section>
-      ) : null}
-      {!canEditBookingDetails && (customFieldsQuery.data || []).length > 0 ? (
-        <Section title="Booking Specifications" icon={MessageSquare}>
-          {(customFieldsQuery.data || []).map((field) => {
-            const rawVal = booking.customFields?.[field.key];
-            let displayVal = rawVal;
-            if (field.type === "multi_select") {
-              const selectedValues = Array.isArray(rawVal)
-                ? rawVal
-                : typeof rawVal === "string" && rawVal
-                  ? rawVal
-                      .split(",")
-                      .map((s) => s.trim())
-                      .filter(Boolean)
-                  : [];
-              displayVal = selectedValues.length > 0 ? selectedValues.join(", ") : "—";
-            } else if (field.type === "boolean") {
-              displayVal =
-                rawVal === true || rawVal === "true"
-                  ? "Yes"
-                  : rawVal === false || rawVal === "false"
-                    ? "No"
-                    : "—";
-            }
-            return <KV key={field.id} label={field.name} value={String(displayVal ?? "—")} />;
-          })}
         </Section>
       ) : null}
       <Section title="Notes & Special Requirements" icon={MessageSquare}>
@@ -1573,8 +1578,8 @@ function TeamTab({
   const roster: RosterRow[] = [
     {
       role: "Chief Technician",
-      name:
-        chief?.user?.name || (isEmptyName(booking.teamLeader) ? "Unassigned" : booking.teamLeader),
+      // A crew team leader is not automatically a chief technician.
+      name: chief?.user?.name || "Unassigned",
       statusKey: chief ? getAssignmentStatus(chief) : "UNASSIGNED",
       assignmentId: chief?.id,
     },
@@ -1744,11 +1749,12 @@ function EquipmentTab({
   booking: Booking;
   bomLines: Array<{
     id: string;
+    createdAt?: string;
     quantity: string;
     acceptedShortfall?: boolean;
     poolId?: string;
-    item?: { name?: string };
-    pool?: { name?: string };
+    item?: { name?: string; category?: { key?: string } };
+    pool?: { name?: string; category?: { key?: string } };
   }>;
   canEditBom?: boolean;
 }) {
@@ -1773,12 +1779,24 @@ function EquipmentTab({
 
   const lines = Array.isArray(bomLines) ? bomLines : [];
 
-  const items = lines.map((line) => ({
-    id: line.id,
-    name: line.item?.name || line.pool?.name || "Equipment Line",
-    qty: parseFloat(String(line.quantity ?? "0")),
-    status: line.acceptedShortfall ? "Checked Out" : "Reserved",
-  }));
+  const items = useMemo(() => {
+    const sortedLines = [...lines].sort((first, second) => {
+      const firstTime = first.createdAt ? new Date(first.createdAt).getTime() : 0;
+      const secondTime = second.createdAt ? new Date(second.createdAt).getTime() : 0;
+      if (firstTime !== secondTime) return firstTime - secondTime;
+      return first.id.localeCompare(second.id);
+    });
+
+    return assignBomLineCodes(
+      sortedLines.map((line) => ({
+        id: line.id,
+        name: line.item?.name || line.pool?.name || "Equipment Line",
+        qty: parseFloat(String(line.quantity ?? "0")),
+        status: line.acceptedShortfall ? "Checked Out" : "Reserved",
+        categoryKey: line.pool?.category?.key || line.item?.category?.key,
+      })),
+    );
+  }, [lines]);
 
   const filteredPools = useMemo(() => {
     const stagedPoolIds = new Set(
@@ -1841,7 +1859,7 @@ function EquipmentTab({
         <View key={item.id} style={styles.itemRow}>
           <View style={{ flex: 1 }}>
             <AppText variant="data" color={colors.accent} style={{ fontWeight: "900" }}>
-              {item.id}
+              {item.code}
             </AppText>
             <AppText>{item.name}</AppText>
           </View>
@@ -2867,6 +2885,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+  },
+  specificationsHeading: {
+    marginTop: 4,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
   choice: {
     minWidth: "47%",
