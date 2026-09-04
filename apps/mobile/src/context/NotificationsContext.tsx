@@ -45,6 +45,12 @@ function upsert(current: Map<string, Notification>, items: Notification[]) {
   return next;
 }
 
+function getExpoProjectId(): string | undefined {
+  const extra = Constants.expoConfig?.extra as
+    { eas?: { projectId?: string }; expoProjectId?: string } | undefined;
+  return Constants.easConfig?.projectId || extra?.eas?.projectId || extra?.expoProjectId;
+}
+
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, authUser } = useAppContext();
   const [byId, setById] = useState<Map<string, Notification>>(new Map());
@@ -140,7 +146,10 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
           ? current
           : await Notifications.requestPermissionsAsync();
         if (!permission.granted || cancelled) return;
-        const token = await Notifications.getDevicePushTokenAsync();
+        const projectId = getExpoProjectId();
+        const token = projectId
+          ? await Notifications.getExpoPushTokenAsync({ projectId })
+          : await Notifications.getExpoPushTokenAsync();
         registerDeviceToken(token);
       })
       .catch(() => undefined);
