@@ -155,22 +155,16 @@ export function BookingDetail() {
         openInternalForm={evaluations.openInternalForm}
       />
 
-      <BookingTabBar
-        visibleTabs={caps.visibleTabs}
-        tab={safeTab}
-        setTab={setTab}
-      />
+      <BookingTabBar visibleTabs={caps.visibleTabs} tab={safeTab} setTab={setTab} />
 
       {safeTab === "Overview" && <OverviewTab b={booking} code={code} caps={caps} />}
       {safeTab === "Schedule" && <ScheduleTab b={booking} />}
       {safeTab === "Team" && <TeamTab b={booking} />}
       {safeTab === "Equipment" && <EquipmentTab b={booking} caps={caps} />}
-      {safeTab === "Payments" && <PaymentsTab b={booking} />}
+      {safeTab === "Payments" && <PaymentsTab b={booking} caps={caps} />}
       {safeTab === "Files" && <FilesTab b={booking} />}
       {safeTab === "Activity" && <ActivityTab b={booking} />}
-      {safeTab === "Evaluations" && (
-        <EvaluationsTab b={booking} evaluations={evaluations} />
-      )}
+      {safeTab === "Evaluations" && <EvaluationsTab b={booking} evaluations={evaluations} />}
 
       <DeclineAssignmentModal actions={actions} />
       <DamageReportModal booking={booking} checkoutSnapshot={checkoutSnapshot} actions={actions} />

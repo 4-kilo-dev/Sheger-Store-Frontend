@@ -10,7 +10,7 @@ import { VenueSetupSection } from "./VenueSetupSection";
 import { LogisticsTeamSection } from "./LogisticsTeamSection";
 import { NotesRequirementsSection } from "./NotesRequirementsSection";
 
-const TERMINAL_BOOKING_STATUSES = new Set(["DONE", "CANCELED"]);
+const TERMINAL_BOOKING_STATUSES = new Set(["COMPLETED", "PARTIALLY_RETURNED", "DONE", "CANCELED"]);
 
 export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {

@@ -24,6 +24,13 @@ import {
   isDeclinedAssignment,
 } from "@/features/bookings/utils/assignmentHelpers";
 
+const BOOKING_UPDATE_LOCKED_STATUSES = new Set([
+  "CANCELED",
+  "COMPLETED",
+  "PARTIALLY_RETURNED",
+  "DONE",
+]);
+
 function isNonDeclinedAssignment(a: any): boolean {
   return !isDeclinedAssignment(a);
 }
@@ -83,8 +90,13 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canAcceptAssignment = pendingTechAssignment && can(PERMISSION.ASSIGNMENT_ACCEPT);
   const canDeclineAssignment = pendingTechAssignment && can(PERMISSION.ASSIGNMENT_DECLINE);
 
+  // Completed bookings remain visible, but their booking data is immutable.
+  // Close-out actions such as check-in and reporting damage are handled separately.
+  const isBookingUpdateLocked = !!booking && BOOKING_UPDATE_LOCKED_STATUSES.has(booking.status);
+
   const canEditBooking =
-    can(PERMISSION.BOOKING_EDIT) || (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned);
+    !isBookingUpdateLocked &&
+    (can(PERMISSION.BOOKING_EDIT) || (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned));
 
   const canDeleteBooking = can(PERMISSION.BOOKING_DELETE);
   const canForceDone = can(PERMISSION.BOOKING_FORCE_DONE);
@@ -95,6 +107,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
    * (view_assigned only) stay read-only even if booking.edit was mis-granted.
    */
   const canEditLogistics =
+    !isBookingUpdateLocked &&
     can(PERMISSION.BOOKING_EDIT) &&
     canAny([
       PERMISSION.BOOKING_VIEW_ALL,
@@ -106,7 +119,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
       PERMISSION.PAYMENT_MANAGE,
     ]);
   const canManageCustomer = can(PERMISSION.CUSTOMER_MANAGE);
-  const canEditDriverLogistics = can(PERMISSION.DRIVER_TRIP_EDIT);
+  const canEditDriverLogistics = !isBookingUpdateLocked && can(PERMISSION.DRIVER_TRIP_EDIT);
 
   const canReportDamage = can(PERMISSION.DAMAGE_REPORT);
   const canSubmitEval =
@@ -142,7 +155,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
       ) &&
       !can(PERMISSION.BOM_CREATE));
   /** Soft-hold create/release — inventory.reserve (not warehouse checkout). */
-  const canWriteTechnicalHolds = can(PERMISSION.INVENTORY_RESERVE);
+  const canWriteTechnicalHolds = !isBookingUpdateLocked && can(PERMISSION.INVENTORY_RESERVE);
   const showOpsSidebar = canAny([
     PERMISSION.BOOKING_VIEW_ALL,
     PERMISSION.BOOKING_CONFIRM,
@@ -273,6 +286,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     canAcceptAssignment,
     canDeclineAssignment,
     canEditBooking,
+    isBookingUpdateLocked,
     canDeleteBooking,
     canForceDone,
     canEditLogistics,

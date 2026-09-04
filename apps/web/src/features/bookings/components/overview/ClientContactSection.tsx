@@ -14,7 +14,10 @@ const fieldClass =
 export function ClientContactSection({ b, code, caps }: OverviewSectionProps) {
   const queryClient = useQueryClient();
   const authUser = useAuthUser();
-  const canEdit = !!b.customerId && (caps.canManageCustomer || b.createdBy === authUser?.id);
+  const canEdit =
+    !caps.isBookingUpdateLocked &&
+    !!b.customerId &&
+    (caps.canManageCustomer || b.createdBy === authUser?.id);
 
   const [client, setClient] = useState(b.client || "");
   const [contactPerson, setContactPerson] = useState(b.contactPerson || "");

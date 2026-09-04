@@ -14,15 +14,16 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 import { useSystemCurrency } from "@/hooks/use-system-currency";
+import type { BookingCapabilities } from "@/features/bookings/hooks/useBookingCapabilities";
 
 type PaymentType = "advance" | "fully_paid";
 
-export function PaymentsTab({ b }: { b: Booking }) {
+export function PaymentsTab({ b, caps }: { b: Booking; caps: BookingCapabilities }) {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
   const { formatDate } = useDateFormatter();
   const { currency, formatMoney } = useSystemCurrency();
-  const canManagePayment = can(PERMISSION.PAYMENT_MANAGE);
+  const canManagePayment = can(PERMISSION.PAYMENT_MANAGE) && !caps.isBookingUpdateLocked;
 
   const summary = getPaymentSummary(b);
   const paymentMethod = b.customFields?.paymentMethod || "Bank Transfer";
@@ -38,9 +39,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
   const fullyPaid = b.payment === "PAID";
 
   const [showModal, setShowModal] = useState(false);
-  const [type, setType] = useState<PaymentType>(
-    b.payment === "ADVANCE" ? "fully_paid" : "advance"
-  );
+  const [type, setType] = useState<PaymentType>(b.payment === "ADVANCE" ? "fully_paid" : "advance");
   const [amount, setAmount] = useState<number>(0);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("Bank Transfer");
 
@@ -72,7 +71,9 @@ export function PaymentsTab({ b }: { b: Booking }) {
   const isExceedingRemaining =
     remainingAmount != null && remainingAmount > 0 && amount > remainingAmount;
   const isSettlingFully =
-    remainingAmount != null && remainingAmount > 0 ? amount >= remainingAmount : type === "fully_paid";
+    remainingAmount != null && remainingAmount > 0
+      ? amount >= remainingAmount
+      : type === "fully_paid";
 
   const targetToStatus: "advance" | "fully_paid" = isSettlingFully ? "fully_paid" : "advance";
   const apiAmount = targetToStatus === "advance" ? alreadyPaid + amount : amount;
@@ -80,7 +81,11 @@ export function PaymentsTab({ b }: { b: Booking }) {
   const { mutate: recordPayment, isPending } = useMutation({
     mutationFn: () => recordBookingPaymentApi(b.id, targetToStatus, apiAmount),
     onSuccess: () => {
-      toast.success(targetToStatus === "fully_paid" ? "Booking marked as Fully Paid." : "Advance payment updated.");
+      toast.success(
+        targetToStatus === "fully_paid"
+          ? "Booking marked as Fully Paid."
+          : "Advance payment updated.",
+      );
       queryClient.invalidateQueries({ queryKey: ["booking", b.code] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       setShowModal(false);
@@ -109,9 +114,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
 
   const openModal = () => {
     setType(b.payment === "ADVANCE" ? "fully_paid" : "advance");
-    setAmount(
-      b.payment === "ADVANCE" && summary.remaining != null ? summary.remaining : 0
-    );
+    setAmount(b.payment === "ADVANCE" && summary.remaining != null ? summary.remaining : 0);
     setShowModal(true);
   };
 
@@ -232,9 +235,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
                     <td className="py-3" style={{ color: "var(--text-2)" }}>
                       {t.m}
                     </td>
-                    <td className="py-3 text-right font-mono font-semibold">
-                      {formatMoney(t.a)}
-                    </td>
+                    <td className="py-3 text-right font-mono font-semibold">{formatMoney(t.a)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -259,11 +260,7 @@ export function PaymentsTab({ b }: { b: Booking }) {
           <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border)" }}>
             <KV
               label="Balance Due"
-              value={
-                summary.remaining === null
-                  ? "Pending"
-                  : formatMoney(summary.remaining)
-              }
+              value={summary.remaining === null ? "Pending" : formatMoney(summary.remaining)}
               mono
             />
           </div>
@@ -276,7 +273,10 @@ export function PaymentsTab({ b }: { b: Booking }) {
             className="w-full max-w-md rounded-lg border p-5 shadow-xl animate-in fade-in zoom-in duration-200"
             style={{ background: "var(--surface)", borderColor: "var(--border)" }}
           >
-            <div className="flex items-center justify-between border-b pb-3 mb-4" style={{ borderColor: "var(--border)" }}>
+            <div
+              className="flex items-center justify-between border-b pb-3 mb-4"
+              style={{ borderColor: "var(--border)" }}
+            >
               <h3 className="text-[15px] font-bold">Record Payment</h3>
               <button
                 onClick={() => setShowModal(false)}
@@ -289,18 +289,28 @@ export function PaymentsTab({ b }: { b: Booking }) {
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                <label
+                  className="text-[11px] font-semibold block"
+                  style={{ color: "var(--text-2)" }}
+                >
                   Payment Mode
                   <input
                     type="text"
                     readOnly
-                    value={targetToStatus === "fully_paid" ? "Fully Paid (Final Settlement)" : "Advance Payment (Partial)"}
+                    value={
+                      targetToStatus === "fully_paid"
+                        ? "Fully Paid (Final Settlement)"
+                        : "Advance Payment (Partial)"
+                    }
                     className="mt-1 h-9 w-full rounded border bg-[var(--surface-2)] px-2.5 font-mono text-[11px] opacity-80"
                     style={{ borderColor: "var(--border)" }}
                   />
                 </label>
 
-                <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
+                <label
+                  className="text-[11px] font-semibold block"
+                  style={{ color: "var(--text-2)" }}
+                >
                   Payment Method
                   <select
                     value={selectedPaymentMethod}
@@ -331,22 +341,35 @@ export function PaymentsTab({ b }: { b: Booking }) {
                 {amount > 0 ? (
                   targetToStatus === "fully_paid" ? (
                     <span>
-                      Payment of <strong>{formatMoney(amount)}</strong> satisfies the remaining balance and will mark the booking as <strong>Fully Paid</strong>.
+                      Payment of <strong>{formatMoney(amount)}</strong> satisfies the remaining
+                      balance and will mark the booking as <strong>Fully Paid</strong>.
                     </span>
                   ) : (
                     <span>
-                      Partial payment of <strong>{formatMoney(amount)}</strong> will be added to previous deposit ({formatMoney(alreadyPaid)}), updating total advance to <strong>{formatMoney(alreadyPaid + amount)}</strong>. Remaining balance: <strong>{formatMoney(Math.max(0, (remainingAmount ?? activeTotal) - amount))}</strong>.
+                      Partial payment of <strong>{formatMoney(amount)}</strong> will be added to
+                      previous deposit ({formatMoney(alreadyPaid)}), updating total advance to{" "}
+                      <strong>{formatMoney(alreadyPaid + amount)}</strong>. Remaining balance:{" "}
+                      <strong>
+                        {formatMoney(Math.max(0, (remainingAmount ?? activeTotal) - amount))}
+                      </strong>
+                      .
                     </span>
                   )
                 ) : (
-                  <span>Enter the payment amount. Partial payments will keep the booking in Advance status.</span>
+                  <span>
+                    Enter the payment amount. Partial payments will keep the booking in Advance
+                    status.
+                  </span>
                 )}
               </div>
 
               {isExceedingRemaining && (
                 <div className="text-[11px] font-semibold text-destructive flex items-center gap-1.5">
                   <AlertCircle className="h-3.5 w-3.5" />
-                  <span>Payment amount ({formatMoney(amount)}) cannot exceed remaining balance due ({formatMoney(remainingAmount ?? 0)}).</span>
+                  <span>
+                    Payment amount ({formatMoney(amount)}) cannot exceed remaining balance due (
+                    {formatMoney(remainingAmount ?? 0)}).
+                  </span>
                 </div>
               )}
 
@@ -358,11 +381,16 @@ export function PaymentsTab({ b }: { b: Booking }) {
               )}
             </div>
 
-            <div className="mt-5 flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+            <div
+              className="mt-5 flex items-center gap-2 border-t pt-3"
+              style={{ borderColor: "var(--border)" }}
+            >
               <button
                 onClick={() => {
                   if (isExceedingRemaining) {
-                    toast.error(`Amount cannot exceed remaining balance of ${formatMoney(remainingAmount ?? 0)}`);
+                    toast.error(
+                      `Amount cannot exceed remaining balance of ${formatMoney(remainingAmount ?? 0)}`,
+                    );
                     return;
                   }
                   if (!amountValid) {
@@ -375,7 +403,11 @@ export function PaymentsTab({ b }: { b: Booking }) {
                 className="rounded px-4 py-2 text-[12px] font-bold transition hover:brightness-110 disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
               >
-                {isPending ? "Recording..." : targetToStatus === "fully_paid" ? "Record Final Payment" : "Record Partial Payment"}
+                {isPending
+                  ? "Recording..."
+                  : targetToStatus === "fully_paid"
+                    ? "Record Final Payment"
+                    : "Record Partial Payment"}
               </button>
               <button
                 onClick={() => setShowModal(false)}
