@@ -1,5 +1,4 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Calendar as CalendarIcon, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -9,10 +8,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useCalendarSystem } from "@/context/CalendarSystemContext";
 import { EthTimeSelect } from "@/components/ui/eth-time-select";
 import {
-  calendarQueryOptions,
-  formatCalendarValuesApi,
-  getEthiopianTimeApi,
-} from "@/lib/calendar/calendar.api";
+  formatEthiopianDate,
+  getEthiopianTime,
+} from "@/lib/calendar/ethiopian-calendar-client";
 
 interface DatePickerProps {
   /** Value in "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm" format */
@@ -41,7 +39,7 @@ export function DatePicker({
   minDate,
   showTime = false,
 }: DatePickerProps) {
-  const { calendarSystem, numeralsSystem } = useCalendarSystem();
+  const { calendarSystem } = useCalendarSystem();
 
   const { parsedDate, timeValue } = React.useMemo(() => {
     if (!value) return { parsedDate: undefined, timeValue: "12:00" };
@@ -56,21 +54,6 @@ export function DatePicker({
   }, [value]);
 
   const dateValue = value?.split("T")[0] || "";
-  const formattedDateQuery = useQuery({
-    queryKey: ["calendar", "format", dateValue, calendarSystem, numeralsSystem],
-    queryFn: () => formatCalendarValuesApi([dateValue], calendarSystem, numeralsSystem).then((entries) => entries[0]),
-    enabled: Boolean(dateValue),
-    ...calendarQueryOptions,
-  });
-  const ethiopianTimeQuery = useQuery({
-    queryKey: ["calendar", "ethiopian-time", timeValue],
-    queryFn: () => getEthiopianTimeApi(timeValue),
-    enabled: showTime && calendarSystem === "ethiopic",
-    ...calendarQueryOptions,
-  });
-  const { data: formattedDate } = formattedDateQuery;
-  const { data: ethiopianTime } = ethiopianTimeQuery;
-
   const handleSelectDate = (date?: Date) => {
     if (!date) {
       onChange?.("");
@@ -111,10 +94,12 @@ export function DatePicker({
 
   const displayText = React.useMemo(() => {
     if (!dateValue) return placeholder;
-    let dateStr = formattedDate?.displayDate || (formattedDateQuery.isError ? "Calendar unavailable" : "Loading date…");
+    let dateStr = calendarSystem === "ethiopic"
+      ? formatEthiopianDate(dateValue) || dateValue
+      : parsedDate?.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) || dateValue;
     if (showTime && value?.includes("T")) {
       if (calendarSystem === "ethiopic") {
-        dateStr += ` · ${ethiopianTime?.display || (ethiopianTimeQuery.isError ? "Calendar unavailable" : "Loading time…")}`;
+        dateStr += ` · ${getEthiopianTime(timeValue)?.display || timeValue}`;
       } else {
         dateStr += ` · ${timeValue}`;
       }
@@ -127,10 +112,7 @@ export function DatePicker({
     showTime,
     timeValue,
     value,
-    formattedDate,
-    formattedDateQuery.isError,
-    ethiopianTime,
-    ethiopianTimeQuery.isError,
+    parsedDate,
   ]);
 
   return (

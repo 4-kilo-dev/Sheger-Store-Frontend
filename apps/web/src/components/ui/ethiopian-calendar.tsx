@@ -1,15 +1,14 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  formatCalendarValuesApi,
-  calendarQueryOptions,
-  getCalendarNowApi,
-  getEthiopianMonthApi,
-} from "@/lib/calendar/calendar.api";
-import { useCalendarSystem } from "@/context/CalendarSystemContext";
+  ETHIOPIAN_MONTH_NAMES,
+  ETHIOPIAN_WEEKDAY_HEADERS,
+  getCurrentEthiopianDate,
+  getEthiopianMonth,
+  toEthiopianDate,
+} from "@/lib/calendar/ethiopian-calendar-client";
 
 type EthiopianCalendarProps = {
   value?: string;
@@ -17,90 +16,71 @@ type EthiopianCalendarProps = {
   minDate?: Date;
 };
 
+function addMonth(view: { year: number; month: number }, direction: -1 | 1) {
+  if (direction === -1) {
+    return view.month === 1
+      ? { year: view.year - 1, month: 13 }
+      : { year: view.year, month: view.month - 1 };
+  }
+  return view.month === 13
+    ? { year: view.year + 1, month: 1 }
+    : { year: view.year, month: view.month + 1 };
+}
+
 export function EthiopianCalendar({ value, onSelect, minDate }: EthiopianCalendarProps) {
-  const { numeralsSystem } = useCalendarSystem();
   const dateValue = value?.split("T")[0] || "";
-  const nowQuery = useQuery({
-    queryKey: ["calendar", "now"],
-    queryFn: getCalendarNowApi,
-    ...calendarQueryOptions,
+  const selected = React.useMemo(() => toEthiopianDate(dateValue), [dateValue]);
+  const [view, setView] = React.useState(() => {
+    const source = selected || getCurrentEthiopianDate();
+    return { year: source.year, month: source.month };
   });
-  const selectedQuery = useQuery({
-    queryKey: ["calendar", "format", dateValue, numeralsSystem],
-    queryFn: () => formatCalendarValuesApi([dateValue], "ethiopic", numeralsSystem).then((entries) => entries[0]),
-    enabled: Boolean(dateValue),
-    ...calendarQueryOptions,
-  });
-  const { data: now } = nowQuery;
-  const { data: selected } = selectedQuery;
-  const [view, setView] = React.useState<{ year: number; month: number } | null>(null);
 
   React.useEffect(() => {
-    if (view) return;
-    const source = selected?.date.ethiopian || now?.ethiopian;
-    if (source) setView({ year: source.year, month: source.month });
-  }, [now, selected, view]);
+    if (selected) setView({ year: selected.year, month: selected.month });
+  }, [selected?.year, selected?.month]);
 
-  const monthQuery = useQuery({
-    queryKey: ["calendar", "ethiopian-month", view?.year, view?.month, numeralsSystem],
-    queryFn: () => getEthiopianMonthApi(view!.year, view!.month, numeralsSystem),
-    enabled: Boolean(view),
-    ...calendarQueryOptions,
-  });
-  const { data: month } = monthQuery;
-
-  const minimum = minDate ? minDate.toISOString().slice(0, 10) : undefined;
-  if (nowQuery.isError || selectedQuery.isError || monthQuery.isError) {
-    return (
-      <div className="grid h-64 w-72 place-items-center px-6 text-center text-sm text-[var(--text-3)]">
-        Calendar service is unavailable. Refresh after the server update completes.
-      </div>
-    );
-  }
-  if (!month) {
-    return <div className="grid h-64 w-72 place-items-center text-sm text-[var(--text-3)]">Loading calendar…</div>;
-  }
-
+  const days = React.useMemo(() => getEthiopianMonth(view.year, view.month), [view]);
   const cells = [
-    ...Array.from({ length: month.days[0]?.weekday || 0 }, () => null),
-    ...month.days,
+    ...Array.from({ length: days[0]?.weekday || 0 }, () => null),
+    ...days,
   ];
   while (cells.length % 7 !== 0) cells.push(null);
+  const minimum = minDate ? minDate.toISOString().slice(0, 10) : undefined;
 
   return (
-    <div className="w-72 p-3" data-calendar-source="backend">
+    <div className="w-72 p-3" data-calendar-source="ethiopian-calendar-date-converter">
       <div className="mb-3 flex items-center justify-between">
-        <Button variant="ghost" size="icon" aria-label="Previous Ethiopian month" onClick={() => setView(month.previous)}>
+        <Button variant="ghost" size="icon" aria-label="Previous Ethiopian month" onClick={() => setView((current) => addMonth(current, -1))}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <div className="text-sm font-semibold">{month.monthName} {month.year}</div>
-        <Button variant="ghost" size="icon" aria-label="Next Ethiopian month" onClick={() => setView(month.next)}>
+        <div className="text-sm font-semibold">{ETHIOPIAN_MONTH_NAMES[view.month - 1]} {view.year}</div>
+        <Button variant="ghost" size="icon" aria-label="Next Ethiopian month" onClick={() => setView((current) => addMonth(current, 1))}>
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
       <div className="grid grid-cols-7 text-center text-[11px] text-[var(--text-3)]">
-        {month.headers.map((header) => <div className="py-1" key={header}>{header}</div>)}
+        {ETHIOPIAN_WEEKDAY_HEADERS.map((header) => <div className="py-1" key={header}>{header}</div>)}
       </div>
       <div className="grid grid-cols-7 gap-y-1">
         {cells.map((day, index) => {
           if (!day) return <div className="h-9" key={`blank-${index}`} />;
-          const isSelected = day.gregorian.display === dateValue;
-          const isDisabled = Boolean(minimum && day.gregorian.display < minimum);
+          const isSelected = day.gregorianDate === dateValue;
+          const isDisabled = Boolean(minimum && day.gregorianDate < minimum);
           return (
             <Button
-              key={day.gregorian.display}
+              key={day.gregorianDate}
               type="button"
               variant="ghost"
               size="icon"
               disabled={isDisabled}
-              onClick={() => onSelect(day.gregorian.display)}
+              onClick={() => onSelect(day.gregorianDate)}
               className={cn(
                 "mx-auto h-8 w-8 text-xs",
                 isSelected && "bg-[var(--accent)] text-black hover:bg-[var(--accent)] hover:text-black",
                 !isSelected && day.isToday && "ring-1 ring-[var(--accent)]",
               )}
             >
-              {day.ethiopian.display}
+              {day.ethiopian.day}
             </Button>
           );
         })}
