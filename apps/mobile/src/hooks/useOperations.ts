@@ -12,6 +12,7 @@ import {
   createReservationApi,
   declineAssignmentApi,
   deleteAssignmentApi,
+  setCrewTeamLeadApi,
   deleteBomLineApi,
   deleteReservationApi,
   getBookingAllowedTransitionsApi,
@@ -930,6 +931,17 @@ export function useDeleteAssignment() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (assignmentId: string) => deleteAssignmentApi(assignmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking-assignments"] });
+    },
+  });
+}
+
+export function useSetCrewTeamLead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (assignmentId: string) => setCrewTeamLeadApi(assignmentId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["booking-assignments"] });

@@ -5,6 +5,7 @@ import { Users } from "lucide-react";
 import {
   createAssignmentApi,
   deleteAssignmentApi,
+  setCrewTeamLeadApi,
 } from "@/features/bookings/services/bookings.api";
 import { useStaffForBooking } from "@/features/bookings/hooks/useStaffForBooking";
 import { Section } from "@/features/bookings/components/shared/Section";
@@ -24,41 +25,38 @@ export function OoCrewAssignmentSection({ b, code, caps }: OverviewSectionProps)
   const [selectedStagehandId, setSelectedStagehandId] = useState("");
   const [isAssigning, setIsAssigning] = useState(false);
   const [isRemovingId, setIsRemovingId] = useState<string | null>(null);
+  const [isPromotingId, setIsPromotingId] = useState<string | null>(null);
 
-  const stagehandLeader = (b.assignments || []).find(
+  const stagehandTeam = (b.assignments || []).filter(
     (a: any) =>
       a.roleContext === "CREW" &&
-      a.isTeamLead &&
       a.status !== "DECLINED"
   );
-
   const stagehandStaff = staffList.filter((s) => isStagehandRole(s.role));
+  const availableStagehands = stagehandStaff.filter(
+    (s) => !stagehandTeam.some((a: any) => a.userId === s.id),
+  );
 
-  const handleAssignLeader = async () => {
+  const handleAddStagehand = async () => {
     if (!selectedStagehandId) {
-      toast.error("Please select a stagehand leader.");
-      return;
-    }
-
-    if (stagehandLeader?.userId === selectedStagehandId) {
-      toast.error("This stagehand is already assigned as team leader.");
+      toast.error("Please select a stagehand.");
       return;
     }
 
     setIsAssigning(true);
     try {
-      if (stagehandLeader) {
-        await deleteAssignmentApi(stagehandLeader.id);
-      }
-
       await createAssignmentApi(b.id, {
         userId: selectedStagehandId,
         roleContext: "CREW",
-        isTeamLead: true,
+        isTeamLead: stagehandTeam.length === 0,
       });
 
       setSelectedStagehandId("");
-      toast.success("Stagehand leader assigned!");
+      toast.success(
+        stagehandTeam.length === 0
+          ? "Stagehand leader assigned!"
+          : "Stagehand added to the team!",
+      );
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
     } catch (e: any) {
       toast.error(e.message || "Failed to assign stagehand leader");
@@ -67,11 +65,28 @@ export function OoCrewAssignmentSection({ b, code, caps }: OverviewSectionProps)
     }
   };
 
-  const handleRemoveLeader = async (assignmentId: string) => {
-    setIsRemovingId(assignmentId);
+  const handlePromote = async (assignmentId: string) => {
+    setIsPromotingId(assignmentId);
     try {
-      await deleteAssignmentApi(assignmentId);
-      toast.success("Stagehand leader removed.");
+      await setCrewTeamLeadApi(assignmentId);
+      toast.success("Stagehand team leader updated.");
+      queryClient.invalidateQueries({ queryKey: ["booking", code] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to update the stagehand team leader");
+    } finally {
+      setIsPromotingId(null);
+    }
+  };
+
+  const handleRemoveStagehand = async (assignment: any) => {
+    if (assignment.isTeamLead && stagehandTeam.length > 1) {
+      toast.error("Choose another team leader before removing the current leader.");
+      return;
+    }
+    setIsRemovingId(assignment.id);
+    try {
+      await deleteAssignmentApi(assignment.id);
+      toast.success("Stagehand removed from the team.");
       queryClient.invalidateQueries({ queryKey: ["booking", code] });
     } catch (e: any) {
       toast.error(e.message || "Failed to remove stagehand leader");
@@ -81,50 +96,73 @@ export function OoCrewAssignmentSection({ b, code, caps }: OverviewSectionProps)
   };
 
   return (
-    <Section title="Assign Stagehand Leader" icon={Users}>
+    <Section title="Assign Stagehand Team" icon={Users}>
       {isStaffRestricted && (
         <AccessLockOverlay
-          sectionName="Stagehand Leader Assignment"
+          sectionName="Stagehand Team Assignment"
           permissionKey={PERMISSION.ASSIGNMENT_ASSIGN_CREW}
         />
       )}
       <div className="space-y-4">
         <p className="text-[12px]" style={{ color: "var(--text-2)" }}>
-          Assign the stagehand team leader for this deployment. They will appear on the onsite team
-          brief and in logistics as team leader.
+          Add one or more stagehands to this deployment. One member is designated as the logistics
+          team leader for the onsite brief and checkout.
         </p>
 
-        {stagehandLeader && (
+        {stagehandTeam.length > 0 && (
           <div className="space-y-2">
             <div
               className="text-[11px] font-semibold uppercase tracking-wider"
               style={{ color: "var(--text-3)" }}
             >
-              Current Stagehand Leader
+              Assigned Stagehand Team ({stagehandTeam.length})
             </div>
-            <div
-              className="flex items-center justify-between rounded border px-3 py-2 text-[12px]"
-              style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
-            >
-              <span className="font-medium">{stagehandLeader.user?.name || "—"}</span>
-              <button
-                type="button"
-                onClick={() => handleRemoveLeader(stagehandLeader.id)}
-                disabled={isRemovingId === stagehandLeader.id}
-                className="text-[11px] font-semibold rounded px-2 py-1 transition hover:brightness-110 disabled:opacity-40 cursor-pointer"
-                style={{
-                  background: "color-mix(in oklab, var(--destructive) 12%, transparent)",
-                  color: "var(--destructive)",
-                }}
+            {stagehandTeam.map((assignment: any) => (
+              <div
+                key={assignment.id}
+                className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-[12px]"
+                style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
               >
-                {isRemovingId === stagehandLeader.id ? "Removing…" : "Remove"}
-              </button>
-            </div>
+                <div className="min-w-0">
+                  <span className="font-medium">{assignment.user?.name || "—"}</span>
+                  {assignment.isTeamLead && (
+                    <span className="ml-2 text-[10px] font-semibold" style={{ color: "var(--accent)" }}>
+                      TEAM LEADER
+                    </span>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {!assignment.isTeamLead && (
+                    <button
+                      type="button"
+                      onClick={() => handlePromote(assignment.id)}
+                      disabled={isPromotingId === assignment.id || isRemovingId !== null}
+                      className="text-[11px] font-semibold transition hover:brightness-110 disabled:opacity-40 cursor-pointer"
+                      style={{ color: "var(--accent)" }}
+                    >
+                      {isPromotingId === assignment.id ? "Updating…" : "Make leader"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveStagehand(assignment)}
+                    disabled={isRemovingId === assignment.id || isPromotingId !== null}
+                    className="text-[11px] font-semibold rounded px-2 py-1 transition hover:brightness-110 disabled:opacity-40 cursor-pointer"
+                    style={{
+                      background: "color-mix(in oklab, var(--destructive) 12%, transparent)",
+                      color: "var(--destructive)",
+                    }}
+                  >
+                    {isRemovingId === assignment.id ? "Removing…" : "Remove"}
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
         <label className="block text-[11px] font-semibold" style={{ color: "var(--text-2)" }}>
-          {stagehandLeader ? "Replace Stagehand Leader" : "Stagehand Leader"}
+          Add Stagehand
           <select
             value={selectedStagehandId}
             onChange={(e) => setSelectedStagehandId(e.target.value)}
@@ -132,12 +170,8 @@ export function OoCrewAssignmentSection({ b, code, caps }: OverviewSectionProps)
             style={{ borderColor: "var(--border)" }}
           >
             <option value="">— Select stagehand —</option>
-            {stagehandStaff.map((s) => (
-              <option
-                key={s.id}
-                value={s.id}
-                disabled={stagehandLeader?.userId === s.id}
-              >
+            {availableStagehands.map((s) => (
+              <option key={s.id} value={s.id}>
                 {s.name}
               </option>
             ))}
@@ -149,19 +183,20 @@ export function OoCrewAssignmentSection({ b, code, caps }: OverviewSectionProps)
             No stagehands available to assign.
           </p>
         )}
+        {stagehandStaff.length > 0 && availableStagehands.length === 0 && (
+          <p className="text-[11px]" style={{ color: "var(--text-3)" }}>
+            All available stagehands are already assigned to this booking.
+          </p>
+        )}
 
         <button
           type="button"
-          onClick={handleAssignLeader}
-          disabled={isAssigning || !selectedStagehandId}
+          onClick={handleAddStagehand}
+          disabled={isAssigning || !selectedStagehandId || availableStagehands.length === 0}
           className="rounded px-4 py-2 text-[12px] font-bold text-white transition hover:brightness-110 disabled:opacity-50 cursor-pointer"
           style={{ background: "var(--accent)" }}
         >
-          {isAssigning
-            ? "Assigning…"
-            : stagehandLeader
-              ? "Replace Stagehand Leader"
-              : "Assign Stagehand Leader"}
+          {isAssigning ? "Assigning…" : stagehandTeam.length === 0 ? "Assign Stagehand Leader" : "Add to Stagehand Team"}
         </button>
       </div>
     </Section>

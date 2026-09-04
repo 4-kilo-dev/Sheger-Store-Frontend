@@ -817,6 +817,10 @@ export async function declineAssignmentApi(assignmentId: string, reason: string)
   return client.patch(`/api/assignments/${assignmentId}/decline`, { declineReason: reason });
 }
 
+export async function setCrewTeamLeadApi(assignmentId: string): Promise<any> {
+  return client.patch(`/api/assignments/${assignmentId}/team-lead`, {});
+}
+
 export async function createBomLineApi(
   bookingId: string,
   payload: { poolId: string; quantity: string; onsiteReason?: string },

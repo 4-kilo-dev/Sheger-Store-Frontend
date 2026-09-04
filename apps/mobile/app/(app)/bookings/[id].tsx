@@ -84,6 +84,7 @@ import {
   useCustomFieldDefinitions,
   useCreateAssignment,
   useDeleteAssignment,
+  useSetCrewTeamLead,
   useDeleteBooking,
 } from "@/hooks/useOperations";
 import { useBookingActions } from "@/hooks/useBookingActions";
@@ -1193,7 +1194,7 @@ function OverviewTab({
       ) : null}
 
       {caps.canAssignCrew && ["PREPARATION", "ONSITE"].includes(booking.status) ? (
-        <StagehandLeaderAssignment booking={booking} />
+        <StagehandTeamAssignment booking={booking} />
       ) : null}
 
       {booking.status === "PREPARATION" &&
@@ -1522,9 +1523,10 @@ function isStagehandRole(role?: string) {
 }
 
 /** Admin/OO crew assignment parity with the web booking overview. */
-function StagehandLeaderAssignment({ booking }: { booking: Booking }) {
+function StagehandTeamAssignment({ booking }: { booking: Booking }) {
   const createAssignment = useCreateAssignment();
   const deleteAssignment = useDeleteAssignment();
+  const setCrewTeamLead = useSetCrewTeamLead();
   const [selectedStagehandId, setSelectedStagehandId] = useState("");
   const {
     data: staffList = [],
@@ -1535,54 +1537,69 @@ function StagehandLeaderAssignment({ booking }: { booking: Booking }) {
     queryFn: getStaffApi,
   });
 
-  const stagehandLeader = (booking.assignments || []).find(
+  const stagehandTeam = (booking.assignments || []).filter(
     (assignment) =>
       assignment.roleContext === "CREW" &&
-      assignment.isTeamLead &&
       !assignment.declineReason &&
       (assignment as { status?: string }).status !== "DECLINED",
   );
   const stagehands = staffList.filter((member) => isStagehandRole(member.role));
-  const isSaving = createAssignment.isPending || deleteAssignment.isPending;
+  const availableStagehands = stagehands.filter(
+    (member) => !stagehandTeam.some((assignment) => assignment.userId === member.id),
+  );
+  const isSaving =
+    createAssignment.isPending || deleteAssignment.isPending || setCrewTeamLead.isPending;
 
-  const assignStagehandLeader = async () => {
+  const addStagehand = async () => {
     if (!selectedStagehandId) {
-      Alert.alert("Select a stagehand", "Choose the stagehand who will lead this booking.");
-      return;
-    }
-    if (stagehandLeader?.userId === selectedStagehandId) {
-      Alert.alert("Already assigned", "This stagehand is already the team leader.");
+      Alert.alert("Select a stagehand", "Choose a stagehand to add to this booking.");
       return;
     }
 
     try {
-      if (stagehandLeader) await deleteAssignment.mutateAsync(stagehandLeader.id);
       await createAssignment.mutateAsync({
         bookingId: booking.id,
         payload: {
           userId: selectedStagehandId,
           roleContext: "CREW",
-          isTeamLead: true,
+          isTeamLead: stagehandTeam.length === 0,
         },
       });
       setSelectedStagehandId("");
       Alert.alert(
-        "Stagehand leader assigned",
-        "The stagehand leader is now part of this booking's logistics team.",
+        stagehandTeam.length === 0 ? "Stagehand leader assigned" : "Stagehand added",
+        stagehandTeam.length === 0
+          ? "The stagehand leader is now part of this booking's logistics team."
+          : "The stagehand has been added to the booking team.",
       );
     } catch (error) {
       Alert.alert(
         "Assignment failed",
-        error instanceof Error ? error.message : "Could not assign the stagehand leader.",
+        error instanceof Error ? error.message : "Could not add the stagehand.",
       );
     }
   };
 
-  const removeStagehandLeader = () => {
-    if (!stagehandLeader) return;
+  const makeTeamLeader = async (assignmentId: string) => {
+    try {
+      await setCrewTeamLead.mutateAsync(assignmentId);
+      Alert.alert("Team leader updated", "The selected stagehand is now the team leader.");
+    } catch (error) {
+      Alert.alert(
+        "Update failed",
+        error instanceof Error ? error.message : "Could not update the stagehand team leader.",
+      );
+    }
+  };
+
+  const removeStagehand = (assignment: Booking["assignments"][number]) => {
+    if (assignment.isTeamLead && stagehandTeam.length > 1) {
+      Alert.alert("Select a new leader", "Make another team member the leader before removing this one.");
+      return;
+    }
     Alert.alert(
-      "Remove stagehand leader?",
-      `${stagehandLeader.user?.name || "This stagehand"} will be removed from the booking team.`,
+      "Remove stagehand?",
+      `${assignment.user?.name || "This stagehand"} will be removed from the booking team.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -1590,10 +1607,10 @@ function StagehandLeaderAssignment({ booking }: { booking: Booking }) {
           style: "destructive",
           onPress: async () => {
             try {
-              await deleteAssignment.mutateAsync(stagehandLeader.id);
+              await deleteAssignment.mutateAsync(assignment.id);
               Alert.alert(
-                "Stagehand leader removed",
-                "No stagehand leader is assigned to this booking.",
+                "Stagehand removed",
+                "The stagehand has been removed from the booking team.",
               );
             } catch (error) {
               Alert.alert(
@@ -1608,25 +1625,41 @@ function StagehandLeaderAssignment({ booking }: { booking: Booking }) {
   };
 
   return (
-    <Section title="Assign Stagehand Leader" icon={Users}>
+    <Section title="Assign Stagehand Team" icon={Users}>
       <AppText variant="subtitle" color={colors.text2}>
-        Choose the stagehand responsible for this deployment. They appear in the team brief and
-        checkout logistics.
+        Add one or more stagehands to this deployment. One member is the team leader for the
+        onsite brief and checkout logistics.
       </AppText>
-      {stagehandLeader ? (
-        <View style={styles.assignmentSummary}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <AppText variant="eyebrow">Current stagehand leader</AppText>
-            <AppText style={{ fontWeight: "800" }}>{stagehandLeader.user?.name || "—"}</AppText>
-          </View>
-          <Button variant="danger" disabled={isSaving} onPress={removeStagehandLeader}>
-            Remove
-          </Button>
+      {stagehandTeam.length > 0 ? (
+        <View style={{ gap: 8 }}>
+          <AppText variant="eyebrow">Assigned stagehand team ({stagehandTeam.length})</AppText>
+          {stagehandTeam.map((assignment) => (
+            <View key={assignment.id} style={styles.assignmentSummary}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <AppText style={{ fontWeight: "800" }}>{assignment.user?.name || "—"}</AppText>
+                {assignment.isTeamLead ? (
+                  <AppText variant="eyebrow" color={colors.accent}>Team leader</AppText>
+                ) : null}
+              </View>
+              {!assignment.isTeamLead ? (
+                <Button
+                  variant="ghost"
+                  disabled={isSaving}
+                  onPress={() => makeTeamLeader(assignment.id)}
+                >
+                  Make leader
+                </Button>
+              ) : null}
+              <Button variant="danger" disabled={isSaving} onPress={() => removeStagehand(assignment)}>
+                Remove
+              </Button>
+            </View>
+          ))}
         </View>
       ) : null}
-      <Field label={stagehandLeader ? "Replace stagehand leader" : "Stagehand leader"}>
+      <Field label="Add stagehand">
         <View style={styles.choiceWrap}>
-          {stagehands.map((member) => (
+          {availableStagehands.map((member) => (
             <Choice
               key={member.id}
               label={member.name}
@@ -1648,13 +1681,17 @@ function StagehandLeaderAssignment({ booking }: { booking: Booking }) {
         <AppText variant="small" color={colors.text2}>
           No stagehands are available to assign.
         </AppText>
+      ) : availableStagehands.length === 0 ? (
+        <AppText variant="small" color={colors.text2}>
+          All available stagehands are already assigned to this booking.
+        </AppText>
       ) : null}
-      <Button disabled={!selectedStagehandId || isSaving} onPress={assignStagehandLeader}>
+      <Button disabled={!selectedStagehandId || isSaving} onPress={addStagehand}>
         {isSaving
           ? "Saving..."
-          : stagehandLeader
-            ? "Replace Stagehand Leader"
-            : "Assign Stagehand Leader"}
+          : stagehandTeam.length === 0
+            ? "Assign Stagehand Leader"
+            : "Add to Stagehand Team"}
       </Button>
     </Section>
   );

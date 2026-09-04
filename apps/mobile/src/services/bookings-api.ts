@@ -685,6 +685,10 @@ export async function declineAssignmentApi(assignmentId: string, reason: string)
   return client.patch(`/api/assignments/${assignmentId}/decline`, { declineReason: reason });
 }
 
+export async function setCrewTeamLeadApi(assignmentId: string): Promise<void> {
+  return client.patch(`/api/assignments/${assignmentId}/team-lead`, {});
+}
+
 export async function getBookingBomLinesApi(bookingId: string): Promise<RawBomLine[]> {
   const data = await client.get<RawBomLine[] | { lines?: RawBomLine[] }>(
     `/api/bookings/${bookingId}/bom/lines`,
