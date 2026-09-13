@@ -16,7 +16,7 @@ export function CreateBackupButton({ onSuccess, className = "" }: CreateBackupBu
   const backupMutation = useMutation({
     mutationFn: async () => {
       setInProgressMessage(
-        "Creating database dump and archiving MinIO attachments to Google Drive...",
+        "Creating backup snapshot and archiving system files to Google Drive...",
       );
       return await createBackupApi();
     },

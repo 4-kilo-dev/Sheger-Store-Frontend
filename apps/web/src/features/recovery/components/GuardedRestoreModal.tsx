@@ -50,23 +50,23 @@ const RESTORE_PHASES: Array<{
 }> = [
   {
     id: "preparing",
-    label: "Initialization & Lockout",
-    description: "Validating authorization and entering maintenance mode",
+    label: "Initialization & Safety Lockout",
+    description: "Validating authorization and placing platform in recovery mode",
   },
   {
     id: "downloading",
     label: "Google Drive Download",
-    description: "Streaming .tar.gz archive and validating checksum",
+    description: "Downloading archive from Google Drive and validating integrity",
   },
   {
     id: "restoring_db",
     label: "Database Recovery",
-    description: "Overwriting PostgreSQL tables and operational records",
+    description: "Restoring system database and operational records",
   },
   {
     id: "restoring_attachments",
-    label: "MinIO Attachments",
-    description: "Synchronizing media objects and binary files",
+    label: "Media & Attachments",
+    description: "Synchronizing media files and uploaded attachments",
   },
   {
     id: "completed",
@@ -130,7 +130,6 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
   // Arm Mutation: Verify Admin Password + Create 15-Minute Draft Job on Backend
   const armMutation = useMutation({
     mutationFn: async () => {
-      // 1. Verify admin password if email is known
       if (authUser?.email) {
         try {
           await verifyAdminPasswordApi(authUser.email, password);
@@ -138,7 +137,6 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
           throw new Error("Invalid administrator password. Please check your password.");
         }
       }
-      // 2. Create the restore draft job on the backend (armed for 15 minutes)
       return await createRestoreDraftApi(backup!.id);
     },
     onSuccess: (job) => {
@@ -226,7 +224,7 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
             return;
           }
         } catch {
-          // Keep smooth visual progression if endpoint temporarily busy during DB restart
+          // Fallback smooth visual progression
         }
       }
 
@@ -264,21 +262,21 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleCloseSafe()}>
       <DialogContent
-        className="max-w-xl border-red-500/30 p-0 overflow-hidden sm:rounded-xl"
+        className="max-w-xl border p-0 overflow-hidden sm:rounded-xl shadow-2xl"
         style={{
           background: "var(--surface)",
-          borderColor: "color-mix(in oklab, #ef4444 35%, var(--border))",
+          borderColor: "var(--border)",
         }}
       >
         <DialogHeader className="border-b px-6 py-4" style={{ borderColor: "var(--border)" }}>
-          <div className="flex items-center gap-2 text-red-500">
+          <div className="flex items-center gap-2 text-red-600 dark:text-red-500">
             <AlertTriangle className="h-5 w-5 shrink-0" />
             <DialogTitle className="text-[16px] font-bold tracking-tight text-[var(--foreground)]">
               Guarded System Restore
             </DialogTitle>
           </div>
-          <DialogDescription className="text-[12px]" style={{ color: "var(--text-2)" }}>
-            High-severity disaster recovery rollback for Vortex Visual Operations.
+          <DialogDescription className="text-[12px] text-[var(--text-2)]">
+            Disaster recovery rollback for Vortex Visual Operations.
           </DialogDescription>
         </DialogHeader>
 
@@ -289,29 +287,29 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
             style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
           >
             <div className="flex items-center justify-between gap-2 border-b pb-2.5 mb-2.5" style={{ borderColor: "var(--border)" }}>
-              <span className="text-[11px] font-semibold text-[var(--text-3)] uppercase tracking-wider">
+              <span className="text-[11px] font-semibold text-[var(--text-2)] uppercase tracking-wider">
                 Target Backup Archive
               </span>
-              <span className="inline-flex items-center gap-1 font-mono text-[10px] text-[var(--accent)] font-semibold">
+              <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold border border-emerald-600/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">
                 <FileArchive className="h-3 w-3" />
                 Verified Archive
               </span>
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <Database className="h-4 w-4 shrink-0 text-red-400" />
+                <Database className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
                 <span className="font-mono font-bold text-[var(--foreground)] break-all">{backup.name}</span>
               </div>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]" style={{ color: "var(--text-2)" }}>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--text-2)]">
                 <div>
-                  <span className="text-[var(--text-3)]">Size: </span>
-                  <span className="font-mono font-medium text-[var(--foreground)]">
+                  <span className="font-semibold text-[var(--foreground)]">Size: </span>
+                  <span className="font-mono font-medium">
                     {formatBackupSize(backup.sizeBytes)}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[var(--text-3)]">Created: </span>
-                  <span className="font-medium text-[var(--foreground)]">
+                  <span className="font-semibold text-[var(--foreground)]">Created: </span>
+                  <span className="font-medium">
                     {new Date(backup.createdAt).toLocaleString()}
                   </span>
                 </div>
@@ -321,15 +319,15 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
 
           {step !== "executing" && (
             <>
-              {/* High Severity Destructive Alert Box */}
-              <div className="rounded-lg border border-red-500/40 bg-red-950/20 p-4 text-[11px] leading-relaxed text-red-200">
-                <p className="font-bold text-red-400 mb-1 flex items-center gap-1.5">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              {/* High Severity Destructive Alert Box - Crisp in Light & Dark Mode */}
+              <div className="rounded-lg border border-red-500/40 bg-red-50 dark:bg-red-950/30 p-4 text-[12px] leading-relaxed text-red-900 dark:text-red-200 shadow-sm">
+                <p className="font-bold text-red-700 dark:text-red-400 mb-1.5 flex items-center gap-1.5 text-[12px]">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
                   Irreversible Data Overwrite Warning:
                 </p>
-                Restoring this archive will completely overwrite the existing production PostgreSQL
-                database and MinIO attachment bucket. Any transactions, bookings, or files created
-                after this backup snapshot will be permanently replaced.
+                Restoring this backup will replace current operational data, including recent bookings,
+                inventory records, and uploaded files. Any changes made after this backup was created
+                will be permanently overwritten.
               </div>
 
               {!isArmed ? (
@@ -366,7 +364,7 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your current administrator password"
-                      className="mt-1.5 h-10 w-full rounded-md border bg-[var(--surface-2)] px-3 text-[12px] text-[var(--foreground)] outline-none focus:border-red-500"
+                      className="mt-1.5 h-10 w-full rounded-md border bg-[var(--surface-2)] px-3 text-[12px] text-[var(--foreground)] outline-none focus:border-red-500 placeholder:text-[var(--text-3)]"
                       style={{ borderColor: "var(--border)" }}
                       autoComplete="current-password"
                       required
@@ -376,7 +374,7 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
                   <div>
                     <label className="block text-[11px] font-bold text-[var(--foreground)]">
                       Type confirmation phrase{" "}
-                      <span className="font-mono text-red-400 font-bold">{RESTORE_CONFIRMATION}</span>{" "}
+                      <span className="font-mono text-red-600 dark:text-red-400 font-bold">{RESTORE_CONFIRMATION}</span>{" "}
                       or the archive name
                     </label>
                     <input
@@ -385,7 +383,7 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
                       value={confirmationInput}
                       onChange={(e) => setConfirmationInput(e.target.value)}
                       placeholder={RESTORE_CONFIRMATION}
-                      className="mt-1.5 h-10 w-full rounded-md border bg-[var(--surface-2)] px-3 font-mono text-[12px] text-[var(--foreground)] outline-none focus:border-red-500"
+                      className="mt-1.5 h-10 w-full rounded-md border bg-[var(--surface-2)] px-3 font-mono text-[12px] text-[var(--foreground)] outline-none focus:border-red-500 placeholder:text-[var(--text-3)]"
                       style={{ borderColor: "var(--border)" }}
                       autoComplete="off"
                       data-1p-ignore="true"
@@ -406,7 +404,7 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
                     <button
                       type="submit"
                       disabled={!password || !isConfirmationMatched || armMutation.isPending}
-                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-red-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-red-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {armMutation.isPending ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -420,17 +418,17 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
               ) : (
                 /* Armed State - 15 Min Window Active */
                 <div className="space-y-4 pt-1">
-                  <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-[12px]">
-                    <div className="flex items-center gap-2 font-bold text-amber-400">
-                      <Clock3 className="h-4 w-4" />
+                  <div className="flex items-center justify-between rounded-lg border border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-3.5 text-[12px] shadow-sm">
+                    <div className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-400">
+                      <Clock3 className="h-4 w-4 text-amber-700 dark:text-amber-400" />
                       <span>15-Minute Authorization Armed</span>
                     </div>
-                    <span className="font-mono font-bold text-amber-300">
+                    <span className="font-mono font-bold text-amber-950 dark:text-amber-300">
                       Expires in {formatCountdown(draftJob!.expiresAt)}
                     </span>
                   </div>
 
-                  <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-2)" }}>
+                  <p className="text-[12px] leading-relaxed text-[var(--text-2)]">
                     Administrator credentials verified. System restore is armed. Clicking &quot;Confirm & Execute Restore&quot;
                     below will trigger immediate system recovery and place the platform in maintenance mode.
                   </p>
@@ -458,7 +456,7 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
                         type="button"
                         onClick={() => executeMutation.mutate()}
                         disabled={executeMutation.isPending}
-                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-red-600 px-5 py-2 text-[12px] font-bold text-white shadow transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-red-600 px-5 py-2 text-[12px] font-bold text-white shadow transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {executeMutation.isPending ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -507,7 +505,7 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
                     >
                       <div className="mt-0.5 shrink-0">
                         {isDone ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                         ) : isCurrent ? (
                           <Loader2 className="h-4 w-4 animate-spin text-[var(--accent)]" />
                         ) : (
@@ -525,7 +523,7 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
                           <span
                             className={`text-[12px] font-bold ${
                               isDone
-                                ? "text-emerald-400"
+                                ? "text-emerald-700 dark:text-emerald-400"
                                 : isCurrent
                                   ? "text-[var(--accent)]"
                                   : "text-[var(--text-3)]"
@@ -539,7 +537,7 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
                             </span>
                           )}
                         </div>
-                        <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-2)" }}>
+                        <p className="mt-0.5 text-[11px] text-[var(--text-2)]">
                           {phase.description}
                         </p>
                       </div>
@@ -550,8 +548,8 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
 
               {/* Error Callout */}
               {restoreError && (
-                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[11px] text-red-300">
-                  <div className="flex items-center gap-2 font-bold text-red-400">
+                <div className="rounded-lg border border-red-500/40 bg-red-50 dark:bg-red-950/30 p-3 text-[11px] text-red-900 dark:text-red-200">
+                  <div className="flex items-center gap-2 font-bold text-red-700 dark:text-red-400">
                     <XCircle className="h-4 w-4" />
                     Restore Operation Stalled
                   </div>
@@ -561,13 +559,13 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
 
               {/* Completion Action */}
               {currentPhase === "completed" && (
-                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-center">
-                  <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-400" />
-                  <h4 className="mt-2 text-[14px] font-bold text-emerald-300">
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-center">
+                  <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+                  <h4 className="mt-2 text-[14px] font-bold text-emerald-800 dark:text-emerald-300">
                     System Restore Successfully Applied
                   </h4>
                   <p className="mt-1 text-[11px] text-[var(--text-2)]">
-                    All tables and MinIO attachments have been restored. You can now refresh the
+                    All records and uploaded files have been restored. You can now refresh the
                     application session.
                   </p>
                   <button

@@ -193,8 +193,8 @@ export function BackupArchivesTable({
             className="mt-1 max-w-sm text-[11px] leading-relaxed"
             style={{ color: "var(--text-2)" }}
           >
-            Click &quot;Create Backup Now&quot; above to capture a fresh PostgreSQL dump and MinIO
-            attachments archive to Google Drive.
+            Click &quot;Create Backup Now&quot; above to capture a full operational backup and
+            system files archive to Google Drive.
           </p>
         </div>
       ) : (

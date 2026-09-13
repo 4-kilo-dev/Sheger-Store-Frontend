@@ -53,7 +53,7 @@ export function BackupRecoveryPanel() {
               style={{ color: "var(--text-2)" }}
             >
               Automated and on-demand disaster recovery snapshots for Vortex Visual Operations.
-              Backups capture full PostgreSQL transactional schemas and MinIO binary attachments,
+              Backups capture full database records, equipment inventories, and media attachments,
               streaming encrypted archives directly to Google Drive.
             </p>
           </div>
@@ -71,12 +71,12 @@ export function BackupRecoveryPanel() {
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded border"
               style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
             >
-              <Server className="h-4 w-4 text-[var(--accent)]" />
+              <Server className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="text-[11px]">
-              <span className="font-bold text-[var(--foreground)]">Database & Storage</span>
-              <p className="text-[10px]" style={{ color: "var(--text-3)" }}>
-                PostgreSQL dump & MinIO files
+              <span className="font-bold text-[var(--foreground)]">System Data & Storage</span>
+              <p className="text-[10px]" style={{ color: "var(--text-2)" }}>
+                Bookings, inventory & files
               </p>
             </div>
           </div>
@@ -86,12 +86,12 @@ export function BackupRecoveryPanel() {
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded border"
               style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
             >
-              <CloudCheck className="h-4 w-4 text-emerald-500" />
+              <CloudCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div className="text-[11px]">
               <span className="font-bold text-[var(--foreground)]">Google Drive Storage</span>
-              <p className="text-[10px]" style={{ color: "var(--text-3)" }}>
-                OAuth 2.0 cloud sync connected
+              <p className="text-[10px]" style={{ color: "var(--text-2)" }}>
+                Secure cloud sync connected
               </p>
             </div>
           </div>
@@ -101,11 +101,11 @@ export function BackupRecoveryPanel() {
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded border"
               style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
             >
-              <Layers className="h-4 w-4 text-[var(--accent)]" />
+              <Layers className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             </div>
             <div className="text-[11px]">
               <span className="font-bold text-[var(--foreground)]">Guarded Rollback</span>
-              <p className="text-[10px]" style={{ color: "var(--text-3)" }}>
+              <p className="text-[10px]" style={{ color: "var(--text-2)" }}>
                 15-minute multi-step authorization
               </p>
             </div>
@@ -121,21 +121,21 @@ export function BackupRecoveryPanel() {
 
       {/* Notice Callout */}
       <div
-        className="flex items-start gap-2.5 rounded-lg border p-4 text-[11px] leading-relaxed"
+        className="flex items-start gap-2.5 rounded-lg border p-4 text-[12px] leading-relaxed"
         style={{
           borderColor: "var(--border)",
           background: "var(--surface-2)",
           color: "var(--text-2)",
         }}
       >
-        <Info className="h-4 w-4 shrink-0 text-[var(--accent)] mt-0.5" />
+        <Info className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5" />
         <div>
           <span className="font-bold text-[var(--foreground)]">Security & Retention Policy: </span>
           Backup archives are retained according to the company&apos;s data governance rules. Only
           administrators with explicit{" "}
-          <code className="font-mono text-[10px] text-[var(--accent)]">system.restore</code>{" "}
-          credentials can execute database rollbacks. System restores temporarily halt operational
-          mutations.
+          <code className="font-mono text-[10px] text-amber-700 dark:text-amber-400 font-bold bg-amber-500/10 px-1 py-0.5 rounded">system.restore</code>{" "}
+          permissions can execute system rollbacks. Restores temporarily place the platform in
+          maintenance mode while applying records.
         </div>
       </div>
 
