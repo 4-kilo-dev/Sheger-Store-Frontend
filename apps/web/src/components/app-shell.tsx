@@ -320,6 +320,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="relative hidden md:block">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: "var(--text-3)" }} />
               <input
+                type="search"
+                name="global_bookings_search"
+                autoComplete="off"
+                data-1p-ignore="true"
+                data-lpignore="true"
                 placeholder="Search bookings, clients, codes…"
                 value={(useRouterState({ select: (s) => s.location.search }) as any).q || ""}
                 onChange={(e) => {

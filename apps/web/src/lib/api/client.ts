@@ -112,7 +112,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 && !(options as any)?.skipAuthRedirect) {
       authStorage.clearToken();
       authStorage.clearUser();
       if (isBrowser && !window.location.pathname.startsWith("/login")) {

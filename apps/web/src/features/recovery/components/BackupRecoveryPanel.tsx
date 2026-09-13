@@ -106,7 +106,7 @@ export function BackupRecoveryPanel() {
             <div className="text-[11px]">
               <span className="font-bold text-[var(--foreground)]">Guarded Rollback</span>
               <p className="text-[10px]" style={{ color: "var(--text-3)" }}>
-                5-minute multi-step authorization
+                15-minute multi-step authorization
               </p>
             </div>
           </div>

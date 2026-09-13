@@ -9,26 +9,32 @@ export interface RecoveryBackup {
 }
 
 export type RestorePhase =
-  "draft" | "downloading" | "restoring_db" | "restoring_attachments" | "completed" | "failed";
-
-export interface RestoreAuthorization {
-  id: string;
-  backupId: string;
-  expiresAt: string;
-  status: "armed" | "running" | "completed" | "failed" | "cancelled" | "expired";
-}
+  | "draft"
+  | "preparing"
+  | "downloading"
+  | "restoring_db"
+  | "restoring_attachments"
+  | "completed"
+  | "failed";
 
 export interface RestoreJob {
   id: string;
-  backupId: string;
+  archiveDriveId: string;
+  archiveName: string;
+  archiveChecksum?: string | null;
+  status: "draft" | "started" | "running" | "completed" | "failed" | "cancelled";
   phase: RestorePhase;
-  progressPercent: number;
-  message?: string;
+  expiresAt: string;
+  progressPercent?: number;
+  failureSummary?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  failedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-export const RESTORE_CONFIRMATION = "I WANT TO RESTORE";
+export const RESTORE_CONFIRMATION = "CONFIRM_RESTORE";
 
 export function formatBackupSize(bytes: number): string {
   if (bytes <= 0) return "0 B";
@@ -41,7 +47,9 @@ export function formatBackupSize(bytes: number): string {
 export function formatCountdown(expiresAt: string): string {
   const remaining = Math.max(0, new Date(expiresAt).getTime() - Date.now());
   const seconds = Math.ceil(remaining / 1000);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
 export interface ParsedRecoveryError {
@@ -101,24 +109,29 @@ export function createBackupApi() {
   return client.post<RecoveryBackup>("/api/recovery/backups");
 }
 
-export function armRestoreApi(payload: {
-  backupId: string;
-  password: string;
-  confirmation: string;
-}) {
-  return client.post<RestoreAuthorization>("/api/recovery/authorizations", payload);
-}
-
-export function cancelRestoreApi(authorizationId: string) {
-  return client.post<void>(`/api/recovery/authorizations/${authorizationId}/cancel`);
-}
-
-export function executeRestoreApi(authorizationId: string) {
-  return client.post<RestoreAuthorization>(
-    `/api/recovery/authorizations/${authorizationId}/execute`,
+export async function verifyAdminPasswordApi(email: string, password: string): Promise<boolean> {
+  await client.post(
+    "/api/auth/login",
+    { email, password },
+    { skipAuthRedirect: true } as any,
   );
+  return true;
 }
 
-export function getRestoreJobStatusApi(authorizationId: string) {
-  return client.get<RestoreJob>(`/api/recovery/authorizations/${authorizationId}/status`);
+export function createRestoreDraftApi(archiveDriveId: string) {
+  return client.post<RestoreJob>("/api/recovery/restore/draft", { archiveDriveId });
+}
+
+export function confirmRestoreApi(jobId: string, confirmationPhrase: string) {
+  return client.post<RestoreJob>(`/api/recovery/restore/${jobId}/confirm`, {
+    confirmationPhrase,
+  });
+}
+
+export function cancelRestoreDraftApi(jobId: string) {
+  return client.post<RestoreJob>(`/api/recovery/restore/${jobId}/cancel`);
+}
+
+export function getRestoreJobStatusApi(jobId: string) {
+  return client.get<RestoreJob>(`/api/recovery/restore/${jobId}`);
 }

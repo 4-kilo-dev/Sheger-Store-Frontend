@@ -21,17 +21,19 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import {
-  armRestoreApi,
-  cancelRestoreApi,
-  executeRestoreApi,
+  createRestoreDraftApi,
+  confirmRestoreApi,
+  cancelRestoreDraftApi,
   getRestoreJobStatusApi,
+  verifyAdminPasswordApi,
   formatBackupSize,
   formatCountdown,
   parseRecoveryError,
   RESTORE_CONFIRMATION,
   type RecoveryBackup,
-  type RestoreAuthorization,
+  type RestoreJob,
   type RestorePhase,
 } from "../services/recovery.api";
 
@@ -47,9 +49,9 @@ const RESTORE_PHASES: Array<{
   description: string;
 }> = [
   {
-    id: "draft",
-    label: "Initialization",
-    description: "Validating authorization and staging restore job",
+    id: "preparing",
+    label: "Initialization & Lockout",
+    description: "Validating authorization and entering maintenance mode",
   },
   {
     id: "downloading",
@@ -74,11 +76,12 @@ const RESTORE_PHASES: Array<{
 ];
 
 export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreModalProps) {
+  const authUser = useAuthUser();
   const queryClient = useQueryClient();
-  const [step, setStep] = useState<"review" | "authorizing" | "executing">("review");
+  const [step, setStep] = useState<"review" | "executing">("review");
   const [password, setPassword] = useState("");
   const [confirmationInput, setConfirmationInput] = useState("");
-  const [authorization, setAuthorization] = useState<RestoreAuthorization | null>(null);
+  const [draftJob, setDraftJob] = useState<RestoreJob | null>(null);
   const [currentPhase, setCurrentPhase] = useState<RestorePhase>("draft");
   const [progressPercent, setProgressPercent] = useState(0);
   const [restoreError, setRestoreError] = useState<string | null>(null);
@@ -91,19 +94,19 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
       setStep("review");
       setPassword("");
       setConfirmationInput("");
-      setAuthorization(null);
+      setDraftJob(null);
       setCurrentPhase("draft");
       setProgressPercent(0);
       setRestoreError(null);
     }
   }, [isOpen, backup?.id]);
 
-  // Tick for 5-minute authorization countdown
+  // Tick for 15-minute authorization countdown
   useEffect(() => {
-    if (!authorization || authorization.status !== "armed") return;
+    if (!draftJob || draftJob.status !== "draft") return;
     const timer = window.setInterval(() => setClockTicker(Date.now()), 1_000);
     return () => window.clearInterval(timer);
-  }, [authorization]);
+  }, [draftJob]);
 
   // Clean up polling timer
   useEffect(() => {
@@ -115,26 +118,33 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
   }, []);
 
   const isArmed =
-    authorization?.status === "armed" && new Date(authorization.expiresAt).getTime() > Date.now();
+    Boolean(draftJob) &&
+    draftJob?.status === "draft" &&
+    new Date(draftJob.expiresAt).getTime() > Date.now();
 
   const isConfirmationMatched =
     Boolean(backup) &&
-    (confirmationInput.trim() === RESTORE_CONFIRMATION ||
+    (confirmationInput.trim().toUpperCase() === RESTORE_CONFIRMATION ||
       confirmationInput.trim() === backup?.name);
 
-  // Arm Mutation (Step 2 -> Step 3)
+  // Arm Mutation: Verify Admin Password + Create 15-Minute Draft Job on Backend
   const armMutation = useMutation({
-    mutationFn: () =>
-      armRestoreApi({
-        backupId: backup!.id,
-        password,
-        confirmation: confirmationInput.trim(),
-      }),
-    onSuccess: (auth) => {
-      setAuthorization(auth);
+    mutationFn: async () => {
+      // 1. Verify admin password if email is known
+      if (authUser?.email) {
+        try {
+          await verifyAdminPasswordApi(authUser.email, password);
+        } catch {
+          throw new Error("Invalid administrator password. Please check your password.");
+        }
+      }
+      // 2. Create the restore draft job on the backend (armed for 15 minutes)
+      return await createRestoreDraftApi(backup!.id);
+    },
+    onSuccess: (job) => {
+      setDraftJob(job);
       setPassword("");
-      setStep("review");
-      toast.success("Restore authorization verified. 5-minute execution window opened.");
+      toast.success("Administrator verified. 15-minute execution window armed.");
     },
     onError: (err: unknown) => {
       const parsed = parseRecoveryError(err, "Failed to authorize restore window");
@@ -144,12 +154,12 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
 
   // Cancel / Disarm Mutation
   const cancelMutation = useMutation({
-    mutationFn: () => cancelRestoreApi(authorization!.id),
+    mutationFn: () => cancelRestoreDraftApi(draftJob!.id),
     onSuccess: () => {
-      setAuthorization(null);
+      setDraftJob(null);
       setPassword("");
       setConfirmationInput("");
-      toast.success("Restore window cancelled.");
+      toast.success("Restore authorization window cancelled.");
     },
     onError: (err: unknown) => {
       const parsed = parseRecoveryError(err, "Could not cancel restore window");
@@ -157,14 +167,17 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
     },
   });
 
-  // Execute Restore Mutation (Step 3: Stepper & Progress)
+  // Execute Restore Mutation (Step 2: Execution & Stepper)
   const executeMutation = useMutation({
     mutationFn: async () => {
       setStep("executing");
-      setCurrentPhase("draft");
-      setProgressPercent(10);
+      setCurrentPhase("preparing");
+      setProgressPercent(15);
       setRestoreError(null);
-      return await executeRestoreApi(authorization!.id);
+      return await confirmRestoreApi(
+        draftJob!.id,
+        confirmationInput.trim() || RESTORE_CONFIRMATION,
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recovery-backups"] });
@@ -178,11 +191,11 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
     },
   });
 
-  // Track restore progress via polling or fallback phase simulator
+  // Track restore progress via backend status checks
   const simulateOrTrackRestore = () => {
     let currentStepIndex = 1;
     const phases: RestorePhase[] = [
-      "draft",
+      "preparing",
       "downloading",
       "restoring_db",
       "restoring_attachments",
@@ -190,23 +203,30 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
     ];
 
     pollIntervalRef.current = window.setInterval(async () => {
-      if (authorization?.id) {
+      if (draftJob?.id) {
         try {
-          const job = await getRestoreJobStatusApi(authorization.id);
+          const job = await getRestoreJobStatusApi(draftJob.id);
           if (job && job.phase) {
             setCurrentPhase(job.phase);
-            setProgressPercent(job.progressPercent || 50);
-            if (job.phase === "completed") {
-              if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            const phaseIndex = phases.indexOf(job.phase);
+            if (phaseIndex >= 0) {
+              setProgressPercent(Math.round(((phaseIndex + 1) / phases.length) * 100));
             }
-            if (job.phase === "failed") {
+            if (job.status === "completed" || job.phase === "completed") {
               if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-              setRestoreError(job.message || "Restore job failed on server.");
+              setProgressPercent(100);
+              toast.success("System restore completed successfully!");
+              return;
+            }
+            if (job.status === "failed" || job.phase === "failed") {
+              if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+              setRestoreError(job.failureSummary || "Restore job failed on server.");
+              return;
             }
             return;
           }
         } catch {
-          // Backend endpoint status check not answering, proceed with smooth visual progression
+          // Keep smooth visual progression if endpoint temporarily busy during DB restart
         }
       }
 
@@ -250,53 +270,55 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
           borderColor: "color-mix(in oklab, #ef4444 35%, var(--border))",
         }}
       >
-        {/* High Severity Danger Header */}
-        <div className="bg-red-500/10 border-b border-red-500/20 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500 text-white shadow-sm">
-              <AlertTriangle className="h-5 w-5" />
-            </div>
-            <div>
-              <DialogTitle className="text-[16px] font-bold text-red-400">
-                Guarded Disaster Recovery Restore
-              </DialogTitle>
-              <DialogDescription className="text-[11px] text-[var(--text-2)]">
-                Permanent database and MinIO storage replacement
-              </DialogDescription>
-            </div>
+        <DialogHeader className="border-b px-6 py-4" style={{ borderColor: "var(--border)" }}>
+          <div className="flex items-center gap-2 text-red-500">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <DialogTitle className="text-[16px] font-bold tracking-tight text-[var(--foreground)]">
+              Guarded System Restore
+            </DialogTitle>
           </div>
-        </div>
+          <DialogDescription className="text-[12px]" style={{ color: "var(--text-2)" }}>
+            High-severity disaster recovery rollback for Vortex Visual Operations.
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="p-6 space-y-5">
-          {/* Target Snapshot Details Card */}
+          {/* Target Archive Details Card */}
           <div
-            className="rounded-lg border p-3.5"
+            className="rounded-lg border p-4 text-[12px]"
             style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
           >
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="font-semibold text-[var(--text-2)]">Selected Snapshot:</span>
-              <span className="font-mono font-bold text-[var(--foreground)]">{backup.name}</span>
+            <div className="flex items-center justify-between gap-2 border-b pb-2.5 mb-2.5" style={{ borderColor: "var(--border)" }}>
+              <span className="text-[11px] font-semibold text-[var(--text-3)] uppercase tracking-wider">
+                Target Backup Archive
+              </span>
+              <span className="inline-flex items-center gap-1 font-mono text-[10px] text-[var(--accent)] font-semibold">
+                <FileArchive className="h-3 w-3" />
+                Verified Archive
+              </span>
             </div>
-            <div
-              className="mt-2 grid grid-cols-2 gap-2 text-[11px]"
-              style={{ color: "var(--text-3)" }}
-            >
-              <div>
-                <span>Size: </span>
-                <span className="font-semibold text-[var(--foreground)]">
-                  {formatBackupSize(backup.sizeBytes)}
-                </span>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Database className="h-4 w-4 shrink-0 text-red-400" />
+                <span className="font-mono font-bold text-[var(--foreground)] break-all">{backup.name}</span>
               </div>
-              <div>
-                <span>Created: </span>
-                <span className="font-semibold text-[var(--foreground)]">
-                  {new Date(backup.createdAt).toLocaleString()}
-                </span>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]" style={{ color: "var(--text-2)" }}>
+                <div>
+                  <span className="text-[var(--text-3)]">Size: </span>
+                  <span className="font-mono font-medium text-[var(--foreground)]">
+                    {formatBackupSize(backup.sizeBytes)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[var(--text-3)]">Created: </span>
+                  <span className="font-medium text-[var(--foreground)]">
+                    {new Date(backup.createdAt).toLocaleString()}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Step 1 & 2: Review and Verification Form */}
           {step !== "executing" && (
             <>
               {/* High Severity Destructive Alert Box */}
@@ -311,36 +333,64 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
               </div>
 
               {!isArmed ? (
-                /* Verification Step */
-                <div className="space-y-4 pt-1">
+                /* Verification Step 1: Password & Confirmation asking */
+                <form
+                  autoComplete="off"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (password && isConfirmationMatched && !armMutation.isPending) {
+                      armMutation.mutate();
+                    }
+                  }}
+                  className="space-y-4 pt-1"
+                >
+                  {/* Hidden dummy username input: keeps password manager autofill strictly bound within this form */}
+                  <input
+                    type="text"
+                    name="username"
+                    autoComplete="username"
+                    value={authUser?.email || "admin@sheger.com"}
+                    readOnly
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    className="sr-only hidden"
+                  />
+
                   <div>
                     <label className="block text-[11px] font-bold text-[var(--foreground)]">
                       Administrator Password
                     </label>
                     <input
                       type="password"
+                      name="admin_verification_password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter your current password"
+                      placeholder="Enter your current administrator password"
                       className="mt-1.5 h-10 w-full rounded-md border bg-[var(--surface-2)] px-3 text-[12px] text-[var(--foreground)] outline-none focus:border-red-500"
                       style={{ borderColor: "var(--border)" }}
                       autoComplete="current-password"
+                      required
                     />
                   </div>
 
                   <div>
                     <label className="block text-[11px] font-bold text-[var(--foreground)]">
-                      Type exact archive name or{" "}
-                      <span className="font-mono text-red-400">{RESTORE_CONFIRMATION}</span>
+                      Type confirmation phrase{" "}
+                      <span className="font-mono text-red-400 font-bold">{RESTORE_CONFIRMATION}</span>{" "}
+                      or the archive name
                     </label>
                     <input
                       type="text"
+                      name="confirmation_keyword"
                       value={confirmationInput}
                       onChange={(e) => setConfirmationInput(e.target.value)}
                       placeholder={RESTORE_CONFIRMATION}
                       className="mt-1.5 h-10 w-full rounded-md border bg-[var(--surface-2)] px-3 font-mono text-[12px] text-[var(--foreground)] outline-none focus:border-red-500"
                       style={{ borderColor: "var(--border)" }}
                       autoComplete="off"
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      required
                     />
                   </div>
 
@@ -354,8 +404,7 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
                       Cancel
                     </button>
                     <button
-                      type="button"
-                      onClick={() => armMutation.mutate()}
+                      type="submit"
                       disabled={!password || !isConfirmationMatched || armMutation.isPending}
                       className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-red-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -364,27 +413,26 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
                       ) : (
                         <LockKeyhole className="h-4 w-4" />
                       )}
-                      <span>Authorize 5-Minute Window</span>
+                      <span>Authorize 15-Minute Window</span>
                     </button>
                   </div>
-                </div>
+                </form>
               ) : (
-                /* Armed State - 5 Min Window Active */
+                /* Armed State - 15 Min Window Active */
                 <div className="space-y-4 pt-1">
                   <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-[12px]">
                     <div className="flex items-center gap-2 font-bold text-amber-400">
                       <Clock3 className="h-4 w-4" />
-                      <span>Authorization Armed</span>
+                      <span>15-Minute Authorization Armed</span>
                     </div>
                     <span className="font-mono font-bold text-amber-300">
-                      Expires in {formatCountdown(authorization!.expiresAt)}
+                      Expires in {formatCountdown(draftJob!.expiresAt)}
                     </span>
                   </div>
 
                   <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-2)" }}>
-                    You have verified your administrator identity. Clicking &quot;Confirm & Execute
-                    Restore&quot; below will trigger immediate system recovery and place the
-                    platform in maintenance mode.
+                    Administrator credentials verified. System restore is armed. Clicking &quot;Confirm & Execute Restore&quot;
+                    below will trigger immediate system recovery and place the platform in maintenance mode.
                   </p>
 
                   <div className="flex items-center justify-between gap-3 pt-2">
