@@ -262,13 +262,13 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleCloseSafe()}>
       <DialogContent
-        className="max-w-xl border p-0 overflow-hidden sm:rounded-xl shadow-2xl"
+        className="max-w-xl border p-0 overflow-hidden sm:rounded-xl shadow-2xl max-h-[88vh] flex flex-col"
         style={{
           background: "var(--surface)",
           borderColor: "var(--border)",
         }}
       >
-        <DialogHeader className="border-b px-6 py-4" style={{ borderColor: "var(--border)" }}>
+        <DialogHeader className="border-b px-6 py-4 shrink-0" style={{ borderColor: "var(--border)" }}>
           <div className="flex items-center gap-2 text-red-600 dark:text-red-500">
             <AlertTriangle className="h-5 w-5 shrink-0" />
             <DialogTitle className="text-[16px] font-bold tracking-tight text-[var(--foreground)]">
@@ -280,7 +280,7 @@ export function GuardedRestoreModal({ backup, isOpen, onClose }: GuardedRestoreM
           </DialogDescription>
         </DialogHeader>
 
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-y-5 overflow-y-auto flex-1 scrollbar-thin">
           {/* Target Archive Details Card */}
           <div
             className="rounded-lg border p-4 text-[12px]"
