@@ -54,6 +54,7 @@ interface RawBooking {
   venue?: string;
   location?: string;
   assemblyStart?: string;
+  deliveryDate?: string;
   disassemblyEnd?: string;
   itemServiceSpec?: string;
   arrangementDetails?: string;
@@ -116,6 +117,19 @@ function parseNumericField(value: string | number | null | undefined): number | 
   if (value == null || value === "") return undefined;
   const n = typeof value === "number" ? value : parseFloat(value);
   return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * Format an instant as local `YYYY-MM-DDTHH:mm` (not UTC-sliced ISO).
+ * UTC `slice(0, 10)` shifts the calendar day in UTC+ offsets such as EAT
+ * and can make assembly, event, and dismantle look like the same date.
+ */
+function normalizeBookingDateTime(value?: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 const KNOWN_SCREEN_TYPES = new Set<string>([
@@ -387,10 +401,10 @@ function mapBackendBookingToFrontend(b: RawBooking): Booking {
     client: customerName,
     contactPerson,
     contactPhone: customerPhone,
-    assemblyDate: b.assemblyStart ? b.assemblyStart.slice(0, 10) : "",
-    eventDate: b.eventDate ? b.eventDate.slice(0, 10) : "",
-    dismantleDate: b.disassemblyEnd ? b.disassemblyEnd.slice(0, 10) : "",
-    rentalStart: b.rentalStart || b.assemblyStart || b.eventDate || "",
+    assemblyDate: normalizeBookingDateTime(b.assemblyStart || b.deliveryDate || b.rentalStart),
+    eventDate: normalizeBookingDateTime(b.eventDate),
+    dismantleDate: normalizeBookingDateTime(b.disassemblyEnd || b.rentalEnd),
+    rentalStart: b.rentalStart || b.deliveryDate || b.assemblyStart || b.eventDate || "",
     rentalEnd: b.rentalEnd || b.disassemblyEnd || b.eventDate || "",
     venue: b.eventLocation || b.venue || b.location || "",
     screenType,
