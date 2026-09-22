@@ -50,6 +50,12 @@ function bookingEthiopianDate(booking: Booking, field: "assembly" | "event"): st
   return booking.ethiopianDates?.[serverField]?.ethiopian.display ?? null;
 }
 
+function bookingDays(booking: Booking): string {
+  return booking.rentedDays != null && booking.rentedDays > 0
+    ? String(booking.rentedDays)
+    : "—";
+}
+
 function downloadCsv(filename: string, headers: string[], rows: string[][]) {
   const lines = [headers, ...rows].map((row) => row.map(csvEscape).join(","));
   const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -210,6 +216,7 @@ export function BookingsIndex() {
       "Client",
       "Assembly",
       "Event",
+      "Number of Days",
       "Venue",
       "Screen Type",
       "Size",
@@ -225,6 +232,7 @@ export function BookingsIndex() {
       b.client,
       b.assemblyDate,
       b.eventDate,
+      bookingDays(b),
       b.venue,
       b.screenType,
       String(b.size),
@@ -473,6 +481,7 @@ export function BookingsIndex() {
                   <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Client</th>
                   <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Assembly Date</th>
                   <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Event Date</th>
+                  <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Days</th>
                   <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Venue / Location</th>
                   <th style={{ borderColor: "var(--border)" }} className="border-b px-4 py-3 text-left label-eyebrow">Status</th>
                 </tr>
@@ -480,7 +489,7 @@ export function BookingsIndex() {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-[13px]" style={{ color: "var(--text-3)" }}>
+                    <td colSpan={7} className="px-4 py-12 text-center text-[13px]" style={{ color: "var(--text-3)" }}>
                       All caught up — no assignments assigned to you.
                     </td>
                   </tr>
@@ -502,6 +511,7 @@ export function BookingsIndex() {
                       </td>
                       <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{bookingEthiopianDate(b, "assembly") ?? formatDate(b.assemblyDate)}</td>
                       <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{bookingEthiopianDate(b, "event") ?? formatDate(b.eventDate)}</td>
+                      <td className="border-b px-4 py-3 font-mono font-semibold" style={{ borderColor: "var(--border)" }}>{bookingDays(b)}</td>
                       <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>{b.venue}</td>
                       <td className="border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
                         <StatusBadge status={b.status} />
@@ -812,7 +822,7 @@ export function BookingsIndex() {
       {/* Table — scrolls independently; header/tabs/filters stay pinned */}
       <div className="flex flex-col overflow-hidden rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--surface)", minHeight: 0, flex: "1 1 0%", maxHeight: "calc(100vh - 260px)" }}>
         <div className="flex-1 overflow-auto scrollbar-thin" style={{ minHeight: 0 }}>
-          <table className="w-full min-w-[1400px] border-collapse text-[12px]">
+          <table className="w-full min-w-[1460px] border-collapse text-[12px]">
             <thead className="sticky top-0 z-10">
               <tr style={{ background: "var(--surface-2)" }}>
                 {[
@@ -821,6 +831,7 @@ export function BookingsIndex() {
                   { k: "CLIENT", w: 180 },
                   { k: "ASSEMBLY", w: 110 },
                   { k: "EVENT", w: 110 },
+                  { k: "DAYS", w: 60 },
                   { k: "VENUE", w: 180 },
                   { k: "TYPE", w: 110 },
                   { k: "SIZE", w: 60 },
@@ -851,7 +862,7 @@ export function BookingsIndex() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="px-4 py-12 text-center text-[13px]" style={{ color: "var(--text-3)" }}>
+                  <td colSpan={15} className="px-4 py-12 text-center text-[13px]" style={{ color: "var(--text-3)" }}>
                     No bookings match your current filters.
                   </td>
                 </tr>
@@ -880,6 +891,7 @@ export function BookingsIndex() {
                     </td>
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{bookingEthiopianDate(b, "assembly") ?? formatDate(b.assemblyDate)}</td>
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{bookingEthiopianDate(b, "event") ?? formatDate(b.eventDate)}</td>
+                    <td className="border-b px-3 py-3 font-mono font-semibold" style={{ borderColor: "var(--border)" }}>{bookingDays(b)}</td>
                     <td className="border-b px-3 py-3" style={{ borderColor: "var(--border)" }}>{b.venue}</td>
                     <td className="border-b px-3 py-3 font-mono text-[11px]" style={{ borderColor: "var(--border)", color: "var(--text-2)" }}>{b.screenType || "—"}</td>
                     <td className="border-b px-3 py-3 font-mono font-semibold" style={{ borderColor: "var(--border)" }}>{b.size}</td>
