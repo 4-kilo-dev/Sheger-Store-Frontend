@@ -512,6 +512,7 @@ export function useBookingActions(
       setShowDeleteModal(false);
       setTargetBookingToDelete(null);
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["pool-availability"] });
       queryClient.removeQueries({ queryKey: ["booking", code] });
       queryClient.removeQueries({ queryKey: ["booking", bookingId] });
       navigate({ to: "/bookings" });

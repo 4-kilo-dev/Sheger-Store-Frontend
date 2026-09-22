@@ -259,7 +259,10 @@ export function useDeleteBooking() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: deleteBookingApi,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bookings"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["pool-availability"] });
+    },
   });
 }
 

@@ -178,6 +178,9 @@ export function BookingsIndex() {
       toast.success(cleanMessage);
       setBookingToDelete(null);
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      // A deleted booking must stop contributing to CTO screen availability
+      // immediately, including availability queries cached for other dates.
+      queryClient.invalidateQueries({ queryKey: ["pool-availability"] });
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to delete booking");
