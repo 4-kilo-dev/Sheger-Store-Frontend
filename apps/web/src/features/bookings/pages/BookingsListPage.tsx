@@ -309,7 +309,9 @@ export function BookingsIndex() {
   const ethiopianYears = useMemo(() => {
     const currentYear = backendNow?.ethiopian.year;
     if (!currentYear) return [];
-    return [String(currentYear), String(currentYear + 1)];
+    // Keep one historical year available so older bookings remain filterable,
+    // while still rolling the choices forward with the current Ethiopian year.
+    return [String(currentYear - 1), String(currentYear), String(currentYear + 1)];
   }, [backendNow?.ethiopian.year]);
 
   // Sort — newest created first by default
