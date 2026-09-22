@@ -6,7 +6,6 @@ import { OnsiteDeploymentsWidget } from "./OnsiteDeploymentsWidget";
 import { PendingTasksWidget } from "./PendingTasksWidget";
 import { QuickActionsWidget } from "./QuickActionsWidget";
 import { RecentBookingsWidget } from "./RecentBookingsWidget";
-import { ScreenAvailabilityWidget } from "./ScreenAvailabilityWidget";
 import { StatsOverviewWidget } from "./StatsOverviewWidget";
 
 export function WidgetRenderer({ id }: { id: WidgetId }) {
@@ -25,8 +24,6 @@ export function WidgetRenderer({ id }: { id: WidgetId }) {
       return <RecentBookingsWidget />;
     case "booking-queues":
       return <BookingQueuesWidget />;
-    case "screen-availability":
-      return <ScreenAvailabilityWidget />;
     case "onsite-deployments":
       return <OnsiteDeploymentsWidget />;
     default:

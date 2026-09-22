@@ -8,7 +8,6 @@ export type WidgetId =
   | "pending-tasks"
   | "recent-bookings"
   | "booking-queues"
-  | "screen-availability"
   | "onsite-deployments";
 
 export interface RoleLayoutConfig {
@@ -40,7 +39,7 @@ export const ROLE_LAYOUTS: Record<UserRole, RoleLayoutConfig> = {
     description: "Confirm reservations and chase outstanding payments.",
   },
   CTO: {
-    widgets: ["stats-overview", "pending-tasks", "booking-queues", "screen-availability"],
+    widgets: ["stats-overview", "pending-tasks", "booking-queues"],
     eyebrow: "Technical operations",
     title: "Screen Config & Crew Assignment",
     description: "Review specs and assign the lead technician.",
