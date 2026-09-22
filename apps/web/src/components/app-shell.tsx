@@ -1,7 +1,7 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, CalendarRange, Package, Users, BarChart3, Settings,
-  ChevronsLeft, ChevronsRight, Search, ChevronRight,
+  ChevronsLeft, ChevronsRight, ChevronRight,
   ClipboardCheck, ShieldAlert, LogOut, Sun, Moon, Menu, X, Trello, Truck, Bell,
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
@@ -317,27 +317,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Breadcrumb />
           </div>
           <div className="flex items-center gap-1.5 md:gap-2">
-            <div className="relative hidden md:block">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: "var(--text-3)" }} />
-              <input
-                type="search"
-                name="global_bookings_search"
-                autoComplete="off"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                placeholder="Search bookings, clients, codes…"
-                value={(useRouterState({ select: (s) => s.location.search }) as any).q || ""}
-                onChange={(e) => {
-                  navigate({
-                    to: "/bookings",
-                    search: (prev: any) => ({ ...prev, q: e.target.value || undefined }),
-                    replace: true,
-                  });
-                }}
-                className="h-8 w-72 rounded-md border bg-[var(--surface-2)] pl-8 pr-3 text-[12px] outline-none placeholder:text-[var(--text-3)] focus:border-[var(--accent)]"
-                style={{ borderColor: "var(--border)" }}
-              />
-            </div>
             <button 
               suppressHydrationWarning
               onClick={() => {
