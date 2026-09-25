@@ -6,6 +6,7 @@ import { AppText, BottomSheet, Button, Field, Input, TextArea } from "@/componen
 import type { BookingActions } from "@/hooks/useBookingActions";
 import type { Booking } from "@/types/domain";
 import { colors, radius } from "@/theme/tokens";
+import { mimeTypeForFile } from "@/utils/file-mime";
 
 const MAX_ATTACHMENTS = 10;
 
@@ -111,7 +112,7 @@ export function DamageReportSheet({ booking, checkoutSnapshot, actions }: Damage
       next.push({
         uri: asset.uri,
         name: asset.fileName || `damage-${Date.now()}.jpg`,
-        type: asset.mimeType || "image/jpeg",
+        type: mimeTypeForFile(asset.fileName || asset.uri, asset.mimeType),
       });
     }
     setDamageAttachments(next);

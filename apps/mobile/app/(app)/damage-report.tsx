@@ -19,6 +19,7 @@ import {
 } from "@/components/ui";
 import { useBookings, useCreateDamageReport, useInventory } from "@/hooks/useOperations";
 import { uploadBookingAttachmentApi } from "@/services/attachments.api";
+import { mimeTypeForFile } from "@/utils/file-mime";
 import { alpha, colors, radius } from "@/theme/tokens";
 
 const SEVERITY_OPTIONS = [
@@ -160,7 +161,7 @@ export default function DamageReportScreen() {
             {
               uri: asset.uri,
               name: asset.fileName || `damage_photo_${Date.now()}.jpg`,
-              type: asset.type || "image/jpeg",
+              type: mimeTypeForFile(asset.fileName || asset.uri, asset.mimeType),
             },
             { relatedEntity: "damage_missing_report", relatedId: report.id },
           ).catch(() => null),

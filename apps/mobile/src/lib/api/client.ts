@@ -4,6 +4,9 @@ import { to } from "@/utils/routes";
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL?.trim() || "";
 const REQUEST_TIMEOUT_MS = 20_000;
+const UPLOAD_TIMEOUT_MS = 60_000;
+
+type RequestOptions = RequestInit & { timeoutMs?: number };
 
 class ApiError extends Error {
   status: number;
@@ -42,7 +45,7 @@ export function setUnauthorizedHandler(handler: () => void) {
   onUnauthorized = handler;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   // The backend has no global "/api" prefix; strip it here so every service
   // file can use "/api/..." paths for parity with the web client, which does
   // the same normalization before hitting the real backend.
@@ -56,8 +59,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   const url = targetPath.startsWith("http") ? targetPath : `${BASE_URL}${targetPath}`;
 
-  const headers = new Headers(options.headers);
-  if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
+  const { timeoutMs, ...requestInit } = options;
+  const headers = new Headers(requestInit.headers);
+  if (!headers.has("Content-Type") && !(requestInit.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -67,13 +71,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    timeoutMs ?? (requestInit.body instanceof FormData ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS),
+  );
   let response: Response;
   try {
     response = await fetch(url, {
-      ...options,
+      ...requestInit,
       headers,
-      signal: options.signal ?? controller.signal,
+      signal: requestInit.signal ?? controller.signal,
     });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -116,30 +123,30 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const client = {
-  get: <T>(path: string, options?: RequestInit) => request<T>(path, { ...options, method: "GET" }),
+  get: <T>(path: string, options?: RequestOptions) => request<T>(path, { ...options, method: "GET" }),
 
-  post: <T>(path: string, body?: unknown, options?: RequestInit) =>
+  post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, {
       ...options,
       method: "POST",
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
 
-  put: <T>(path: string, body?: unknown, options?: RequestInit) =>
+  put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, {
       ...options,
       method: "PUT",
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
 
-  patch: <T>(path: string, body?: unknown, options?: RequestInit) =>
+  patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, {
       ...options,
       method: "PATCH",
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
 
-  delete: <T>(path: string, options?: RequestInit) =>
+  delete: <T>(path: string, options?: RequestOptions) =>
     request<T>(path, { ...options, method: "DELETE" }),
 };
 

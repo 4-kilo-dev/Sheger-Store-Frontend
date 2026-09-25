@@ -11,6 +11,7 @@
       "expo-router",
       "expo-sharing",
       "expo-notifications",
+      "expo-document-picker",
       [
         "expo-image-picker",
         {

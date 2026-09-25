@@ -26,9 +26,10 @@ import {
   XCircle,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import { PaymentBadge, StatusBadge, StatusStepper, ToneBadge } from "@/components/status";
 import {
   AppText,
@@ -97,6 +98,7 @@ import { filterScreenPools, isScreenPool } from "@/utils/screen-pools";
 import { assignBomLineCodes } from "@/utils/bomLineCodes";
 import { uploadBookingAttachmentApi } from "@/services/attachments.api";
 import { getStaffApi } from "@/services/staff-api";
+import { COMMON_DOCUMENT_TYPES, fileExtension, mimeTypeForFile } from "@/utils/file-mime";
 import { useBookingCapabilities, type BookingTabName } from "@/hooks/useBookingCapabilities";
 import { getBookingPollPhaseFromQuery } from "@/hooks/useBookingPoll";
 import { createAssignTechnicianAction } from "@/utils/bookingActions";
@@ -1497,14 +1499,12 @@ function ScheduleTab({ booking }: { booking: Booking }) {
                 style={[styles.timelineDot, event.accent ? { borderColor: colors.accent } : null]}
               />
               <View style={styles.timelineCard}>
-                <View style={styles.rowBetween}>
-                  <AppText style={{ fontWeight: "800" }}>{event.title}</AppText>
-                  <AppText variant="data" color={colors.text3}>
-                    {formatDateTime(event.when)}
-                  </AppText>
-                </View>
+                <AppText style={{ fontWeight: "800" }}>{event.title}</AppText>
+                <AppText variant="data" color={colors.text3}>
+                  {formatDateTime(event.when)}
+                </AppText>
                 {event.detail ? (
-                  <AppText variant="small" color={colors.text2}>
+                  <AppText variant="small" color={colors.text2} numberOfLines={2}>
                     {event.detail}
                   </AppText>
                 ) : null}
@@ -2463,6 +2463,7 @@ function FilesTab({
 }) {
   const deleteAttachment = useDeleteAttachment();
   const downloadAttachment = useDownloadAttachment();
+  const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const { can } = usePermissions();
@@ -2483,34 +2484,80 @@ function FilesTab({
     }
   };
 
-  const handleUpload = async () => {
+  const uploadPickedFile = async (file: {
+    uri: string;
+    name?: string | null;
+    mimeType?: string | null;
+    size?: number | null;
+  }) => {
+    const name = file.name || `attachment_${Date.now()}.${fileExtension(file.uri) || "jpg"}`;
+    await uploadBookingAttachmentApi(booking.id, {
+      uri: file.uri,
+      name,
+      type: mimeTypeForFile(name, file.mimeType),
+      fileSize: file.size,
+    });
+    await queryClient.invalidateQueries({ queryKey: ["booking-attachments", booking.id] });
+  };
+
+  const pickFromLibrary = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setUploadError("Photo library access is needed to attach photos.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images", "videos"],
+      allowsMultipleSelection: false,
+      quality: 0.9,
+    });
+    if (result.canceled || !result.assets?.length) return;
+    const asset = result.assets[0];
+    setUploading(true);
     try {
-      setUploadError(null);
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        setUploadError("Photo library access is needed to attach files.");
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
-        allowsMultipleSelection: false,
-        quality: 0.9,
-      });
-      if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
-      setUploading(true);
-      const ext = asset.uri.split(".").pop() || "jpg";
-      const mimeType = asset.type === "video" ? `video/${ext}` : `image/${ext}`;
-      await uploadBookingAttachmentApi(booking.id, {
+      await uploadPickedFile({
         uri: asset.uri,
-        name: asset.fileName || `attachment_${Date.now()}.${ext}`,
-        type: mimeType,
+        name: asset.fileName,
+        mimeType: asset.mimeType,
+        size: asset.fileSize,
       });
-    } catch (e) {
-      setUploadError(e instanceof Error ? e.message : "Upload failed.");
     } finally {
       setUploading(false);
     }
+  };
+
+  const pickDocument = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: COMMON_DOCUMENT_TYPES,
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (result.canceled || !result.assets?.length) return;
+    const asset = result.assets[0];
+    setUploading(true);
+    try {
+      await uploadPickedFile({
+        uri: asset.uri,
+        name: asset.name,
+        mimeType: asset.mimeType,
+        size: asset.size,
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleUpload = () => {
+    setUploadError(null);
+    Alert.alert("Attach a file", "Photos, PDFs, Word, Excel, ZIP, and other common files are supported.", [
+      { text: "Photo or video", onPress: () => void pickFromLibrary().catch(showUploadError) },
+      { text: "Document", onPress: () => void pickDocument().catch(showUploadError) },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const showUploadError = (error: unknown) => {
+    setUploadError(error instanceof Error ? error.message : "Upload failed.");
   };
 
   return (
@@ -3041,6 +3088,7 @@ const styles = StyleSheet.create({
   },
   timelineCard: {
     flex: 1,
+    minWidth: 0,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
