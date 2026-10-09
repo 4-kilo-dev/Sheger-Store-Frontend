@@ -527,10 +527,14 @@ function ManagementReportsPage() {
 
   // Helper styles for priority/status indicators
   const getPaymentBadgeStyle = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "paid": return { bg: "rgba(48, 164, 108, 0.15)", color: "#30A46C", label: "Paid" };
-      case "advance": return { bg: "rgba(232, 160, 48, 0.15)", color: "#E8A030", label: "Advance" };
-      default: return { bg: "rgba(229, 70, 102, 0.15)", color: "#E54666", label: "Unpaid" };
+    switch (status?.toLowerCase()) {
+      case "fully_paid":
+      case "paid":
+        return { bg: "rgba(48, 164, 108, 0.15)", color: "#30A46C", label: "Paid" };
+      case "advance":
+        return { bg: "rgba(232, 160, 48, 0.15)", color: "#E8A030", label: "Advance" };
+      default:
+        return { bg: "rgba(229, 70, 102, 0.15)", color: "#E54666", label: "Unpaid" };
     }
   };
 

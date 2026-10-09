@@ -9,90 +9,30 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as StaffRouteImport } from './routes/staff'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as ReportsRouteImport } from './routes/reports'
-import { Route as OtpRouteImport } from './routes/otp'
-import { Route as OperationsRouteImport } from './routes/operations'
-import { Route as NotificationsRouteImport } from './routes/notifications'
-import { Route as NotificationSettingsRouteImport } from './routes/notification-settings'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as InventoryRouteImport } from './routes/inventory'
-import { Route as DriverTripsRouteImport } from './routes/driver-trips'
-import { Route as DamageReportRouteImport } from './routes/damage-report'
-import { Route as CheckoutRouteImport } from './routes/checkout'
-import { Route as ChangePasswordRouteImport } from './routes/change-password'
-import { Route as BookingsRouteImport } from './routes/bookings'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as InventoryIndexRouteImport } from './routes/inventory.index'
+import { Route as BookingsRouteImport } from './routes/bookings'
+import { Route as ChangePasswordRouteImport } from './routes/change-password'
+import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as DamageReportRouteImport } from './routes/damage-report'
+import { Route as DriverTripsRouteImport } from './routes/driver-trips'
+import { Route as InventoryRouteImport } from './routes/inventory'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as NotificationSettingsRouteImport } from './routes/notification-settings'
+import { Route as NotificationsRouteImport } from './routes/notifications'
+import { Route as OperationsRouteImport } from './routes/operations'
+import { Route as OtpRouteImport } from './routes/otp'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as StaffRouteImport } from './routes/staff'
 import { Route as BookingsIndexRouteImport } from './routes/bookings.index'
-import { Route as InventoryItemIdRouteImport } from './routes/inventory.$itemId'
-import { Route as BookingsNewRouteImport } from './routes/bookings.new'
 import { Route as BookingsCodeRouteImport } from './routes/bookings.$code'
+import { Route as BookingsNewRouteImport } from './routes/bookings.new'
+import { Route as InventoryIndexRouteImport } from './routes/inventory.index'
+import { Route as InventoryItemIdRouteImport } from './routes/inventory.$itemId'
 
-const StaffRoute = StaffRouteImport.update({
-  id: '/staff',
-  path: '/staff',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ReportsRoute = ReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OtpRoute = OtpRouteImport.update({
-  id: '/otp',
-  path: '/otp',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OperationsRoute = OperationsRouteImport.update({
-  id: '/operations',
-  path: '/operations',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const NotificationsRoute = NotificationsRouteImport.update({
-  id: '/notifications',
-  path: '/notifications',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const NotificationSettingsRoute = NotificationSettingsRouteImport.update({
-  id: '/notification-settings',
-  path: '/notification-settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const InventoryRoute = InventoryRouteImport.update({
-  id: '/inventory',
-  path: '/inventory',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DriverTripsRoute = DriverTripsRouteImport.update({
-  id: '/driver-trips',
-  path: '/driver-trips',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DamageReportRoute = DamageReportRouteImport.update({
-  id: '/damage-report',
-  path: '/damage-report',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CheckoutRoute = CheckoutRouteImport.update({
-  id: '/checkout',
-  path: '/checkout',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ChangePasswordRoute = ChangePasswordRouteImport.update({
-  id: '/change-password',
-  path: '/change-password',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BookingsRoute = BookingsRouteImport.update({
@@ -100,35 +40,95 @@ const BookingsRoute = BookingsRouteImport.update({
   path: '/bookings',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const ChangePasswordRoute = ChangePasswordRouteImport.update({
+  id: '/change-password',
+  path: '/change-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const InventoryIndexRoute = InventoryIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => InventoryRoute,
+const CheckoutRoute = CheckoutRouteImport.update({
+  id: '/checkout',
+  path: '/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DamageReportRoute = DamageReportRouteImport.update({
+  id: '/damage-report',
+  path: '/damage-report',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DriverTripsRoute = DriverTripsRouteImport.update({
+  id: '/driver-trips',
+  path: '/driver-trips',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InventoryRoute = InventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationSettingsRoute = NotificationSettingsRouteImport.update({
+  id: '/notification-settings',
+  path: '/notification-settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OperationsRoute = OperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OtpRoute = OtpRouteImport.update({
+  id: '/otp',
+  path: '/otp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StaffRoute = StaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const BookingsIndexRoute = BookingsIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => BookingsRoute,
 } as any)
-const InventoryItemIdRoute = InventoryItemIdRouteImport.update({
-  id: '/$itemId',
-  path: '/$itemId',
-  getParentRoute: () => InventoryRoute,
+const BookingsCodeRoute = BookingsCodeRouteImport.update({
+  id: '/$code',
+  path: '/$code',
+  getParentRoute: () => BookingsRoute,
 } as any)
 const BookingsNewRoute = BookingsNewRouteImport.update({
   id: '/new',
   path: '/new',
   getParentRoute: () => BookingsRoute,
 } as any)
-const BookingsCodeRoute = BookingsCodeRouteImport.update({
-  id: '/$code',
-  path: '/$code',
-  getParentRoute: () => BookingsRoute,
+const InventoryIndexRoute = InventoryIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => InventoryRoute,
+} as any)
+const InventoryItemIdRoute = InventoryItemIdRouteImport.update({
+  id: '/$itemId',
+  path: '/$itemId',
+  getParentRoute: () => InventoryRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -283,95 +283,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/staff': {
-      id: '/staff'
-      path: '/staff'
-      fullPath: '/staff'
-      preLoaderRoute: typeof StaffRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reports': {
-      id: '/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof ReportsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/otp': {
-      id: '/otp'
-      path: '/otp'
-      fullPath: '/otp'
-      preLoaderRoute: typeof OtpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/operations': {
-      id: '/operations'
-      path: '/operations'
-      fullPath: '/operations'
-      preLoaderRoute: typeof OperationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/notifications': {
-      id: '/notifications'
-      path: '/notifications'
-      fullPath: '/notifications'
-      preLoaderRoute: typeof NotificationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/notification-settings': {
-      id: '/notification-settings'
-      path: '/notification-settings'
-      fullPath: '/notification-settings'
-      preLoaderRoute: typeof NotificationSettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/inventory': {
-      id: '/inventory'
-      path: '/inventory'
-      fullPath: '/inventory'
-      preLoaderRoute: typeof InventoryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/driver-trips': {
-      id: '/driver-trips'
-      path: '/driver-trips'
-      fullPath: '/driver-trips'
-      preLoaderRoute: typeof DriverTripsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/damage-report': {
-      id: '/damage-report'
-      path: '/damage-report'
-      fullPath: '/damage-report'
-      preLoaderRoute: typeof DamageReportRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/checkout': {
-      id: '/checkout'
-      path: '/checkout'
-      fullPath: '/checkout'
-      preLoaderRoute: typeof CheckoutRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/change-password': {
-      id: '/change-password'
-      path: '/change-password'
-      fullPath: '/change-password'
-      preLoaderRoute: typeof ChangePasswordRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bookings': {
@@ -381,19 +297,96 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BookingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/change-password': {
+      id: '/change-password'
+      path: '/change-password'
+      fullPath: '/change-password'
+      preLoaderRoute: typeof ChangePasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/inventory/': {
-      id: '/inventory/'
-      path: '/'
-      fullPath: '/inventory/'
-      preLoaderRoute: typeof InventoryIndexRouteImport
-      parentRoute: typeof InventoryRoute
+    '/checkout': {
+      id: '/checkout'
+      path: '/checkout'
+      fullPath: '/checkout'
+      preLoaderRoute: typeof CheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/damage-report': {
+      id: '/damage-report'
+      path: '/damage-report'
+      fullPath: '/damage-report'
+      preLoaderRoute: typeof DamageReportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/driver-trips': {
+      id: '/driver-trips'
+      path: '/driver-trips'
+      fullPath: '/driver-trips'
+      preLoaderRoute: typeof DriverTripsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inventory': {
+      id: '/inventory'
+      path: '/inventory'
+      fullPath: '/inventory'
+      preLoaderRoute: typeof InventoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notification-settings': {
+      id: '/notification-settings'
+      path: '/notification-settings'
+      fullPath: '/notification-settings'
+      preLoaderRoute: typeof NotificationSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/operations': {
+      id: '/operations'
+      path: '/operations'
+      fullPath: '/operations'
+      preLoaderRoute: typeof OperationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/otp': {
+      id: '/otp'
+      path: '/otp'
+      fullPath: '/otp'
+      preLoaderRoute: typeof OtpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/staff': {
+      id: '/staff'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof StaffRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/bookings/': {
       id: '/bookings/'
@@ -402,12 +395,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BookingsIndexRouteImport
       parentRoute: typeof BookingsRoute
     }
-    '/inventory/$itemId': {
-      id: '/inventory/$itemId'
-      path: '/$itemId'
-      fullPath: '/inventory/$itemId'
-      preLoaderRoute: typeof InventoryItemIdRouteImport
-      parentRoute: typeof InventoryRoute
+    '/bookings/$code': {
+      id: '/bookings/$code'
+      path: '/$code'
+      fullPath: '/bookings/$code'
+      preLoaderRoute: typeof BookingsCodeRouteImport
+      parentRoute: typeof BookingsRoute
     }
     '/bookings/new': {
       id: '/bookings/new'
@@ -416,12 +409,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BookingsNewRouteImport
       parentRoute: typeof BookingsRoute
     }
-    '/bookings/$code': {
-      id: '/bookings/$code'
-      path: '/$code'
-      fullPath: '/bookings/$code'
-      preLoaderRoute: typeof BookingsCodeRouteImport
-      parentRoute: typeof BookingsRoute
+    '/inventory/': {
+      id: '/inventory/'
+      path: '/'
+      fullPath: '/inventory/'
+      preLoaderRoute: typeof InventoryIndexRouteImport
+      parentRoute: typeof InventoryRoute
+    }
+    '/inventory/$itemId': {
+      id: '/inventory/$itemId'
+      path: '/$itemId'
+      fullPath: '/inventory/$itemId'
+      preLoaderRoute: typeof InventoryItemIdRouteImport
+      parentRoute: typeof InventoryRoute
     }
   }
 }
