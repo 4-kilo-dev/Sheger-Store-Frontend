@@ -32,7 +32,12 @@ import { useAuthUser } from "@/hooks/use-auth-user";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import { DatePicker } from "@/components/ui/date-picker";
-import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { useDateFormatter, useCalendarSystem } from "@/context/CalendarSystemContext";
+import {
+  toEthiopianDate,
+  toGregorianDate,
+  monthLength,
+} from "@/lib/calendar/ethiopian-calendar-client";
 import { useSystemCurrency } from "@/hooks/use-system-currency";
 import { getBookingsApi, type Booking } from "@/features/bookings/services/bookings.api";
 
@@ -168,6 +173,7 @@ function AssignedStaffWorksheet() {
 
 function ManagementReportsPage() {
   const { formatDate } = useDateFormatter();
+  const { calendarSystem } = useCalendarSystem();
   const { currency, formatMoney } = useSystemCurrency();
   const authUser = useAuthUser();
   const { can } = usePermissions();
@@ -214,6 +220,41 @@ function ManagementReportsPage() {
   const [endDate, setEndDate] = useState("");
   const [status, setStatus] = useState("");
   const [location, setLocation] = useState("");
+
+  const currentMonthRange = useMemo(() => {
+    if (calendarSystem === "ethiopic") {
+      const now = new Date();
+      const eth = toEthiopianDate(now.toISOString().slice(0, 10));
+      if (eth) {
+        const start = toGregorianDate(eth.year, eth.month, 1);
+        const lastDay = monthLength(eth.year, eth.month);
+        const end = toGregorianDate(eth.year, eth.month, lastDay);
+        return { start, end };
+      }
+    }
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return {
+      start: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`,
+      end: `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`,
+    };
+  }, [calendarSystem]);
+
+  const currentWeekRange = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return {
+      start: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`,
+      end: `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`,
+    };
+  }, []);
   const [qualityDays, setQualityDays] = useState("30");
   const [qualityView, setQualityView] = useState<"recent" | "all_done">("recent");
   const [qualityCrew, setQualityCrew] = useState("");
@@ -590,6 +631,58 @@ function ManagementReportsPage() {
           />
         </div>
 
+        {/* Quick Date Presets */}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setStartDate(currentMonthRange.start);
+              setEndDate(currentMonthRange.end);
+            }}
+            className="h-8 rounded border px-2.5 text-[11px] font-semibold transition cursor-pointer"
+            style={{
+              borderColor:
+                startDate === currentMonthRange.start && endDate === currentMonthRange.end
+                  ? "var(--accent)"
+                  : "var(--border)",
+              background:
+                startDate === currentMonthRange.start && endDate === currentMonthRange.end
+                  ? "var(--accent)"
+                  : "var(--surface-2)",
+              color:
+                startDate === currentMonthRange.start && endDate === currentMonthRange.end
+                  ? "var(--accent-foreground)"
+                  : "var(--text-2)",
+            }}
+          >
+            This Month
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setStartDate(currentWeekRange.start);
+              setEndDate(currentWeekRange.end);
+            }}
+            className="h-8 rounded border px-2.5 text-[11px] font-semibold transition cursor-pointer"
+            style={{
+              borderColor:
+                startDate === currentWeekRange.start && endDate === currentWeekRange.end
+                  ? "var(--accent)"
+                  : "var(--border)",
+              background:
+                startDate === currentWeekRange.start && endDate === currentWeekRange.end
+                  ? "var(--accent)"
+                  : "var(--surface-2)",
+              color:
+                startDate === currentWeekRange.start && endDate === currentWeekRange.end
+                  ? "var(--accent-foreground)"
+                  : "var(--text-2)",
+            }}
+          >
+            This Week
+          </button>
+        </div>
+
         {/* Location Filter */}
         <input
           type="text"
@@ -738,10 +831,10 @@ function ManagementReportsPage() {
                   <CalendarCheck className="h-4 w-4" style={{ color: "var(--accent)" }} />
                 </div>
                 <div className="mt-3 text-[22px] font-bold">
-                  {loadingRevenue ? "..." : revenueBookingCount}
+                  {loadingBookings ? "..." : (bookingsReport?.totalCount ?? 0)}
                 </div>
                 <div className="mt-1 text-[11px]" style={{ color: "var(--text-3)" }}>
-                  Bookings with payments in range
+                  {startDate || endDate ? "Events scheduled in selected range" : "All scheduled events"}
                 </div>
               </div>
 

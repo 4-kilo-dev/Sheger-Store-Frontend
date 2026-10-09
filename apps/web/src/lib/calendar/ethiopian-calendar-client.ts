@@ -90,7 +90,7 @@ export function toGregorianDate(year: number, month: number, day: number): strin
   );
 }
 
-function monthLength(year: number, month: number): number {
+export function monthLength(year: number, month: number): number {
   if (month !== 13) return 30;
   try {
     new EthDateTime(year, month, 6, 12).toEuropeanDate();
