@@ -8,6 +8,7 @@ import {
 } from "@/features/bookings/services/bookings.api";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Section } from "@/features/bookings/components/shared/Section";
+import { AdminOverrideBanner } from "@/features/bookings/components/shared/AdminOverrideBanner";
 import type { OverviewSectionProps } from "./types";
 
 type CoreEdits = {
@@ -152,6 +153,11 @@ export function BookingSpecificationsEditor({ b, code, caps }: OverviewSectionPr
       icon={MessageSquare}
     >
       <div className="space-y-4">
+        {caps.canBypassStageLock &&
+          ["COMPLETED", "PARTIALLY_RETURNED", "DONE", "CANCELED"].includes(b.status) && (
+            <AdminOverrideBanner />
+          )}
+
         {canFullyEdit && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -23,7 +23,8 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
     Component: BookingSpecificationsEditor,
     when: (caps, b) => {
       // Full editable booking details — booking.edit only (not field technicians)
-      if (!caps.canEditLogistics || TERMINAL_BOOKING_STATUSES.has(b.status)) return false;
+      if (!caps.canEditLogistics) return false;
+      if (!caps.canBypassStageLock && TERMINAL_BOOKING_STATUSES.has(b.status)) return false;
       return true;
     },
   },
@@ -41,7 +42,9 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
     id: "oo-crew-assignment",
     Component: OoCrewAssignmentSection,
-    when: (caps, b) => ["PREPARATION", "ONSITE"].includes(b.status) && caps.canAssignCrew,
+    when: (caps, b) =>
+      (caps.canBypassStageLock || ["PREPARATION", "ONSITE"].includes(b.status)) &&
+      caps.canAssignCrew,
   },
   {
     id: "oo-vehicle-driver",
@@ -56,8 +59,10 @@ export const OVERVIEW_MAIN_SECTIONS: OverviewSectionDef[] = [
   {
     id: "venue-setup",
     Component: VenueSetupSection,
-    // Read-only venue/spec view for users without booking.edit (e.g. technicians)
-    when: (caps) => !caps.canEditLogistics,
+    // Read-only venue/spec view for users without booking.edit (e.g. technicians) or non-admins on closed bookings
+    when: (caps, b) =>
+      !caps.canEditLogistics ||
+      (!caps.canBypassStageLock && TERMINAL_BOOKING_STATUSES.has(b.status)),
   },
   {
     id: "logistics-team",

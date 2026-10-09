@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Section } from "@/features/bookings/components/shared/Section";
 import { KV } from "@/features/bookings/components/shared/KV";
+import { AdminOverrideBanner } from "@/features/bookings/components/shared/AdminOverrideBanner";
 import {
   getPaymentSummary,
   recordBookingPaymentApi,
@@ -23,7 +24,9 @@ export function PaymentsTab({ b, caps }: { b: Booking; caps: BookingCapabilities
   const { can } = usePermissions();
   const { formatDate } = useDateFormatter();
   const { currency, formatMoney } = useSystemCurrency();
-  const canManagePayment = can(PERMISSION.PAYMENT_MANAGE) && !caps.isBookingUpdateLocked;
+  const canManagePayment =
+    (can(PERMISSION.PAYMENT_MANAGE) && !caps.isBookingUpdateLocked) ||
+    (caps.canBypassStageLock && can(PERMISSION.PAYMENT_MANAGE));
 
   const summary = getPaymentSummary(b);
   const paymentMethod = b.customFields?.paymentMethod || "Bank Transfer";
@@ -123,6 +126,13 @@ export function PaymentsTab({ b, caps }: { b: Booking; caps: BookingCapabilities
 
   return (
     <div className="grid grid-cols-12 gap-4">
+      {caps.canBypassStageLock &&
+        ["COMPLETED", "PARTIALLY_RETURNED", "DONE", "CANCELED"].includes(b.status) && (
+          <div className="col-span-12">
+            <AdminOverrideBanner />
+          </div>
+        )}
+
       {canManagePayment && (
         <div className="col-span-12">
           <Section title="Pricing" icon={DollarSign}>
@@ -198,7 +208,7 @@ export function PaymentsTab({ b, caps }: { b: Booking; caps: BookingCapabilities
           title="Transactions"
           icon={DollarSign}
           action={
-            canManagePayment && !fullyPaid ? (
+            canManagePayment && (!fullyPaid || caps.canBypassStageLock) ? (
               <button
                 onClick={openModal}
                 className="text-[11px] font-semibold"

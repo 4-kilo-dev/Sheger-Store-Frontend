@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useAppContext } from "@/context/AppContext";
-import { usePermissions } from "@/hooks/use-permissions";
+import { usePermissions, canBypassBookingStageLock } from "@/hooks/use-permissions";
 import { useAllowedTransitions } from "@/hooks/useOperations";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import type { AllowedTransition } from "@/services/bookings-api";
@@ -86,6 +86,8 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canAcceptAssignment = pendingTechAssignment && can(PERMISSION.ASSIGNMENT_ACCEPT);
   const canDeclineAssignment = pendingTechAssignment && can(PERMISSION.ASSIGNMENT_DECLINE);
 
+  const canBypassStageLock = canBypassBookingStageLock(authUser);
+
   const canEditBooking =
     can(PERMISSION.BOOKING_EDIT) || (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned);
 
@@ -132,12 +134,14 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canAssignCrew = can(PERMISSION.ASSIGNMENT_ASSIGN_CREW);
   const canReverseCheckout = can(PERMISSION.INVENTORY_CHECKOUT_REVERSE);
   const canOverrideAvailability = can(PERMISSION.INVENTORY_OVERRIDE_AVAILABILITY);
-  const bomEditableStatus = booking?.status === "ACCEPTED" || booking?.status === "PREPARATION";
+  const bomEditableStatus =
+    canBypassStageLock || booking?.status === "ACCEPTED" || booking?.status === "PREPARATION";
   const canEditBom =
-    !!bomEditableStatus &&
-    (can(PERMISSION.BOM_CREATE) ||
-      (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned) ||
-      can(PERMISSION.BOOKING_EDIT));
+    canBypassStageLock ||
+    (!!bomEditableStatus &&
+      (can(PERMISSION.BOM_CREATE) ||
+        (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned) ||
+        can(PERMISSION.BOOKING_EDIT)));
   const canWriteTechnicalHolds = can(PERMISSION.INVENTORY_RESERVE);
   /** Writers see holds beyond RESERVED; others only at RESERVED (web registry parity). */
   const showTechnicalHolds =
@@ -203,19 +207,22 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   );
 
   const assignTechnicianAction = useMemo((): BookingAction | null => {
-    if (!canAssignTechnician || !booking) return null;
+    if ((!canAssignTechnician && !canBypassStageLock) || !booking) return null;
 
     const fromTransitions = statusActions.find(
       (a) => a.id === "assignment.assign_technician" || a.requiresForm === "assign",
     );
     if (fromTransitions) return fromTransitions;
 
-    if (["CONFIRMED", "ASSIGNED", "ACCEPTED", "PREPARATION", "ONSITE"].includes(booking.status)) {
+    if (
+      canBypassStageLock ||
+      ["CONFIRMED", "ASSIGNED", "ACCEPTED", "PREPARATION", "ONSITE"].includes(booking.status)
+    ) {
       return createAssignTechnicianAction();
     }
 
     return null;
-  }, [canAssignTechnician, booking, statusActions]);
+  }, [canAssignTechnician, canBypassStageLock, booking, statusActions]);
 
   const visibleTabs: BookingTabName[] = useMemo(() => {
     const showPayments = can(PERMISSION.PAYMENT_MANAGE);
@@ -262,6 +269,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     permissions,
     can,
     canAny,
+    canBypassStageLock,
     isAssigned,
     myAssignments,
     myTechAssignment,

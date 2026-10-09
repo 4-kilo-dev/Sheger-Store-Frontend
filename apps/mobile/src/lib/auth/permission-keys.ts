@@ -46,6 +46,7 @@ export const PERMISSION = {
   CUSTOMER_VIEW: "customer.view",
   CUSTOMER_MANAGE: "customer.manage",
   NOTIFICATION_MANAGE: "notification.manage",
+  BOOKING_OVERRIDE_STATUS_LOCK: "booking.override_status_lock",
 } as const;
 
 export type PermissionKey = (typeof PERMISSION)[keyof typeof PERMISSION];

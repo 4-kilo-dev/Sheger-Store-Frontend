@@ -9,6 +9,7 @@ import {
 } from "@/features/bookings/services/bookings.api";
 import type { StaffMember } from "@/features/checkout/services/operations.api";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { usePermissions } from "@/hooks/use-permissions";
 
 type RoleContext = "TECHNICIAN" | "CREW" | "OO";
 
@@ -49,6 +50,7 @@ export function AssignStaffToBookingModal({
 }) {
   const queryClient = useQueryClient();
   const { formatDate } = useDateFormatter();
+  const { canBypassStageLock } = usePermissions();
   const [bookingId, setBookingId] = useState("");
   const [asTeamLead, setAsTeamLead] = useState(false);
 
@@ -62,9 +64,9 @@ export function AssignStaffToBookingModal({
 
   const options = useMemo(() => {
     if (!person || !roleContext) return [];
-    const allowed = new Set(eligibleStatuses(roleContext));
+    const allowed = canBypassStageLock ? null : new Set(eligibleStatuses(roleContext));
     return bookings
-      .filter((b) => allowed.has(b.status))
+      .filter((b) => !allowed || allowed.has(b.status))
       .filter((b) => {
         const already = (b.assignments || []).some(
           (a: any) =>

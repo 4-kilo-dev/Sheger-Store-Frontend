@@ -817,7 +817,17 @@ export async function declineAssignmentApi(assignmentId: string, reason: string)
   return client.patch(`/api/assignments/${assignmentId}/decline`, { declineReason: reason });
 }
 
-export async function setCrewTeamLeadApi(assignmentId: string): Promise<any> {
+export async function setCrewTeamLeadApi(assignmentId: string, bookingId?: string): Promise<any> {
+  if (bookingId) {
+    try {
+      return await client.post(`/api/bookings/${bookingId}/assignments/${assignmentId}/team-lead`, {});
+    } catch (e: any) {
+      if (e?.status === 404 || e?.status === 405) {
+        return client.patch(`/api/assignments/${assignmentId}/team-lead`, {});
+      }
+      throw e;
+    }
+  }
   return client.patch(`/api/assignments/${assignmentId}/team-lead`, {});
 }
 
@@ -876,7 +886,17 @@ export async function getBookingSnapshotsApi(
   return client.get<any[]>(`/api/bookings/${bookingId}/bom/snapshots${query}`);
 }
 
-export async function deleteAssignmentApi(assignmentId: string): Promise<any> {
+export async function deleteAssignmentApi(assignmentId: string, bookingId?: string): Promise<any> {
+  if (bookingId) {
+    try {
+      return await client.delete(`/api/bookings/${bookingId}/assignments/${assignmentId}`);
+    } catch (e: any) {
+      if (e?.status === 404) {
+        return await client.delete(`/api/assignments/${assignmentId}`);
+      }
+      throw e;
+    }
+  }
   return client.delete(`/api/assignments/${assignmentId}`);
 }
 

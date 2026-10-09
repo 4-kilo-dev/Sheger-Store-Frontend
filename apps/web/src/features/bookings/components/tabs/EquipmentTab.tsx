@@ -7,6 +7,7 @@ import type { BookingCapabilities } from "@/features/bookings/hooks/useBookingCa
 import { useBookingBom } from "@/features/bookings/hooks/useBookingBom";
 import { bookingToPackingSlip, printPackingSlip } from "@/features/bookings/utils/printPackingSlip";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
+import { AdminOverrideBanner } from "@/features/bookings/components/shared/AdminOverrideBanner";
 import { useMemo } from "react";
 
 function AvailabilityHint({
@@ -93,6 +94,11 @@ export function EquipmentTab({
 
   return (
     <div className="space-y-4">
+      {caps.canBypassStageLock &&
+        ["COMPLETED", "PARTIALLY_RETURNED", "DONE", "CANCELED"].includes(b.status) && (
+          <AdminOverrideBanner />
+        )}
+
       {!canAddMaterials && (
         <div
           className="rounded-lg border px-4 py-3 text-[12px] font-semibold leading-relaxed"

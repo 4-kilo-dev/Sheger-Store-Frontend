@@ -159,7 +159,7 @@ export function BookingDetail() {
 
       {safeTab === "Overview" && <OverviewTab b={booking} code={code} caps={caps} />}
       {safeTab === "Schedule" && <ScheduleTab b={booking} />}
-      {safeTab === "Team" && <TeamTab b={booking} />}
+      {safeTab === "Team" && <TeamTab b={booking} caps={caps} actions={actions} />}
       {safeTab === "Equipment" && <EquipmentTab b={booking} caps={caps} />}
       {safeTab === "Payments" && <PaymentsTab b={booking} caps={caps} />}
       {safeTab === "Files" && <FilesTab b={booking} />}

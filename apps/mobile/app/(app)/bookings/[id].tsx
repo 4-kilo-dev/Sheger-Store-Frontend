@@ -738,7 +738,8 @@ function OverviewTab({
   const [savingBookingDetails, setSavingBookingDetails] = useState(false);
   const customFieldsQuery = useCustomFieldDefinitions();
   const canEditBookingDetails =
-    caps.canEditLogistics && booking.status !== "DONE" && booking.status !== "CANCELED";
+    caps.canEditLogistics &&
+    (caps.canBypassStageLock || (booking.status !== "DONE" && booking.status !== "CANCELED"));
 
   useEffect(() => {
     setClientName(booking.client || "");

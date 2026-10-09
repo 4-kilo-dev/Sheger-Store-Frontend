@@ -28,6 +28,21 @@ export function canPermission(key: string): boolean {
 }
 
 /**
+ * Helper to determine if the current user can bypass stage locks
+ */
+export function canBypassBookingStageLock(
+  user?: { roles?: string[]; permissions?: string[]; role?: string } | null
+): boolean {
+  if (!user) return false;
+  const isAdmin =
+    user.roles?.includes("admin") ||
+    user.roles?.some((r) => r.toLowerCase() === "admin") ||
+    user.role?.toLowerCase() === "admin";
+  const hasOverridePerm = user.permissions?.includes("booking.override_status_lock");
+  return Boolean(isAdmin || hasOverridePerm);
+}
+
+/**
  * Permission helpers from the stored auth user (`/auth/me` / login).
  * Sole FE source of truth for can() — never gate on role strings.
  */
@@ -35,6 +50,7 @@ export function usePermissions() {
   const user = useAuthUser();
   const permissions = user?.permissions ?? EMPTY_PERMISSIONS;
   const roles = user?.roles ?? EMPTY_ROLES;
+  const canBypassStageLock = canBypassBookingStageLock(user);
 
   return useMemo(
     () => ({
@@ -42,7 +58,8 @@ export function usePermissions() {
       roles,
       can: (key: string) => hasPermission(permissions, key),
       canAny: (keys: string[]) => hasAnyPermission(permissions, keys),
+      canBypassStageLock,
     }),
-    [permissions, roles]
+    [permissions, roles, canBypassStageLock]
   );
 }

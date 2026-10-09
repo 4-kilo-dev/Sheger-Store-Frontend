@@ -6,6 +6,7 @@ import { updateBookingCustomerApi } from "@/features/bookings/services/bookings.
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { Section } from "@/features/bookings/components/shared/Section";
 import { KV } from "@/features/bookings/components/shared/KV";
+import { AdminOverrideBanner } from "@/features/bookings/components/shared/AdminOverrideBanner";
 import type { OverviewSectionProps } from "./types";
 
 const fieldClass =
@@ -15,7 +16,7 @@ export function ClientContactSection({ b, code, caps }: OverviewSectionProps) {
   const queryClient = useQueryClient();
   const authUser = useAuthUser();
   const canEdit =
-    !caps.isBookingUpdateLocked &&
+    (!caps.isBookingUpdateLocked || caps.canBypassStageLock) &&
     !!b.customerId &&
     (caps.canManageCustomer || b.createdBy === authUser?.id);
 
@@ -91,6 +92,11 @@ export function ClientContactSection({ b, code, caps }: OverviewSectionProps) {
   return (
     <Section title="Client & Contact" icon={User}>
       <div className="space-y-4">
+        {caps.canBypassStageLock &&
+          ["COMPLETED", "PARTIALLY_RETURNED", "DONE", "CANCELED"].includes(b.status) && (
+            <AdminOverrideBanner />
+          )}
+
         <div className="grid grid-cols-2 gap-4">
           <label className="text-[11px] font-semibold block" style={{ color: "var(--text-2)" }}>
             Client

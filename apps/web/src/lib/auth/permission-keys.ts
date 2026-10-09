@@ -54,6 +54,8 @@ export const PERMISSION = {
   NOTIFICATION_MANAGE: "notification.manage",
   /** Arm and execute a guarded disaster-recovery restore. */
   SYSTEM_RESTORE: "system.restore",
+  /** Bypass booking stage restrictions across all endpoints (admin override). */
+  BOOKING_OVERRIDE_STATUS_LOCK: "booking.override_status_lock",
 } as const;
 
 /** Human labels for role-editor / permission catalog UI (explicit DB grants). */
@@ -77,6 +79,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   "driver_trip.edit": "Edit driver trips",
   "driver_trip.view": "View driver trips",
   "driver_trip.approve": "Approve / reject driver trips",
+  "booking.override_status_lock": "Bypass booking stage lock",
 };
 
 export type PermissionKey = (typeof PERMISSION)[keyof typeof PERMISSION];

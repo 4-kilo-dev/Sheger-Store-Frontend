@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { runWithPollTimeout } from "@vortex/utils";
 import { useAuthUser } from "@/hooks/use-auth-user";
-import { usePermissions } from "@/hooks/use-permissions";
+import { usePermissions, canBypassBookingStageLock } from "@/hooks/use-permissions";
 import { PERMISSION } from "@/lib/auth/permission-keys";
 import {
   getBookingAllowedTransitionsApi,
@@ -90,9 +90,12 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canAcceptAssignment = pendingTechAssignment && can(PERMISSION.ASSIGNMENT_ACCEPT);
   const canDeclineAssignment = pendingTechAssignment && can(PERMISSION.ASSIGNMENT_DECLINE);
 
-  // Completed bookings remain visible, but their booking data is immutable.
-  // Close-out actions such as check-in and reporting damage are handled separately.
-  const isBookingUpdateLocked = !!booking && BOOKING_UPDATE_LOCKED_STATUSES.has(booking.status);
+  const canBypassStageLock = canBypassBookingStageLock(authUser);
+
+  // Completed bookings remain visible, but their booking data is immutable for regular users.
+  // Administrators and users with booking.override_status_lock bypass this lock across all stages.
+  const isBookingUpdateLocked =
+    !canBypassStageLock && !!booking && BOOKING_UPDATE_LOCKED_STATUSES.has(booking.status);
 
   const canEditBooking =
     !isBookingUpdateLocked &&
@@ -140,13 +143,16 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   const canAssignCrew = can(PERMISSION.ASSIGNMENT_ASSIGN_CREW);
   const canReverseCheckout = can(PERMISSION.INVENTORY_CHECKOUT_REVERSE);
   const canOverrideAvailability = can(PERMISSION.INVENTORY_OVERRIDE_AVAILABILITY);
-  const bomEditableStatus = booking?.status === "ACCEPTED" || booking?.status === "PREPARATION";
+  const bomEditableStatus =
+    canBypassStageLock || booking?.status === "ACCEPTED" || booking?.status === "PREPARATION";
   const canEditBom =
-    bomEditableStatus &&
-    (can(PERMISSION.BOM_CREATE) ||
-      (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned) ||
-      can(PERMISSION.BOOKING_EDIT));
+    canBypassStageLock ||
+    (bomEditableStatus &&
+      (can(PERMISSION.BOM_CREATE) ||
+        (can(PERMISSION.BOOKING_VIEW_ASSIGNED) && isAssigned) ||
+        can(PERMISSION.BOOKING_EDIT)));
   const canAddBomMaterials =
+    canBypassStageLock ||
     canEditBom ||
     (booking?.status === "ONSITE" &&
       myAssignments.some(
@@ -249,19 +255,22 @@ export function useBookingCapabilities(booking: Booking | undefined) {
   );
 
   const assignTechnicianAction = useMemo((): BookingAction | null => {
-    if (!canAssignTechnician || !booking) return null;
+    if ((!canAssignTechnician && !canBypassStageLock) || !booking) return null;
 
     const fromTransitions = statusActions.find(
       (a) => a.id === "assignment.assign_technician" || a.requiresForm === "assign",
     );
     if (fromTransitions) return fromTransitions;
 
-    if (["CONFIRMED", "ASSIGNED", "ACCEPTED", "PREPARATION", "ONSITE"].includes(booking.status)) {
+    if (
+      canBypassStageLock ||
+      ["CONFIRMED", "ASSIGNED", "ACCEPTED", "PREPARATION", "ONSITE"].includes(booking.status)
+    ) {
       return createAssignTechnicianAction();
     }
 
     return null;
-  }, [canAssignTechnician, booking, statusActions]);
+  }, [canAssignTechnician, canBypassStageLock, booking, statusActions]);
 
   const showDeclinedAssignmentBanner =
     canAssignTechnician &&
@@ -279,6 +288,7 @@ export function useBookingCapabilities(booking: Booking | undefined) {
     permissions,
     can,
     canAny,
+    canBypassStageLock,
     isAssigned,
     myAssignments,
     myTechAssignment,
