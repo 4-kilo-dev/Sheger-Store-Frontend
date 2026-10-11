@@ -6,6 +6,7 @@ import {
   Download,
   Gauge,
   PieChart,
+  Ruler,
   Truck,
   Users,
 } from "lucide-react-native";
@@ -27,7 +28,7 @@ import {
 } from "@/components/ui";
 import { useAppContext } from "@/context/AppContext";
 import { colors } from "@/theme/tokens";
-import { formatCompactCurrency, formatCurrency, pct } from "@/utils/format";
+import { formatCompactCurrency, formatCurrency, formatSqm, pct } from "@/utils/format";
 import { useDateFormatter } from "@/context/CalendarSystemContext";
 import {
   getBookingsReportApi,
@@ -242,12 +243,22 @@ function RevenueBookingsTab({
           note={`${bookingsReport.totalCount} bookings`}
           icon={Banknote}
         />
-        <StatCard
-          label="Booking Count"
-          value={bookingsReport.totalCount}
-          note="Filtered window"
-          icon={CalendarCheck}
-        />
+        <View style={styles.statRow}>
+          <StatCard
+            label="Booking Count"
+            value={bookingsReport.totalCount}
+            note="Filtered window"
+            icon={CalendarCheck}
+            style={styles.statRowCard}
+          />
+          <StatCard
+            label="Total Screen Size"
+            value={formatSqm(bookingsReport.totalScreenAreaSqm)}
+            note="sqm · all booked screens"
+            icon={Ruler}
+            style={styles.statRowCard}
+          />
+        </View>
         <StatCard
           label="Avg. Job Value"
           value={
@@ -840,6 +851,13 @@ function StaffWorkSheetsTab({
 }
 
 const styles = StyleSheet.create({
+  statRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  statRowCard: {
+    flex: 1,
+  },
   chart: {
     height: 250,
     flexDirection: "row",

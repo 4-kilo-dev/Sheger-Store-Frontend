@@ -11,11 +11,15 @@ export interface BookingReportRecord {
   paymentAmount: string;
   createdAt: string;
   customerName: string;
+  /** Screen area in sqm; 0 when the booking has no size recorded */
+  screenAreaSqm: number;
 }
 
 export interface BookingsReportResponse {
   totalCount: number;
   totalBookingAmountValue: number;
+  /** Sum of screen area (sqm) across the filtered bookings, rounded to 2 decimals */
+  totalScreenAreaSqm: number;
   statusCounts: Record<string, number>;
   bookings: BookingReportRecord[];
 }
@@ -164,6 +168,40 @@ async function getBookingCodeMap(): Promise<Map<string, string>> {
   return bookingCodeMapPromise;
 }
 
+/**
+ * Fetches the bookings list fresh (screen sizes can be edited, unlike codes) and
+ * refreshes the shared booking code cache with the result.
+ */
+async function getBookingSizeIndex(): Promise<{
+  codeMap: Map<string, string>;
+  sizeMap: Map<string, number>;
+}> {
+  const codeMap = new Map<string, string>();
+  const sizeMap = new Map<string, number>();
+  try {
+    const bookings = await getBookingsApi();
+    for (const booking of bookings) {
+      if (!booking.id) continue;
+      if (booking.code) codeMap.set(booking.id, booking.code);
+      sizeMap.set(booking.id, booking.size);
+    }
+    bookingCodeMapPromise = Promise.resolve(codeMap);
+  } catch {
+    // Report still renders; sizes fall back to 0 and codes to the raw ids.
+  }
+  return { codeMap, sizeMap };
+}
+
+function toSqm(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+export function sumScreenAreaSqm(records: Array<{ screenAreaSqm: number }>): number {
+  const total = records.reduce((sum, record) => sum + toSqm(record.screenAreaSqm), 0);
+  return Math.round(total * 100) / 100;
+}
+
 function looksLikeUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -195,19 +233,32 @@ export async function getBookingsReportApi(filters: {
   if (filters.location) query.append("location", filters.location);
   if (filters.staffUserId) query.append("staffUserId", filters.staffUserId);
 
-  const [report, codeMap] = await Promise.all([
-    client.get<BookingsReportResponse & { bookings: Array<BookingReportRecord & { id?: string }> }>(
-      `/api/reports/bookings?${query.toString()}`,
-    ),
-    getBookingCodeMap(),
+  const [report, { codeMap, sizeMap }] = await Promise.all([
+    client.get<
+      Omit<BookingsReportResponse, "totalScreenAreaSqm" | "bookings"> & {
+        bookings: Array<
+          Omit<BookingReportRecord, "screenAreaSqm"> & {
+            id?: string;
+            screenAreaSqm?: number | string | null;
+          }
+        >;
+      }
+    >(`/api/reports/bookings?${query.toString()}`),
+    getBookingSizeIndex(),
   ]);
+
+  const bookings = (report.bookings || []).map((booking) => ({
+    ...booking,
+    bookingCode: resolveBookingCode(codeMap, booking.id, booking.bookingCode),
+    // Prefer a backend-provided area if the report ever includes it.
+    screenAreaSqm:
+      toSqm(booking.screenAreaSqm) || (booking.id ? toSqm(sizeMap.get(booking.id)) : 0),
+  }));
 
   return {
     ...report,
-    bookings: (report.bookings || []).map((booking) => ({
-      ...booking,
-      bookingCode: resolveBookingCode(codeMap, booking.id, booking.bookingCode),
-    })),
+    bookings,
+    totalScreenAreaSqm: sumScreenAreaSqm(bookings),
   };
 }
 

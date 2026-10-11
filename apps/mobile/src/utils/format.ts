@@ -29,3 +29,18 @@ export function pct(part: number, total: number) {
   if (!total) return 0;
   return Math.round((part / total) * 100);
 }
+
+/**
+ * Square meters with thousands separators, e.g. 36.5 → "36.5", 12078.5 → "12,079".
+ * Up to 2 decimals below 1,000; whole numbers above so the value fits a half-width stat card.
+ */
+export function formatSqm(value: number) {
+  const safe = Number.isFinite(value) && value > 0 ? value : 0;
+  const rounded = safe >= 1_000 ? Math.round(safe) : Math.round(safe * 100) / 100;
+  const [whole, fraction] = rounded
+    .toFixed(2)
+    .replace(/\.?0+$/, "")
+    .split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return fraction ? `${grouped}.${fraction}` : grouped;
+}

@@ -214,15 +214,17 @@ export function StatCard({
   note,
   icon: Icon,
   tone = colors.accent,
+  style,
 }: {
   label: string;
   value: string | number;
   note?: string;
   icon?: LucideIcon;
   tone?: string;
+  style?: ViewStyle;
 }) {
   return (
-    <Card style={styles.statCard}>
+    <Card style={{ ...styles.statCard, ...style }}>
       <View style={styles.rowBetween}>
         <AppText variant="eyebrow">{label}</AppText>
         {Icon ? <Icon size={17} color={tone} /> : null}
