@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { 
   Banknote, CalendarCheck, Download, Gauge, TrendingUp, BarChart3, 
-  Users, Filter, AlertTriangle, Check, ShieldAlert, AlertCircle, RefreshCw,
+  Users, Filter, AlertTriangle, Check, ShieldAlert, AlertCircle, RefreshCw, Monitor,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -811,7 +811,7 @@ function ManagementReportsPage() {
         {activeTab === "revenue_bookings" && (
           <div className="space-y-4">
             {/* KPI Cards Strip */}
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               <div className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
                 <div className="flex items-center justify-between">
                   <span className="label-eyebrow">Logged Revenue</span>
@@ -835,6 +835,19 @@ function ManagementReportsPage() {
                 </div>
                 <div className="mt-1 text-[11px]" style={{ color: "var(--text-3)" }}>
                   {startDate || endDate ? "Events scheduled in selected range" : "All scheduled events"}
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+                <div className="flex items-center justify-between">
+                  <span className="label-eyebrow">Total Screen Size</span>
+                  <Monitor className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                </div>
+                <div className="mt-3 text-[22px] font-bold">
+                  {loadingBookings ? "..." : `${(bookingsReport?.totalScreenAreaSqm ?? 0).toLocaleString()} sqm`}
+                </div>
+                <div className="mt-1 text-[11px]" style={{ color: "var(--text-3)" }}>
+                  Sum of screen area for matching bookings
                 </div>
               </div>
 

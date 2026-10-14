@@ -12,12 +12,14 @@ export interface BookingReportRecord {
   eventLocation: string;
   paymentStatus: string;
   paymentAmount: string;
+  screenAreaSqm?: string | number | null;
   createdAt: string;
   customerName: string;
 }
 
 export interface BookingsReportResponse {
   totalCount: number;
+  totalScreenAreaSqm: number;
   totalBookingAmountValue: number;
   statusCounts: Record<string, number>;
   bookings: BookingReportRecord[];
